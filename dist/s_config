@@ -1,0 +1,54 @@
+#!/bin/sh -x
+# DBSQL - A SQL database engine.
+#
+# Copyright (C) 2007  The DBSQL Group, Inc. - All rights reserved.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# There are special exceptions to the terms and conditions of the GPL as it
+# is applied to this software. View the full text of the exception in file
+# LICENSE_EXCEPTIONS in the directory of this software distribution.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# http://creativecommons.org/licenses/GPL/2.0/
+#
+# $Id: s_config 7 2007-02-03 13:34:17Z gburd $
+#
+# Build the autoconfiguration files.
+
+trap 'rm -f aclocal.m4 ; exit 0' 0 1 2 3 13 15
+
+. ./RELEASE
+
+echo "autoconf: building aclocal.m4..."
+cat aclocal/*.ac > aclocal.m4
+
+echo "autoconf: running autoheader to build config.hin..."
+rm -f config.hin
+autoheader
+chmod 444 config.hin
+
+echo "autoconf: running autoconf to build configure"
+rm -f configure
+autoconf
+
+# Edit version information we couldn't pre-compute.
+(echo "1,\$s/__EDIT_DBSQL_VERSION_MAJOR__/$DBSQL_VERSION_MAJOR/g" &&
+ echo "1,\$s/__EDIT_DBSQL_VERSION_MINOR__/$DBSQL_VERSION_MINOR/g" &&
+ echo "1,\$s/__EDIT_DBSQL_VERSION_PATCH__/$DBSQL_VERSION_PATCH/g" &&
+ echo "1,\$s/__EDIT_DBSQL_VERSION_STRING__/$DBSQL_VERSION_STRING/g" &&
+ echo "1,\$s/__EDIT_DBSQL_VERSION__/$DBSQL_VERSION/g" &&
+ echo "w" &&
+ echo "q") | ed -s configure
+
+rm -rf autom4te.cache
+chmod 555 configure
+
+chmod 555 config.guess config.sub install-sh

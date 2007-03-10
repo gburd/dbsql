@@ -1,0 +1,25 @@
+#!/bin/sh -
+#
+# $Id: chk.offt 7 2007-02-03 13:34:17Z gburd $
+#
+# Make sure that no off_t's have snuck into the release.
+
+d=../..
+
+[ -f $d/LICENSE ] || {
+	echo 'FAIL: cannot find source distribution directory.'
+	exit 1
+}
+
+t=__1
+
+egrep -w off_t $d/*/*.[ch] $d/*/*.in |
+sed -e "/_/d" > $t
+
+test -s $t && {
+	cat $t
+	echo "FAIL: found questionable off_t usage"
+	exit 1
+}
+
+exit 0

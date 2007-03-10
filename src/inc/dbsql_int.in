@@ -1,0 +1,1019 @@
+/*-
+ * DBSQL - A SQL database engine.
+ *
+ * Copyright (C) 2007  The DBSQL Group, Inc. - All rights reserved.
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * http://creativecommons.org/licenses/GPL/2.0/
+ *
+ * $Id: dbsql_int.in 7 2007-02-03 13:34:17Z gburd $
+ */
+
+#ifndef	_DBSQL_INT_H_
+#define	_DBSQL_INT_H_
+
+/*
+ * Included by all implementation files this header contains all the
+ * basic information required.
+ */
+
+#ifndef NO_SYSTEM_INCLUDES
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include <stdarg.h>
+#include <errno.h>
+#endif
+
+#include <db.h>
+
+#include "dbsql.h"
+#include "sql_parser.h"
+
+#include "inc/queue.h"
+#include "inc/hash.h"
+#include "inc/str.h"
+#include "inc/vdbe.h"
+#include "inc/debug.h"
+#include "inc/xvprintf.h"
+#include "inc/globals.h"
+
+/*
+ * Forward references to structures.
+ */
+struct column;        typedef struct column column_t;
+struct table;         typedef struct table table_t;
+struct index;         typedef struct index index_t;
+struct expr;          typedef struct expr expr_t;
+struct expr_list;     typedef struct expr_list expr_list_t;
+struct parser;        typedef struct parser parser_t;
+struct token;         typedef struct token token_t;
+struct id_list;       typedef struct id_list id_list_t;
+struct src_list;      typedef struct src_list src_list_t;
+struct where_info;    typedef struct where_info where_info_t;
+struct where_level;   typedef struct where_level where_level_t;
+struct select;        typedef struct select select_t;
+struct agg;           typedef struct agg agg_t;
+struct agg_expr;      typedef struct agg_expr agg_expr_t;
+struct agg_elem;      typedef struct agg_elem agg_elem_t;
+struct keylist;       typedef struct keylist keylist_t;
+struct cursor;        typedef struct cursor cursor_t;
+struct func_def;      typedef struct func_def func_def_t;
+struct trigger;       typedef struct trigger trigger_t;
+struct trigger_step;  typedef struct trigger_step trigger_step_t;
+struct trigger_stack; typedef struct trigger_stack trigger_stack_t;
+struct foreign_key;   typedef struct foreign_key foreign_key_t;
+struct auth_context;  typedef struct auth_context auth_context_t;
+
+/*
+ * A "format version" is used to know how data was written into the keys
+ * and values of and across the various DBs.  As that changes, increment
+ * this number and write code to automatically upgrade from the older
+ * version.
+ */
+#define DBSQL_FORMAT_VERSION 1
+
+/*
+ * The maximum number of attached databases.  This must be at least 2
+ * in order to support the main database (0) and the temp tables (1).
+ * And it must be less than 256 because an unsigned character is used
+ * to stored the database index.
+ */
+#define MAX_ATTACHED 255
+
+/*
+ * General purpose constants and macros.
+ */
+#ifndef	UINT16_MAX
+#define	UINT16_MAX	65535		/* Maximum 16-bit unsigned. */
+#endif
+#ifndef	UINT32_MAX
+#define	UINT32_MAX	4294967295U	/* Maximum 32-bit unsigned. */
+#endif
+
+#if defined(HAVE_LONG_LONG) && defined(HAVE_UNSIGNED_LONG_LONG)
+#ifdef	DB_WIN32
+#define	INT64_MAX	_I64_MAX
+#define	INT64_MIN	_I64_MIN
+#define	UINT64_MAX	_UI64_MAX
+
+#define	INT64_FMT	"%l64d"
+#define	UINT64_FMT	"%l64u"
+#else
+#ifndef	INT64_MAX
+#define	INT64_MAX	9223372036854775807LL
+#endif
+#ifndef	INT64_MIN
+#define	INT64_MIN	(-INT64_MAX-1)
+#endif
+#ifndef	UINT64_MAX
+#define	UINT64_MAX	18446744073709551615ULL
+#endif
+#define	INT64_FMT	"%lld"
+#define	UINT64_FMT	"%llu"
+#endif	/* DB_WIN32 */
+#endif	/* HAVE_LONG_LONG && HAVE_UNSIGNED_LONG_LONG */
+
+#define	MEGABYTE	1048576
+#define	GIGABYTE	1073741824
+
+#define	MS_PER_SEC	1000		/* Milliseconds in a second. */
+#define	USEC_PER_MS	1000		/* Microseconds in a millisecond. */
+
+/* Test for a power-of-two (tests true for zero, which doesn't matter here). */
+#define	POWER_OF_TWO(x)	(((x) & ((x) - 1)) == 0)
+
+/*
+ * API return values
+ *
+ * Return values that are OK for each different call.  Most calls have a
+ * standard 'return of 0 is only OK value', but some can return one or more
+ * non-zero values that are really status information and not an error
+ * condition.
+ */
+#define DBSQL_RETOK_STD(ret)       ((ret) == 0)
+
+/*
+ * Each attached SQL database is represented by a set of Berkeley DB
+ * DB_BTREE databases, a stack of DB_TXNs and a set of open and active
+ * DBCs.
+ */
+typedef struct sm {
+	char *name;                 /* A copy of our database name */
+	DB *primary;                /* Meta and n live within this. */
+	DB *meta;                   /* The metadata database */
+	DB_SEQUENCE *n;             /* The <n> sequence within <name>_main */
+	DB_TXN *txn;                /* The current transaction */
+	DBSQL *dbp;                 /* A handle to the database manager */
+	hash_t dbs;                 /* Set of open DBs, key: dbi value: DB * */
+	int flags;                  /* Flags for this sm */
+#define SM_INMEM_DB        0x0001   /* If set, DBs should exist in memory */
+#define SM_TEMP_DB         0x0002   /* If set, DB is temporary */
+#define SM_HAS_INIT        0x0004   /* If set, this sm has been initialized */
+} sm_t;
+
+typedef struct sm_cursor {
+	sm_t *sm;                  /* A reference to the storage manager */
+	DB *db;                    /* A reference to the database */
+	DBC *dbc;                  /* The real cursor */
+	DB_TXN *txn;               /* For use when read only */
+	int id;                    /* The index of the database we traverse */
+	int flags;
+#define SMC_RO_CURSOR 0x0001
+#define SMC_RW_CURSOR 0x0002
+} sm_cursor_t;
+
+/*
+ * Each database managed by the system is an instance of the following
+ * structure.  There are normally two of these structures in the
+ * DBSQL.aDb[] array.  aDb[0] is simply the 1st user database file attached
+ * as a result of calling DBSQL->open() with a filename.  aDb[1] is used to
+ * hold temporary tables.  Additional user databases may be attached by using
+ * the ATTACH statement during the session.
+ */
+struct __dbsql_db {
+	char *zName;       /* Name of this database */
+	sm_t *pBt;         /* The storage manager for this database */
+	int schema_sig;    /* Database schema version number for this file */
+	hash_t tblHash;    /* All tables indexed by name */
+	hash_t idxHash;    /* All (named) indices indexed by name */
+	hash_t trigHash;   /* All triggers indexed by name */
+	hash_t aFKey;      /* Foreign keys indexed by to-table */
+	u_int8_t inTrans;  /* 0: not writable. 1: Transaction. 2: Checkpoint */
+	DBSQL *dbp;        /* A reference to our managing DBSQL */
+	u_int16_t flags;   /* Flags associated with this database */
+/*
+ * The DBSQL_SCHEMA_LOCKED flag is set when the first OP_Transaction or
+ * OP_Checkpoint opcode is emitted for a database.  This prevents multiple
+ * occurances of those opcodes for the same database in the same program.
+ * TODO: do we need this?
+ *
+ * Similarly, the DBSQL_COOKIE flag is set when the OP_VerifyCookie opcode
+ * is emitted, and prevents duplicate OP_VerifyCookies from taking up space
+ * and slowing down execution. TODO: do we need this?
+ * 
+ * The DBSQL_SCHEMA_LOADED flag is set after the database schema has been
+ * read into internal hash tables.
+ *
+ * DBSQL_UNRESET_VIEWS means that one or more views have column names that
+ * have been filled out.  If the schema changes, these column names might
+ * changes and so the view will need to be reset.
+ */
+#define DBSQL_SCHEMA_LOCKED 0x0001 /* OP_Transaction opcode has been emitted */
+#define DBSQL_COOKIE        0x0002 /* OP_VerifyCookie opcode has been emiited*/
+#define DBSQL_SCHEMA_LOADED 0x0004 /* The schema has been loaded */
+#define DBSQL_UNRESET_VIEWS 0x0008 /* Some views have defined column names */
+};
+
+#define DB_PROPERTY_HAS_VALUE(D,I,P)     (((D)->aDb[I].flags&(P))==(P))
+#define DB_PROPERTY_IS_SET(D,I,P)        (((D)->aDb[I].flags&(P))!=0)
+#define DB_PROPERTY_SET(D,I,P)           ((D)->aDb[I].flags|=(P))
+#define DB_PROPERTY_CLEAR(D,I,P)         ((D)->aDb[I].flags&=~(P))
+
+/*
+ * Determine the number of elements in an array.
+ */
+#define ARRAY_SIZE(X)    (sizeof((X))/sizeof((X)[0]))
+
+/* Set, clear and test flags. */
+#define	FLD_CLR(fld, f)		(fld) &= ~(f)
+#define	FLD_ISSET(fld, f)	((fld) & (f))
+#define	FLD_SET(fld, f)		(fld) |= (f)
+#define	F_CLR(p, f)		(p)->flags &= ~(f)
+#define	F_ISSET(p, f)		((p)->flags & (f))
+#define	F_SET(p, f)		(p)->flags |= (f)
+#define	LF_CLR(f)		((flags) &= ~(f))
+#define	LF_ISSET(f)		((flags) & (f))
+#define	LF_SET(f)		((flags) |= (f))
+
+/*
+ * Panic the system.
+ */
+#define PANIC_SET(dbp, val)  ((dbp)->panic = (val))
+#define CHECK_FOR_PANIC(dbp) if ((dbp)->panic != 0) \
+		{ return DBSQL_RUNRECOVERY; }
+
+/*
+ * Aligning items to particular sizes or in pages or memory.
+ *
+ * db_align_t --
+ * Largest integral type, used to align structures in memory.  We don't store
+ * floating point types in structures, so integral types should be sufficient
+ * (and we don't have to worry about systems that store floats in other than
+ * power-of-2 numbers of bytes).  Additionally this fixes compiler that rewrite
+ * structure assignments and ANSI C memcpy calls to be in-line instructions
+ * that happen to require alignment.  Note: this alignment isn't sufficient for
+ * mutexes, which depend on things like cache line alignment.  Mutex alignment
+ * is handled separately, in mutex.h.
+ *
+ * db_alignp_t --
+ * Integral type that's the same size as a pointer.  There are places where
+ * DB modifies pointers by discarding the bottom bits to guarantee alignment.
+ * We can't use db_align_t, it may be larger than the pointer, and compilers
+ * get upset about that.  So far we haven't run on any machine where there
+ * isn't an integral type the same size as a pointer -- here's hoping.
+ */
+@db_align_t_decl@
+@db_alignp_t_decl@
+
+/*
+ * Convert a pointer to a small integral value.
+ *
+ * The (u_int16_t)(db_alignp_t) cast avoids warnings: the (db_alignp_t) cast
+ * converts the value to an integral type, and the (u_int16_t) cast converts
+ * it to a small integral type so we don't get complaints when we assign the
+ * final result to an integral type smaller than db_alignp_t.
+ */
+#define	P_TO_UINT32(p)	((u_int32_t)(db_alignp_t)(p))
+
+#define	PATH_SEPARATOR	"@PATH_SEPARATOR@"
+
+/*
+ * Each SQL function is defined by an instance of the following
+ * structure.  A pointer to this structure is stored in the dbsql.aFunc
+ * hash table.  When multiple functions have the same name, the hash table
+ * points to a linked list of these structures.
+ */
+struct func_def {
+	void (*xFunc)(dbsql_func_t*,int,const char**); /* Regular fn */
+	void (*xStep)(dbsql_func_t*,int,const char**); /* Aggregate fn step */
+	void (*xFinalize)(dbsql_func_t*);       /* Aggregate fn finializer */
+	int nArg;                               /* Number of arguments */
+	int dataType;                           /* Datatype of the result */
+	void *pUserData;                        /* User data parameter */
+	func_def_t *pNext;                      /* Next function with same name. */
+};
+
+/*
+ * Information about each column of an SQL table is held in an instance
+ * of this structure.
+ */
+struct column {
+	char *zName;           /* Name of this column */
+	char *zDflt;           /* Default value of this column */
+	char *zType;           /* Data type for this column */
+	u_int8_t notNull;      /* True if there is a NOT NULL constraint */
+	u_int8_t isPrimKey;    /* True if part of the PRIMARY KEY */
+	u_int8_t sortOrder;    /* Some combination of DBSQL_SO_... values */
+/*
+ * The allowed sort orders.  The TEXT and NUM values use bits that do not
+ * overlap with DESC and ASC.  That way the two can be combined into a
+ * single number.
+ */
+#define DBSQL_SO_UNK       0  /* Use the default collating type.  (SCT_NUM) */
+#define DBSQL_SO_TEXT      2  /* Sort using memcmp() */
+#define DBSQL_SO_NUM       4  /* Sort using __str_numeric_cmp() */
+#define DBSQL_SO_TYPEMASK  6  /* Mask to extract the collating sequence */
+#define DBSQL_SO_ASC       0  /* Sort in ascending order */
+#define DBSQL_SO_DESC      1  /* Sort in descending order */
+#define DBSQL_SO_DIRMASK   1  /* Mask to extract the sort direction */
+};
+
+
+/*
+ * Each SQL table is represented in memory by an instance of the
+ * following structure.
+ *
+ * table_t.zName is the name of the table.  The case of the original
+ * CREATE TABLE statement is stored, but case is not significant for
+ * comparisons.
+ *
+ * table_t.nCol is the number of columns in this table.  table_t.aCol is a
+ * pointer to an array of column_t structures, one for each column.
+ *
+ * If the table has an INTEGER PRIMARY KEY, then table_t.iPKey is the index of
+ * the column that is that key.   Otherwise table_t.iPKey is negative.  Note
+ * that the datatype of the PRIMARY KEY must be INTEGER for this field to
+ * be set.  An INTEGER PRIMARY KEY is used as the rowid for each row of
+ * the table.  If a table has no INTEGER PRIMARY KEY, then a random rowid
+ * is generated for each row of the table.  table_t.hasPrimKey is true if
+ * the table has any PRIMARY KEY, INTEGER or otherwise.
+ *
+ * TODO table_t.tnum is the page number for the root BTree page of the
+ * table in the database file.
+ * TODO In this case table_t.tnum refers VDBE cursor number that holds the
+ * table open, not to the root page number.
+ * If table_t.iDb is the index of the database table backend in DBSQL.aDb[].
+ * 0 is for the main database and 1 is for the file that holds temporary
+ * tables and indices.  If table_t.isTransient is true, then the table is
+ * stored in a file that is automatically deleted when the VDBE cursor to the
+ * table is closed.
+ * Transient tables are used to hold the results of a sub-query that appears
+ * instead of a real table name in the FROM clause of a SELECT statement.
+*/
+struct table {
+	char *zName;             /* Name of the table */
+	int nCol;                /* Number of columns in this table */
+	column_t *aCol;          /* Information about each column */
+	int iPKey;               /* If !< 0, use aCol[iPKey] as the primary
+				    key */
+	index_t *pIndex;         /* List of SQL indexes on this table. */
+	int tnum;                /* TODO Root BTree node for this table */
+	select_t *pSelect;       /* NULL for tables. Points to definition if
+				    a view.*/
+	u_int8_t readOnly;       /* True if this table should not be written
+				    to by the user */
+	u_int8_t iDb;            /* Index into DBSQL.aDb[] for this table */
+	u_int8_t isTransient;    /* True if automatically deleted when VDBE
+				    finishes */
+	u_int8_t hasPrimKey;     /* True if there exists a primary key */
+	u_int8_t keyConf;        /* What to do in case of uniqueness conflict
+				    on iPKey */
+	trigger_t *pTrigger;     /* List of SQL triggers on this table */
+	foreign_key_t *pFKey;    /* Linked list of all foreign keys in this
+				    table */
+};
+
+/*
+ * Each foreign key constraint is an instance of the following structure.
+ *
+ * A foreign key is associated with two tables.  The "from" table is
+ * the table that contains the REFERENCES clause that creates the foreign
+ * key.  The "to" table is the table that is named in the REFERENCES clause.
+ * Consider this example:
+ *
+ *     CREATE TABLE ex1(
+ *       a INTEGER PRIMARY KEY,
+ *       b INTEGER CONSTRAINT fk1 REFERENCES ex2(x)
+ *     );
+ *
+ * For foreign key "fk1", the from-table is "ex1" and the to-table is "ex2".
+ *
+ * Each REFERENCES clause generates an instance of the following structure
+ * which is attached to the from-table.  The to-table need not exist when
+ * the from-table is created.  The existance of the to-table is not checked
+ * until an attempt is made to insert data into the from-table.
+ *
+ * The DBSQL.aFKey hash table stores pointers to this structure
+ * given the name of a to-table.  For each to-table, all foreign keys
+ * associated with that table are on a linked list using the
+ * foreign_key_t.pNextTo field.
+ */
+struct foreign_key {
+	table_t *pFrom;          /* The table that constains the REFERENCES
+				    clause */
+	foreign_key_t *pNextFrom;/* Next foreign key in pFrom */
+	char *zTo;               /* Name of table that the key points to */
+	foreign_key_t *pNextTo;  /* Next foreign key that points to zTo */
+	int nCol;                /* Number of columns in this key */
+	struct col_map {         /* Mapping of columns in pFrom to columns
+				    in zTo */
+		int iFrom;       /* Index of column in pFrom */
+		char *zCol;      /* Name of column in zTo.  If 0 use
+				    PRIMARY KEY */
+	} *aCol;                 /* One entry for each of nCol column s */
+	u_int8_t isDeferred;     /* True if constraint checking is deferred
+				    till COMMIT */
+	u_int8_t updateConf;     /* How to resolve conflicts that occur on
+				    UPDATE */
+	u_int8_t deleteConf;    /* How to resolve conflicts that occur on
+				   DELETE */
+	u_int8_t insertConf;    /* How to resolve conflicts that occur on
+				   INSERT */
+};
+
+/*
+ * There are many ways to to resolve a constraint error.  ROLLBACK
+ * processing means that a constraint violation causes the operation
+ * in process to fail and for the current transaction to be rolled back.
+ * ABORT processing means the operation in process fails and any prior
+ * changes from that one operation are backed out, but the transaction
+ * is not rolled back.  FAIL processing means that the operation in progress
+ * stops and returns an error code.  But prior changes due to the same
+ * operation are not backed out and no rollback occurs.  IGNORE means
+ * that the particular row that caused the constraint error is not
+ * inserted or updated.  Processing continues and no error is returned.
+ * REPLACE means that preexisting database rows that caused a UNIQUE
+ * constraint violation are removed so that the new insert or
+ * update can proceed.  Processing continues and no error is reported.
+ *
+ * RESTRICT, SETNULL, and CASCADE actions apply only to foreign keys.
+ * RESTRICT is the same as ABORT for IMMEDIATE foreign keys and the
+ * same as ROLLBACK for DEFERRED keys.  SETNULL means that the foreign
+ * key is set to NULL.  CASCADE means that a DELETE or UPDATE of the
+ * referenced table row is propagated into the row that holds the
+ * foreign key.
+ * 
+ * The following symbolic values are used to record which type
+ * of action to take.
+ */
+#define OE_None     0   /* There is no constraint to check */
+#define OE_Rollback 1   /* Fail the operation and rollback the transaction */
+#define OE_Abort    2   /* Back out changes but do no rollback transaction */
+#define OE_Fail     3   /* Stop the operation but leave all prior changes */
+#define OE_Ignore   4   /* Ignore the error. Do not do the INSERT or UPDATE */
+#define OE_Replace  5   /* Delete existing record, then do INSERT or UPDATE */
+
+#define OE_Restrict 6   /* OE_Abort for IMMEDIATE, OE_Rollback for DEFERRED */
+#define OE_SetNull  7   /* Set the foreign key value to NULL */
+#define OE_SetDflt  8   /* Set the foreign key value to its default */
+#define OE_Cascade  9   /* Cascade the changes */
+
+#define OE_Default  99  /* Do whatever the default action is */
+
+/*
+ * Each SQL index is represented in memory by an
+ * instance of the following structure.
+ *
+ * The columns of the table that are to be indexed are described
+ * by the aiColumn[] field of this structure.  For example, suppose
+ * we have the following table and index:
+ *
+ *     CREATE TABLE Ex1(c1 int, c2 int, c3 text);
+ *     CREATE INDEX Ex2 ON Ex1(c3,c1);
+ *
+ * In the table_t structure describing Ex1, nCol==3 because there are
+ * three columns in the table.  In the index_t structure describing
+ * Ex2, nColumn==2 since 2 of the 3 columns of Ex1 are indexed.
+ * The value of aiColumn is {2, 0}.  aiColumn[0]==2 because the 
+ * first column to be indexed (c3) has an index of 2 in Ex1.aCol[].
+ * The second column to be indexed (c1) has an index of 0 in
+ * Ex1.aCol[], hence Ex2.aiColumn[1]==0.
+ *
+ * The index_t.onError field determines whether or not the indexed columns
+ * must be unique and what to do if they are not.  When
+ * index_t.onError=OE_None, it means this is not a unique index.  Otherwise
+ * it is a unique index and the value of index_t.onError indicate the which
+ * conflict resolution algorithm to employ whenever an attempt is made to
+ * insert a non-unique element.
+ */
+struct index {
+	char *zName;             /* Name of this index */
+	int nColumn;             /* Number of columns in the table used by
+				    this index */
+	int *aiColumn;           /* Which columns are used by this index.
+				    1st is 0 */
+	table_t *pTable;         /* The SQL table being indexed */
+	int tnum;                /* Page containing root of this index in
+				    database file */
+	u_int8_t onError;        /* OE_Abort, OE_Ignore, OE_Replace, or
+				    OE_None */
+	u_int8_t autoIndex;      /* True if is automatically created
+				    (for instance by the use of UNIQUE) */
+	u_int8_t iDb;            /* Index in DBSQL.aDb[] of where this index
+				    is stored */
+	index_t *pNext;          /* The next index associated with the same
+				    table */
+};
+
+/*
+ * Each token coming out of the lexer is an instance of this structure.
+ * Tokens are also used as part of an expression.
+ *
+ * Note if token_t.z==0 then token_t.dyn and token_t.n are undefined and
+ * may contain random values.  Do not make any assuptions about token_t.dyn
+ * and token_t.n when token_t.z==0.
+ */
+struct token {
+	const char *z;           /* Text of the token.  Not NULL-terminated! */
+	unsigned dyn  : 1;       /* True for malloced memory, false for
+				    static */
+	unsigned n    : 31;      /* Number of characters in this token */
+};
+
+/*
+ * Each node of an expression in the parse tree is an instance
+ * of this structure.
+ *
+ * expr_t.op is the opcode.  The integer parser token codes are reused
+ * as opcodes here.  For example, the parser defines TK_GE to be an integer
+ * code representing the ">=" operator.  This same integer code is reused
+ * to represent the greater-than-or-equal-to operator in the expression
+ * tree.
+ *
+ * expr_t.pRight and expr_t.pLeft are subexpressions.  expr_t.pList is a list
+ * of argument if the expression is a function.
+ *
+ * expr_t.token is the operator token for this node.  For some expressions
+ * that have subexpressions, expr_t.token can be the complete text that gave
+ * rise to the expr_t.  In the latter case, the token is marked as being
+ * a compound token.
+ *
+ * An expression of the form ID or ID.ID refers to a column in a table.
+ * For such expressions, expr_t.op is set to TK_COLUMN and expr_t.iTable is
+ * the integer cursor number of a VDBE cursor pointing to that table and
+ * expr_t.iColumn is the column number for the specific column.  If the
+ * expression is used as a result in an aggregate SELECT, then the
+ * value is also stored in the expr_t.iAgg column in the aggregate so that
+ * it can be accessed after all aggregates are computed.
+ *
+ * If the expression is a function, the expr_t.iTable is an integer code
+ * representing which function.  If the expression is an unbound variable
+ * marker (a question mark character '?' in the original SQL) then the
+ * expr_t.iTable holds the index number for that variable.
+ *
+ * The expr_t.pSelect field points to a SELECT statement.  The SELECT might
+ * be the right operand of an IN operator.  Or, if a scalar SELECT appears
+ * in an expression the opcode is TK_SELECT and expr_t.pSelect is the only
+ * operand.
+ */
+struct expr {
+	u_int8_t op;             /* Operation performed by this node */
+	u_int8_t dataType;       /* Either DBSQL_SO_TEXT or DBSQL_SO_NUM */
+	u_int8_t iDb;            /* Database referenced by this expression */
+	u_int8_t flags;          /* Various flags.  See below */
+/*
+ * The following are the meanings of bits in the expr_t.flags field.
+ */
+#define EP_FromJoin     0x0001   /* Originated in ON or USING clause of a
+				    join */
+	expr_t *pLeft, *pRight;  /* Left and right subnodes */
+	expr_list_t *pList;      /* A list of expressions used as function
+				    arguments or in "<expr> IN (<expr-list)" */
+	token_t token;           /* An operand token */
+	token_t span;            /* Complete text of the expression */
+	int iTable, iColumn;     /* When op==TK_COLUMN, then this expr node
+				    means the iColumn-th field of the iTable-th
+				    table. */
+	int iAgg;                /* When op==TK_COLUMN and pParse->useAgg==TRUE
+				    pull result from the iAgg-th element of the
+				    aggregator */
+	select_t *pSelect;       /* When the expression is a sub-select.  Also
+				    the right side of "<expr> IN (<select>)" */
+};
+
+/*
+ * These macros can be used to test, set, or clear bits in the 
+ * expr_t.flags field.
+ */
+#define ExprHasProperty(E,P)     (((E)->flags&(P))==(P))
+#define ExprHasAnyProperty(E,P)  (((E)->flags&(P))!=0)
+#define ExprSetProperty(E,P)     (E)->flags|=(P)
+#define ExprClearProperty(E,P)   (E)->flags&=~(P)
+
+/*
+ * A list of expressions.  Each expression may optionally have a
+ * name.  An expr/name combination can be used in several ways, such
+ * as the list of "expr AS ID" fields following a "SELECT" or in the
+ * list of "ID = expr" items in an UPDATE.  A list of expressions can
+ * also be used as the argument to a function, in which case the a.zName
+ * field is not used.
+ */
+struct expr_list {
+	int nExpr;               /* Number of expressions on the list */
+	int nAlloc;              /* Number of entries allocated below */
+	struct expr_list_item {
+		expr_t *pExpr;   /* The list of expressions */
+		char *zName;     /* token_t associated with this expression */
+		u_int8_t sortOrder; /* 1 for DESC or 0 for ASC */
+		u_int8_t isAgg;  /* True if this is an aggregate like
+				    count(*) */
+		u_int8_t done;   /* A flag to indicate when processing is
+				    finished */
+	} *a;                    /* One entry for each expression */
+};
+
+/*
+ * An instance of this structure can hold a simple list of identifiers,
+ * such as the list "a,b,c" in the following statements:
+ *
+ *      INSERT INTO t(a,b,c) VALUES ...;
+ *      CREATE INDEX idx ON t(a,b,c);
+ *      CREATE TRIGGER trig BEFORE UPDATE ON t(a,b,c) ...;
+ *
+ * The id_list_t.a.idx field is used when the id_list_t represents the list of
+ * column names after a table name in an INSERT statement.  In the statement
+ *
+ *     INSERT INTO t(a,b,c) ...
+ *
+ * If "a" is the k-th column of table "t", then id_list_t.a[0].idx==k.
+ */
+struct id_list {
+	int nId;                 /* Number of identifiers on the list */
+	int nAlloc;              /* Number of entries allocated for a[]
+				    below */
+	struct id_list_item {
+		char *zName;     /* Name of the identifier */
+		int idx;         /* Index in some table_t.aCol[] of a column
+				    named zName */
+	} *a;
+};
+
+/*
+ * The following structure describes the FROM clause of a SELECT statement.
+ * Each table or subquery in the FROM clause is a separate element of
+ * the src_list_t.a[] array.
+ *
+ * With the addition of multiple database support, the following structure
+ * can also be used to describe a particular table such as the table that
+ * is modified by an INSERT, DELETE, or UPDATE statement.  In standard SQL,
+ * such a table must be a simple name: ID.  Instead, the table can now be
+ * identified by a database name, a dot, then the table name: ID.ID.
+ */
+struct src_list {
+	u_int16_t nSrc;          /* Number of tables or subqueries in the
+				    FROM clause */
+	u_int16_t nAlloc;        /* Number of entries allocated in a[] below */
+	struct src_list_item {
+		char *zDatabase; /* Name of database holding this table */
+		char *zName;     /* Name of the table */
+		char *zAlias;    /* The "B" part of a "A AS B" phrase.  zName
+				    is the "A" */
+		table_t *pTab;   /* An SQL table corresponding to zName */
+		select_t *pSelect; /* A SELECT statement used in place of
+				      a table name */
+		int jointype;    /* Type of join between this table and the
+				    next */
+/*
+ * Permitted values of the src_list_t.a.jointype field
+ */
+#define JT_INNER     0x0001    /* Any kind of inner or cross join */
+#define JT_NATURAL   0x0002    /* True for a "natural" join */
+#define JT_LEFT      0x0004    /* Left outer join */
+#define JT_RIGHT     0x0008    /* Right outer join */
+#define JT_OUTER     0x0010    /* The "OUTER" keyword is present */
+#define JT_ERROR     0x0020    /* unknown or unsupported join type */
+		int iCursor;     /* The VDBE cursor number used to access
+				    this table */
+		expr_t *pOn;     /* The ON clause of a join */
+		id_list_t *pUsing; /* The USING clause of a join */
+	} a[1];                  /* One entry for each identifier on the
+				    list */
+};
+
+
+/*
+ * For each nested loop in a WHERE clause implementation, the where_info_t
+ * structure contains a single instance of this structure.  This structure
+ * is intended to be private the the where.c module and should not be
+ * access or modified by other modules.
+ */
+struct where_level {
+	int iMem;                /* Memory cell used by this level */
+	index_t *pIdx;           /* index_t used */
+	int iCur;                /* Cursor number used for this index */
+	int score;               /* How well this indexed scored */
+	int brk;                 /* Jump here to break out of the loop */
+	int cont;                /* Jump here to continue with the next loop
+				    cycle */
+	int op, p1, p2;          /* Opcode used to terminate the loop */
+	int iLeftJoin;           /* Memory cell used to implement
+				    LEFT OUTER JOIN */
+	int top;                 /* First instruction of interior of the
+				    loop */
+	int inOp, inP1, inP2;    /* Opcode used to implement an IN operator */
+	int bRev;                /* Do the scan in the reverse direction */
+};
+
+/*
+ * The WHERE clause processing routine has two halves.  The
+ * first part does the start of the WHERE loop and the second
+ * half does the tail of the WHERE loop.  An instance of
+ * this structure is returned by the first half and passed
+ * into the second half to give some continuity.
+ */
+struct where_info {
+	parser_t *pParse;
+	src_list_t *pTabList;    /* List of tables in the join */
+	int iContinue;           /* Jump here to continue with next record */
+	int iBreak;              /* Jump here to break out of the loop */
+	int nLevel;              /* Number of nested loop */
+	int savedNTab;           /* Value of pParse->nTab before WhereBegin()*/
+	int peakNTab;            /* Value of pParse->nTab after WhereBegin() */
+	where_level_t a[1];      /* Info about each nest loop in the WHERE */
+};
+
+/*
+ * An instance of the following structure contains all information
+ * needed to generate code for a single SELECT statement.
+ *
+ * The zSelect field is used when the select_t structure must be persistent.
+ * Normally, the expression tree points to tokens in the original input
+ * string that encodes the select.  But if the select_t structure must live
+ * longer than its input string (for example when it is used to describe
+ * a VIEW) we have to make a copy of the input string so that the nodes
+ * of the expression tree will have something to point to.  zSelect is used
+ * to hold that copy.
+ *
+ * nLimit is set to -1 if there is no LIMIT clause.  nOffset is set to 0.
+ * If there is a LIMIT clause, the parser sets nLimit to the value of the
+ * limit and nOffset to the value of the offset (or 0 if there is not
+ * offset).  But later on, nLimit and nOffset become the memory locations
+ * in the VDBE that record the limit and offset counters.
+ */
+struct select {
+	expr_list_t *pEList;     /* The fields of the result */
+	u_int8_t op;             /* One of: TK_UNION TK_ALL TK_INTERSECT
+				    TK_EXCEPT */
+	u_int8_t isDistinct;     /* True if the DISTINCT keyword is present */
+	src_list_t *pSrc;        /* The FROM clause */
+	expr_t *pWhere;          /* The WHERE clause */
+	expr_list_t *pGroupBy;   /* The GROUP BY clause */
+	expr_t *pHaving;         /* The HAVING clause */
+	expr_list_t *pOrderBy;   /* The ORDER BY clause */
+	select_t *pPrior;        /* Prior select in a compound select stmt */
+	int nLimit, nOffset;     /* LIMIT and OFFSET values.  -1 means
+				    not used */
+	int iLimit, iOffset;     /* Memory registers holding LIMIT & OFFSET
+				    counters */
+	char *zSelect;           /* Complete text of the SELECT command */
+};
+
+/*
+ * The results of a select can be distributed in several ways.
+ */
+#define SRT_Callback     1  /* Invoke a callback with each row of result */
+#define SRT_Mem          2  /* Store result in a memory cell */
+#define SRT_Set          3  /* Store result as unique keys in a table */
+#define SRT_Union        5  /* Store result as keys in a table */
+#define SRT_Except       6  /* Remove result from a UNION table */
+#define SRT_Table        7  /* Store result as data with a unique key */
+#define SRT_TempTable    8  /* Store result in a trasient table */
+#define SRT_Discard      9  /* Do not save the results anywhere */
+#define SRT_Sorter      10  /* Store results in the sorter */
+#define SRT_Subroutine  11  /* Call a subroutine to handle results */
+
+/*
+ * When a SELECT uses aggregate functions (like "count(*)" or "avg(f1)")
+ * we have to do some additional analysis of expressions.  An instance
+ * of the following structure holds information about a single subexpression
+ * somewhere in the SELECT statement.  An array of these structures holds
+ * all the information we need to generate code for aggregate
+ * expressions.
+ *
+ * Note that when analyzing a SELECT containing aggregates, both
+ * non-aggregate field variables and aggregate functions are stored
+ * in the agg_expr_t array of the parser_t structure.
+ *
+ * The pExpr field points to an expression that is part of either the
+ * field list, the GROUP BY clause, the HAVING clause or the ORDER BY
+ * clause.  The expression will be freed when those clauses are cleaned
+ * up.  Do not try to delete the expression attached to agg_expr_t.pExpr.
+ *
+ * If agg_expr_t.pExpr==0, that means the expression is "count(*)".
+ */
+struct agg_expr {
+	int isAgg;               /* if TRUE contains an aggregate function */
+	expr_t *pExpr;           /* The expression */
+	func_def_t *pFunc;       /* Information about the aggregate function */
+};
+
+/*
+ * An SQL parser context.  A copy of this structure is passed through
+ * the parser and down into all the parser action routine in order to
+ * carry around information that is global to the entire parse.
+ */
+struct parser {
+	DBSQL *db;               /* The main database structure */
+	int rc;                  /* Return code from execution */
+	dbsql_callback xCallback;/* The callback function */
+	void *pArg;              /* First argument to the callback function */
+	char *zErrMsg;           /* An error message */
+	token_t sErrToken;       /* The token at which the error occurred */
+	token_t sFirstToken;     /* The first token parsed */
+	token_t sLastToken;      /* The last token parsed */
+	const char *zTail;       /* All SQL text past the last semicolon
+				    parsed */
+	table_t *pNewTable;      /* A table being constructed by CREATE TABLE*/
+	vdbe_t *pVdbe;           /* An engine for executing database bytecode*/
+	u_int8_t colNamesSet;    /* TRUE after OP_ColumnName has been issued
+				    to pVdbe */
+	u_int8_t explain;        /* True if the EXPLAIN flag is found on the
+				    query */
+	u_int8_t initFlag;       /* True if reparsing CREATE TABLEs */
+	u_int8_t nameClash;      /* A permanent table name clashes with temp
+				    table name */
+	u_int8_t useAgg;         /* If true, extract field values from the
+				    aggregator while generating expressions.
+				    Normally false. */
+	u_int8_t iDb;            /* Index of database whose schema is being
+				    parsed */
+	u_int8_t useCallback;    /* True if callbacks should be used to report
+				    results */
+	int newTnum;             /* Table number to use when reparsing CREATE
+				    TABLEs */
+	int nErr;                /* Number of errors seen */
+	int nTab;                /* Number of previously allocated VDBE
+				    cursors */
+	int nMem;                /* Number of memory cells used so far */
+	int nSet;                /* Number of sets used so far */
+	int nAgg;                /* Number of aggregate expressions */
+	int nVar;                /* Number of '?' variables seen in the SQL so
+				    far */
+	agg_expr_t *aAgg;        /* An array of aggregate expressions */
+	const char *zAuthContext;/* The 6th parameter to db->auth callbacks */
+	trigger_t *pNewTrigger;  /* trigger_t under construct by a CREATE
+				    TRIGGER */
+	trigger_stack_t *trigStack; /* Trigger actions being coded */
+};
+
+/*
+ * An instance of the following structure can be declared on a stack and used
+ * to save the parser_t.zAuthContext value so that it can be restored later.
+ */
+struct auth_context {
+	const char *zAuthContext;/* Put saved Parse.zAuthContext here */
+	parser_t *pParse;        /* The Parse structure */
+};
+
+/*
+ * Each trigger present in the database schema is stored as an instance of
+ * struct trigger. 
+ *
+ * Pointers to instances of struct trigger are stored in two ways.
+ * 1. In the "trigHash" hash table (part of the DBSQL* that represents the 
+ *    database). This allows trigger_t structures to be retrieved by name.
+ * 2. All triggers associated with a single table form a linked list, using the
+ *    pNext member of struct trigger. A pointer to the first element of the
+ *    linked list is stored as the "pTrigger" member of the associated
+ *    struct table_t.
+ *
+ * The "step_list" member points to the first element of a linked list
+ * containing the SQL statements specified as the trigger program.
+ */
+struct trigger {
+	char *name;              /* The name of the trigger */
+	char *table;             /* The table or view to which the trigger
+				    applies */
+	u_int8_t iDb;            /* Database containing this trigger */
+	u_int8_t iTabDb;         /* Database containing trigger_t.table */
+	u_int8_t op;             /* One of TK_DELETE, TK_UPDATE, TK_INSERT */
+	u_int8_t tr_tm;          /* One of TK_BEFORE, TK_AFTER */
+	expr_t *pWhen;           /* The WHEN clause of the expresion (may be
+				    NULL) */
+	id_list_t *pColumns;     /* If this is an UPDATE OF <column-list>
+				    trigger, the <column-list> is stored
+				    here */
+	int foreach;             /* One of TK_ROW or TK_STATEMENT */
+	token_t nameToken;       /* token_t containing zName. Use during
+				    parsing only */
+	trigger_step_t *step_list;/* Link list of trigger program steps */
+	trigger_t *pNext;        /* Next trigger associated with the table */
+};
+
+/*
+ * An instance of struct trigger_step_t is used to store a single SQL statement
+ * that is a part of a trigger-program. 
+ *
+ * Instances of struct trigger_step_t are stored in a singly linked list
+ * (linked using the "pNext" member) referenced by the "step_list" member of
+ * the associated struct trigger instance. The first element of the linked
+ * list is the first step of the trigger-program.
+ * 
+ * The "op" member indicates whether this is a "DELETE", "INSERT", "UPDATE" or
+ * "SELECT" statement. The meanings of the other members is determined by the 
+ * value of "op" as follows:
+ *
+ * (op == TK_INSERT)
+ * orconf    -> stores the ON CONFLICT algorithm
+ * pSelect   -> If this is an INSERT INTO ... SELECT ... statement, then
+ *              this stores a pointer to the SELECT statement. Otherwise NULL.
+ * target    -> A token holding the name of the table to insert into.
+ * pExprList -> If this is an INSERT INTO ... VALUES ... statement, then
+ *              this stores values to be inserted. Otherwise NULL.
+ * pIdList   -> If this is an INSERT INTO ... (<column-names>) VALUES ... 
+ *              statement, then this stores the column-names to be
+ *              inserted into.
+ *
+ * (op == TK_DELETE)
+ * target    -> A token holding the name of the table to delete from.
+ * pWhere    -> The WHERE clause of the DELETE statement if one is specified.
+ *              Otherwise NULL.
+ * 
+ * (op == TK_UPDATE)
+ * target    -> A token holding the name of the table to update rows of.
+ * pWhere    -> The WHERE clause of the UPDATE statement if one is specified.
+ *              Otherwise NULL.
+ * pExprList -> A list of the columns to update and the expressions to update
+ *              them to. See __update() documentation of "pChanges"
+ *              argument.
+ * 
+ */
+struct trigger_step {
+	int op;                  /* One of TK_DELETE, TK_UPDATE, TK_INSERT,
+				    TK_SELECT */
+	int orconf;              /* OE_Rollback etc. */
+	trigger_t *pTrig;        /* The trigger that this step is a part of */
+	select_t *pSelect;       /* Valid for SELECT and sometimes 
+				    INSERT steps (when pExprList == 0) */
+	token_t target;          /* Valid for DELETE, UPDATE, INSERT steps */
+	expr_t *pWhere;          /* Valid for DELETE, UPDATE steps */
+	expr_list_t *pExprList;  /* Valid for UPDATE statements and sometimes 
+				    INSERT steps (when pSelect == 0) */
+	id_list_t *pIdList;      /* Valid for INSERT statements only */
+	trigger_step_t * pNext;  /* Next in the link-list */
+};
+
+/*
+ * An instance of struct trigger_stack_t stores information required during
+ * code generation of a single trigger program. While the trigger program is
+ * being coded, its associated trigger_stack_t instance is pointed to by the
+ * "pTriggerStack" member of the Parse structure.
+ *
+ * The pTab member points to the table that triggers are being coded on. The 
+ * newIdx member contains the index of the vdbe cursor that points at the temp
+ * table that stores the new.* references. If new.* references are not valid
+ * for the trigger being coded (for example an ON DELETE trigger), then newIdx
+ * is set to -1. The oldIdx member is analogous to newIdx, for old.*
+ * references.
+ *
+ * The ON CONFLICT policy to be used for the trigger program steps is stored 
+ * as the orconf member. If this is OE_Default, then the ON CONFLICT clause 
+ * specified for individual triggers steps is used.
+ *
+ * struct trigger_stack_t has a "pNext" member, to allow linked lists to be
+ * constructed. When coding nested triggers (triggers fired by other triggers)
+ * each nested trigger stores its parent trigger's trigger_stack_t as the
+ * "pNext" pointer. Once the nested trigger has been coded, the pNext value is
+ * restored to the pTriggerStack member of the Parse stucture and coding of
+ * the parent trigger continues.
+ *
+ * Before a nested trigger is coded, the linked list pointed to by the 
+ * pTriggerStack is scanned to ensure that the trigger is not about to be coded
+ * recursively. If this condition is detected, the nested trigger is not coded.
+ */
+struct trigger_stack {
+	table_t *pTab;           /* Table that triggers are currently being
+				    coded on */
+	int newIdx;              /* Index of vdbe cursor to "new" temp table */
+	int oldIdx;              /* Index of vdbe cursor to "old" temp table */
+	int orconf;              /* Current orconf policy */
+	int ignoreJump;          /* where to jump to for a RAISE(IGNORE) */
+	trigger_t *pTrigger;     /* The trigger currently being coded */
+	trigger_stack_t *pNext;  /* Next trigger down on the trigger stack */
+};
+
+/*
+ * The following structure contains information used by the __ref_normalizeXXX
+ * routines as they walk the parse tree to make database references
+ * explicit.  
+ */
+typedef struct ref_normalizer_ctx ref_normalizer_ctx_t;
+struct ref_normalizer_ctx {
+	parser_t *pParse;        /* The parsing context.  Error messages
+				    written here */
+	const char *zDb;         /* Make sure all objects are contained in
+				    this database */
+	const char *zType;       /* Type of the container - used for error
+				    messages */
+	const token_t *pName;    /* Name of the container - used for error
+				    messages */
+};
+
+/*
+ * This global flag is set for performance testing of triggers. When it is set
+ * the library will perform the overhead of building new and old trigger
+ * references even when no triggers exist
+ * TODO remove this(?) at least ifdef, or move it to globals
+ */
+extern int always_code_trigger_setup;
+
+#include "inc/dbsql_ext.h"
+#include "inc/os_ext.h"
+#include "inc/clib_ext.h"
+#include "inc/common_ext.h"
+
+#if defined(__cplusplus)
+}
+#endif
+#endif /* !_DBSQL_INT_H_ */

@@ -1,0 +1,141 @@
+--- Things to fix before 1.0
+* search for TODO and fix in all files
+* review use of __os_malloc verses __os_umalloc
+* strcasecmp.c: what about UNICODE?
+* --enable-sqlite-compat  create the sqlite compat api
+* --disable-statistics
+* command line tools
+  * dbsql
+    * --bcp bulk copy from file
+* integrate the new 4.3 unique id generation
+* replace NDEBUG with DIAGNOSTIC
+* ask about optimizations for MySQL, incorporate into DBSQL
+* modify types to be less ambiguous int -> u_int32_t
+* work bottom up, and top down knitting DB access patterns in
+* grep for 'return [0-9]+' and replace with #defines that make more sense
+* change all 'return XXX;' statements to be 'return (XXX);'
+* replace '(char*)0' with NULL or some such thing
+* look for and try to replace (void*) casts
+* move dbsql_get_encoding global into DBSQL->[get,set]_encoding() 
+* rewrite error reporting, get rid of __str_urealloc and err_msgs
+* lint, lclint and splint checking
+* spell check comments, docs, etc - add standard spell.ok etc stuff
+* grep for "Malloc Failed", fix
+* replace home grown linked lists(src_list) with macro implementations of same
+* dbsql_create_env() should do the following as a default setup:
+  To minimize the amount of space taken up by the log files, 
+  configure Berkeley DB to have small log files (see the
+  DbEnv.set_lg_max method), do frequent checkpoints (see the
+  DbEnv.txn_checkpoint method), and automatically remove log 
+  files (see the DB_LOG_AUTOREMOVE flag to the DbEnv.set_flags
+  method). -- Keith
+* purify - memory leak/buffer overrun check
+* profile - gprof(1) - profile run, look for hot spots
+* produce and examine a code coverage report
+* fix places where I moved local scope vars to function scope vars (as I go)
+* consider using a DB_SEQ for 'int priorNewRowid;    /* Last generated ROWID */'
+* what is the difference between DBSQL_STATUS_ERROR verses DBSQL_RUN_RECOVERY
+  when should one be used over the other?  check usage.
+* DBSQL->{sg}et_verbose
+* stats?
+* How will TRIGGERS work in a multi env setup or worse yet, when replicated?
+* add .describe [command] ('.describe select') to dbsql
+* add .edit [!n] to open $EDITOR on historical statement
+* examine the MySQL command line interface, add best features
+* TRUNCATE table [tablename]
+* use something similar to readline in shell (but not readline, its GPL)
+
+--- 1.1
+* cxx
+* Java
+  * JDBC type ???
+* make the data types user definable via codec functions
+* ASSOCIATE select_stmt WITH db_database_name  [READ ONLY|READ WRITE]
+  KEY 'printf format expression' VALUE AS 'printf format expression'
+* select @@IDENTITY
+* SEQUENCE http://otn.oracle.com/products/rdb/pdf/0307_sequences.pdf
+* XOpen CLI (==ODBC) implementation
+* --enable-regex-like (e.g. 'SELECT * from Person where name like /B(u|i|y)rd/;')
+
+--- 2.0
+* note that cg_where.c has a WHERE clause limit of 100 search for wc_exprs[101]
+* note in cg_where.c that if the 33rd table of a join has an index it won't
+  be found or used as the bitmask method uses an u_int_32, consider fixing this
+* LibSDB interface http://siag.nu/libsdb/
+* --enable-xml
+  http://www.throwingbeans.org/tech/postgresql_and_xml.html
+  http://weblog.infoworld.com/udell/2003/03/12.html#a637
+  http://www.sqlxml.org/
+  http://www.perfectxml.com/SQLXML.asp
+  http://www.sqlxml.org/faqs.aspx?faq=103
+* 64bit clean http://www.treblig.org/articles/64bits.html
+* Create View INFORMATION_SCHEMA_TABLES as
+ Select * from ( select 'main' as TABLE_CATALOG , 'sqlite' as TABLE_SCHEMA , tbl_name as TABLE_NAME , case when type = 'table' then 'BASE TABLE' when type = 'view' then 'VIEW' end as TABLE_TYPE, sql as TABLE_SOURCE from sqlite_master where type in('table','view') and tbl_name not like 'INFORMATION_SCHEMA_%' union select 'main' as TABLE_CATALOG , 'sqlite' as TABLE_SCHEMA , tbl_name as TABLE_NAME , case when type = 'table' then 'TEMPORARY TABLE' when type = 'view' then 'TEMPORARY VIEW' end as TABLE_TYPE, sql as TABLE_SOURCE from sqlite_temp_master where type in('table','view') and tbl_name not like 'INFORMATION_SCHEMA_%' ) BT order by TABLE_TYPE , TABLE_NAME
+
+--- 3.0
+* --enable-full-text-searching
+  CONTAINS full text index, stemming, etc.
+* server
+* replication
+  * build in severial replication methods, TCP p2p, TCP broadcast,
+    UDP broadcast, multicast
+  * discovery
+    * on mac, use rendevous
+    * on UNIX use SLRP
+  * use kqueues, /dev/poll, rt-signals etc - I think there is a lib that abstracts this
+
+--- Debugging
+* build dbsql_sim - randomly exercises the system hoping to uncover bugs
+* build dbsql_perf - measures performance of things relase/release vs baseline
+* OSDB http://osdb.sourceforge.net/
+
+--- Missing SQL92 features
+* TRUNCATE table [tablename]
+* ???
+
+--- Competition
+  * http://mindprod.com/jgloss/sql.html
+
+--- Everything else...
+* look at the API of http://www.xtgsystems.com/linux/simdb/doc.php
+* http://www.sqlsummit.com/ODBCPORT.HTM
+* http://en.wikipedia.org/wiki/ODBC
+* dbExpress, is it some ODBC-like API
+* http://www.thinksql.co.uk/Main/Documents/Multiversion.html
+* http://www.rpbourret.com/xml/XMLDatabaseProds.htm
+* http://www.rpbourret.com/xml/XMLAndDatabases.htm
+
+--- Google AdWords
+
+MySQL, sql, sql92, sqlite, jet database, ms access, access, sql engine,
+ 
+
+--- References
+
+http://www.wiscorp.com/SQLStandards.html
+http://www.ocelot.ca/nist.htm
+http://www.jcc.com/SQLPages/jccs_sql.htm
+http://www.tdan.com/i016hy01.htm
+http://www.mimer.com/news.asp?secId=176&itemId=10
+http://www.itl.nist.gov/div897/ctg/sql-testing/sqlman60.htm
+http://www.opengroup.org/public/tech/datam/sql.htm
+http://www.dwm.uni-hildesheim.de/homes/r_maximi/SQL1998/CLICK_ME_SECOND.html
+http://www.iam.unibe.ch/~scg/Archive/Software/FreeDB/FreeDB.list.html
+http://www.infres.enst.fr/naw-home/doc/srfsqlhtml_bnf.html
+http://www.ontko.com/~rayo/database.html
+http://www.ocelot.ca/sites.htm
+http://www.sqlcorner.com/
+http://www.codebox.8m.com/sql.htm
+http://sqlzoo.net/sql92.html
+http://www.opengroup.org/testing/testsuites/nistsql.htm
+http://ou800doc.caldera.com/SDK_netapi/CTOC-xtiN.intro.html
+http://cui.unige.ch/db-research/Enseignement/analyseinfo/SQL7/BNFindex.html
+http://cui.unige.ch/db-research/Enseignement/analyseinfo/SQL92/BNFindex.html
+http://cui.unige.ch/db-research/Enseignement/analyseinfo/PLSQL21/BNFindex.html
+http://wombat.doc.ic.ac.uk/foldoc/foldoc.cgi?relational+algebra
+http://support.openlinksw.com/support/mac-faq.html
+
+@misc{ gukal-fast,
+  author = "Sreenivas Gukal and Edward Omiecinski and Umakishore Ramachandran",
+  title = "Fast Recovery in Transient-Versioned Databases",
+  url = "citeseer.nj.nec.com/38354.html" }

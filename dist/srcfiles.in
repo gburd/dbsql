@@ -1,0 +1,86 @@
+# DBSQL - A SQL database engine.
+#
+# Copyright (C) 2007  The DBSQL Group, Inc. - All rights reserved.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# There are special exceptions to the terms and conditions of the GPL as it
+# is applied to this software. View the full text of the exception in file
+# LICENSE_EXCEPTIONS in the directory of this software distribution.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# http://creativecommons.org/licenses/GPL/2.0/
+#
+# $Id: srcfiles.in 7 2007-02-03 13:34:17Z gburd $
+
+
+# This is an input file for the s_win32_dsp.  It lists the source files in
+# the DBSQL tree and notes which are used to build the Win/32 library.
+#
+# Please keep this list sorted alphabetically!
+#
+# Each non-blank, non-comment line is of the form
+#   filename		module [ module ...]
+#
+# The possible modules, including the name of the project (.dsp) file:
+#
+#   app=NAME		Linked into application NAME.exe (db_NAME.dsp)
+#   dynamic		File is in the Windows DLL (db_dll.dsp)
+#   static		File is in the Windows static library (db_static.dsp)
+#   java		File is in the Windows Java DLL (db_java.dsp)
+#   tcl			File is in the Windows tcl DLL (db_tcl.dsp)
+#   testutil		File is used for Windows testing (db_test.dsp)
+
+build_unix/lempar.c				dynamic static
+build_unix/opcodes.c				dynamic static
+build_unix/sql_parser.c				dynamic static
+build_win32/dbkill.cpp				testutil
+dist/splint.rc
+examples/binary_codec.c
+src/api.c					dynamic static
+src/api_table.c					dynamic static
+src/cg_attach.c					dynamic static
+src/cg_auth.c					dynamic static
+src/cg_build.c					dynamic static
+src/cg_copy.c					dynamic static
+src/cg_date.c					dynamic static
+src/cg_delete.c					dynamic static
+src/cg_expr.c					dynamic static
+src/cg_insert.c					dynamic static
+src/cg_pragma.c					dynamic static
+src/cg_select.c					dynamic static
+src/cg_trigger.c				dynamic static
+src/cg_update.c					dynamic static
+src/cg_vacuum.c					dynamic static
+src/cg_where.c					dynamic static
+src/clib/getopt.c				app=dbsql
+src/clib/memcmp.c				dynamic static
+src/clib/random.c				dynamic static
+src/clib/snprintf.c				dynamic static
+src/clib/strcasecmp.c				dynamic static
+src/clib/strdup.c				dynamic static
+src/clib/xvprintf.c				dynamic static
+src/common/dbsql_alloc.c			dynamic static
+src/common/dbsql_atof.c				dynamic static
+src/common/dbsql_atoi.c				dynamic static
+src/common/dbsql_err.c				dynamic static
+src/common/hash.c				dynamic static
+src/common/str.c				dynamic static
+src/dbsql/dbsql.c				app=dbsql
+src/dbsql_tclsh.c				app=dbsql_tclsh
+src/lemon/lemon.c				app=lemon
+src/lemon/lempar.c				app=lemon
+src/os/os_jtime.c				dynamic static
+src/safety.c					dynamic static
+src/sm.c					dynamic static
+src/sql_fns.c					dynamic static
+src/sql_tokenize.c				dynamic static
+src/vdbe.c					dynamic static
+src/vdbe_method.c				dynamic static

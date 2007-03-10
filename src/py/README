@@ -1,0 +1,7 @@
+This is a fork of the pysqlite2 Python API for SQLite project found at:
+  http://www.initd.org/tracker/pysqlite/wiki/pysqlite
+  svn co http://initd.org/svn/pysqlite/pysqlite/trunk/
+
+The branch was started Feb 14, 2007.  Changes since then are copyright by
+The DBSQL Group, Inc. and not written by Gerhard Haering.  Changes to
+the pysqlite2 package are periodically examined and integrated.

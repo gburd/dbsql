@@ -1,0 +1,486 @@
+# DBSQL - A SQL database engine.
+#
+# Copyright (C) 2007  The DBSQL Group, Inc. - All rights reserved.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# There are special exceptions to the terms and conditions of the GPL as it
+# is applied to this software. View the full text of the exception in file
+# LICENSE_EXCEPTIONS in the directory of this software distribution.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# http://creativecommons.org/licenses/GPL/2.0/
+#
+# $Id: Makefile.in 7 2007-02-03 13:34:17Z gburd $
+
+srcdir=		@srcdir@/../src
+tstdir=		@srcdir@/../test
+distdir=	@srcdir@/../dist
+builddir=.
+
+##################################################
+# Installation directories and permissions.
+##################################################
+prefix=		@prefix@
+exec_prefix=	@exec_prefix@
+bindir=		@bindir@
+includedir=	@includedir@
+libdir=		@libdir@
+docdir=		$(prefix)/docs
+
+dmode=	755
+emode=	555
+fmode=	444
+
+transform=@program_transform_name@
+
+##################################################
+# Paths for standard user-level commands.
+##################################################
+SHELL=	@db_cv_path_sh@
+ar=	@db_cv_path_ar@
+awk=	@db_cv_path_awk@
+chmod=	@db_cv_path_chmod@
+cp=	@db_cv_path_cp@
+depend= @db_cv_path_makedepend@
+grep=	@db_cv_path_grep@
+ln=	@db_cv_path_ln@
+mkdir=	@db_cv_path_mkdir@
+ranlib=	@db_cv_path_ranlib@
+rm=	@db_cv_path_rm@
+rpm=	@db_cv_path_rpm@
+sed=	@db_cv_path_sed@
+perl=	@db_cv_path_perl@
+splint=	@db_cv_path_splint@
+strip=	@db_cv_path_strip@
+
+##################################################
+# General library information.
+##################################################
+DEF_LIB=	@DEFAULT_LIB@
+DEF_LIB_CXX=	@DEFAULT_LIB_CXX@
+INSTALLER=	@INSTALLER@
+LIBTOOL=	@LIBTOOL@
+POSTLINK=	@POSTLINK@
+SOLINK=		@MAKEFILE_SOLINK@
+SOFLAGS=	@SOFLAGS@
+LIBMAJOR=	@DBSQL_VERSION_MAJOR@
+LIBVERSION=	@DBSQL_VERSION_MAJOR@.@DBSQL_VERSION_MINOR@
+CPPFLAGS=	-I$(builddir) -I$(srcdir) @CPPFLAGS@
+
+##################################################
+# Lemon parser generator information.
+##################################################
+LEMON=		./lemon
+LEMON_FLAGS=
+
+##################################################
+# C API.
+##################################################
+CFLAGS=	 		-c $(CPPFLAGS) @CFLAGS@
+CC=			@MAKEFILE_CC@
+CCLINK=			@MAKEFILE_CCLINK@
+
+LDFLAGS=		@LDFLAGS@
+LIBS=			@LIBS@
+LIBSO_LIBS=		@LIBSO_LIBS@
+
+libdbsql_base=	 	libdbsql
+libdbsql=		$(libdbsql_base).a
+libdbsql_version=	$(libdbsql_base)-$(LIBVERSION).a
+libso=			$(libdbsql_base)-$(LIBVERSION)@SOSUFFIX@
+libso_target=		$(libdbsql_base)-$(LIBVERSION).la
+libso_default=		$(libdbsql_base)@SOSUFFIX@
+libso_major=		$(libdbsql_base)-$(LIBMAJOR)@SOSUFFIX@
+
+##################################################
+# Python Language Bindings
+#
+# Python support is optional and requires shared libraries.
+##################################################
+
+##################################################
+# NOTHING BELOW THIS LINE SHOULD EVER NEED TO BE MODIFIED.
+##################################################
+
+##################################################
+# Source file lists.
+##################################################
+
+C_FILES=\
+	$(srcdir)/api.c $(srcdir)/api_table.c $(srcdir)/cg_attach.c \
+	$(srcdir)/cg_auth.c $(srcdir)/cg_build.c $(srcdir)/cg_copy.c \
+	$(srcdir)/cg_date.c $(srcdir)/cg_delete.c $(srcdir)/cg_expr.c \
+	$(srcdir)/cg_insert.c $(srcdir)/cg_pragma.c $(srcdir)/cg_select.c \
+	$(srcdir)/cg_trigger.c $(srcdir)/cg_update.c $(srcdir)/cg_where.c \
+	$(srcdir)/clib/xvprintf.c $(srcdir)/dbsql/dbsql.c \
+	$(srcdir)/sm.c $(srcdir)/common/hash.c $(srcdir)/lemon/lemon.c \
+	$(srcdir)/lemon/lempar.c $(srcdir)/os/os.c $(srcdir)/clib/random.c \
+	$(srcdir)/sql_fns.c $(srcdir)/sql_tokenize.c \
+	$(srcdir)/cg_vacuum.c $(srcdir)/vdbe.c $(srcdir)/vdbe_method.c \
+	$(srcdir)/common/dbsql_err.c $(srcdir)/clib/snprintf.c \
+	$(srcdir)/os/os_jtime.c $(srcdir)/clib/memcmp.c \
+	$(srcdir)/clib/strcasecmp.c $(srcdir)/os/dbsql_alloc.c \
+	$(srcdir)/common/str.c $(srcdir)/common/dbsql_atoi.c \
+	$(srcdir)/common/dbsql_atof.c $(srcdir)/safety.c \
+	$(srcdir)/clib/strdup.c
+
+##################################################
+# Object and utility lists.
+##################################################
+
+C_OBJS= @ADDITIONAL_OBJS@ @REPLACEMENT_OBJS@ \
+	cg_attach@o@ cg_insert@o@ sql_tokenize@o@ cg_auth@o@ \
+	cg_copy@o@ api_table@o@ cg_date@o@ api@o@ xvprintf@o@ \
+	cg_pragma@o@ cg_where@o@ cg_trigger@o@ cg_build@o@ \
+	sql_fns@o@ random@o@ cg_update@o@ cg_delete@o@ hash@o@ \
+	cg_expr@o@ opcodes@o@ sql_parser@o@ cg_vacuum@o@ \
+	vdbe@o@ vdbe_method@o@ sm@o@ snprintf@o@ dbsql_err@o@ cg_select@o@ \
+	os_jtime@o@ memcmp@o@ dbsql_atof@o@ safety@o@ \
+	strcasecmp@o@ strdup@o@ dbsql_alloc@o@ str@o@ dbsql_atoi@o@ 
+
+LEMON_OBJS=\
+	lemon@o@
+
+UTIL_PROGS=\
+	@ADDITIONAL_PROGS@ \
+	dbsql
+
+##################################################
+# List of files installed into the library directory.
+##################################################
+LIB_INSTALL_FILE_LIST=\
+	$(libdbsql) \
+	$(libso) \
+	$(libso_default) \
+	$(libso_major) \
+	$(libdbsql_version) \
+	$(libso_target) \
+	$(libtso) \
+	$(libtso_default) \
+	$(libtso_major) \
+	$(libtso_static) \
+	$(libtso_target)
+
+##################################################
+# We're building a standard library or a RPM file hierarchy.
+# Note: "all" must be the first target in the Makefile.
+##################################################
+all: @BUILD_TARGET@
+
+install-strip install: all @INSTALL_TARGET@
+
+##################################################
+# Library and standard utilities build.
+##################################################
+library_build: @INSTALL_LIBS@ @ADDITIONAL_LANG@ $(UTIL_PROGS)
+
+# Static C library named libdbsql.a.
+$(libdbsql): $(DEF_LIB)
+	$(rm) -f $@
+	test ! -f .libs/$(libdbsql_version) || \
+		$(ln) -s .libs/$(libdbsql_version) $@
+	test -f .libs/$(libdbsql_version) || \
+		(test -f $(libdbsql_version) &&
+			$(ln) -s $(libdbsql_version) $@)
+
+# Real static C library.
+$(libdbsql_version): dbsql_int.h sql_parser.h opcodes.h $(C_OBJS)
+	$(ar) cr $@ $(C_OBJS)
+	test ! -f $(ranlib) || $(ranlib) $@
+
+# Shared C library.
+$(libso_target): dbsql_int.h sql_parser.h opcodes.h $(C_OBJS)
+	$(SOLINK) $(SOFLAGS) $(LDFLAGS) -o $@ $(C_OBJS) $(LIBSO_LIBS)
+
+##################################################
+# Utilities
+##################################################
+lemon: $(LEMON_OBJS)
+	$(CCLINK) -o $@ $(LDFLAGS) \
+	    $(LEMON_OBJS) $(LIBS)
+	$(POSTLINK) $@
+	$(cp) $(srcdir)/lemon/lempar.c .
+
+dbsql: $(DEF_LIB) dbsql@o@
+	$(CCLINK) -o $@ $(LDFLAGS) \
+	    dbsql@o@ $(DEF_LIB) $(LIBS)
+	$(POSTLINK) $@
+
+##################################################
+# Testing.
+##################################################
+test: $(tstdir)/scr050/dbsql_tclsh
+	$(tstdir)/scr050/dbsql_tclsh $(tstdir)/quick.test
+
+##################################################
+# Library and standard utilities install.
+##################################################
+library_install: install_setup
+library_install: install_include install_lib install_utilities install_docs
+
+uninstall: uninstall_include uninstall_lib uninstall_utilities uninstall_docs
+
+install_setup:
+	@test -d $(DESTDIR)$(prefix) || \
+	    ($(mkdir) -p $(DESTDIR)$(prefix) && \
+	    $(chmod) $(dmode) $(DESTDIR)$(prefix))
+
+INCDOT=	dbsql.h @ADDITIONAL_INCS@
+install_include:
+	@echo "Installing DBSQL include files: $(DESTDIR)$(includedir) ..."
+	@test -d $(DESTDIR)$(includedir) || \
+	    ($(mkdir) -p $(DESTDIR)$(includedir) && \
+	    $(chmod) $(dmode) $(DESTDIR)$(includedir))
+	@cd $(DESTDIR)$(includedir) && $(rm) -f $(INCDOT)
+	@$(cp) -p $(INCDOT) $(DESTDIR)$(includedir)
+	@cd $(DESTDIR)$(includedir) && $(chmod) $(fmode) $(INCDOT)
+
+uninstall_include:
+	@cd $(DESTDIR)$(includedir) && $(rm) -f $(INCDOT)
+
+install_lib:
+	@echo "Installing DBSQL library: $(DESTDIR)$(libdir) ..."
+	@test -d $(DESTDIR)$(libdir) || \
+	    ($(mkdir) -p $(DESTDIR)$(libdir) && \
+	    $(chmod) $(dmode) $(DESTDIR)$(libdir))
+	@cd $(DESTDIR)$(libdir) && $(rm) -f $(LIB_INSTALL_FILE_LIST)
+	@$(INSTALLER) @INSTALL_LIBS@ $(DESTDIR)$(libdir)
+	@(cd $(DESTDIR)$(libdir) && \
+	    test -f $(libso) && $(ln) -s $(libso) $(libso_default); \
+	    test -f $(libso) && $(ln) -s $(libso) $(libso_major); \
+	    test -f $(libtso) && $(ln) -s $(libtso) $(libtso_default); \
+	    test -f $(libtso) && $(ln) -s $(libtso) $(libtso_major);
+
+uninstall_lib:
+	@cd $(DESTDIR)$(libdir) && $(rm) -f $(LIB_INSTALL_FILE_LIST)
+
+install_utilities:
+	@echo "Installing DBSQL utilities: $(DESTDIR)$(bindir) ..."
+	@test -d $(DESTDIR)$(bindir) || \
+	    ($(mkdir) -p $(DESTDIR)$(bindir) && \
+	    $(chmod) $(dmode) $(DESTDIR)$(bindir))
+	@for i in $(UTIL_PROGS); do \
+		$(rm) -f $(DESTDIR)$(bindir)/$$i $(DESTDIR)$(bindir)/$$i.exe; \
+		test -f $$i.exe && i=$$i.exe || true; \
+		$(INSTALLER) $$i $(DESTDIR)$(bindir)/$$i; \
+		test -f $(strip) && $(strip) $(DESTDIR)$(bindir)/$$i || true; \
+		$(chmod) $(emode) $(DESTDIR)$(bindir)/$$i; \
+	done
+
+uninstall_utilities:
+	@(cd $(DESTDIR)$(bindir); for i in $(UTIL_PROGS); do \
+		$(rm) -f $$i $$i.exe; \
+	done)
+
+##################################################
+# RPM, build and install.
+##################################################
+rpm_build:
+	@test -f @db_cv_path_rpm_archive@ || \
+	    (echo "@db_cv_path_rpm_archive@: archive file not found" && false)
+	@$(rm) -rf BUILD RPMS SOURCES SPECS SRPMS RPM_INSTALL
+	@$(mkdir) -p BUILD && $(chmod) $(dmode) BUILD
+	@$(mkdir) -p RPMS/i386 && $(chmod) $(dmode) RPMS RPMS/i386
+	@$(mkdir) -p SOURCES && $(chmod) $(dmode) SOURCES
+	@$(mkdir) -p SPECS && $(chmod) $(dmode) SPECS
+	@$(mkdir) -p SRPMS && $(chmod) $(dmode) SRPMS
+	$(cp) @db_cv_path_rpm_archive@ SOURCES/
+	$(cp) dbsql.spec SPECS/dbsql.spec
+	@RPM_BUILD@ --define="`cat rpm-macro-defines`" -ba SPECS/dbsql.spec
+
+rpm_install:
+
+RPM_SRPMS=dbsql-@DBSQL_VERSION_MAJOR@.@DBSQL_VERSION_MINOR@.@DBSQL_VERSION_PATCH@-1.src.rpm
+
+##################################################
+# Remaining standard Makefile targets.
+##################################################
+CLEAN_LIST=\
+	lemon
+
+mostly-clean clean:
+	$(rm) -rf $(C_OBJS)
+	$(rm) -rf $(UTIL_PROGS) *.exe $(CLEAN_LIST)
+	$(rm) -rf $(JAVA_CLASSTOP) $(JAVA_EXCLASSTOP)
+	$(rm) -rf tags *@o@ *~ *.o *.o.lock *.lo core *.core *.loT
+	$(rm) -rf .libs $(LIB_INSTALL_FILE_LIST)
+	$(rm) -rf sql_parser.c sql_parser.h sql_parser.out
+	$(rm) -rf opcodes.c opcodes.h
+	$(rm) -rf lempar.c
+	$(rm) -rf test.db test?.db test.db-journal test1.bt data?.txt
+	$(rm) -f  log.*
+
+REALCLEAN_LIST=\
+	Makefile config.cache config.log config.status \
+	configure.lineno dbsql.h dbsql.spec dbsql_config.h \
+	db_int.h dbsql_int.h db_int_def.h rpm-macro-defines win_dbsql.h
+
+distclean maintainer-clean realclean: clean
+	$(rm) -rf $(REALCLEAN_LIST)
+	$(rm) -rf libtool
+
+check dvi info obj TAGS:
+	@echo "$@: make target not supported" && true
+
+dist:
+	@echo "$@: make target not supported" && false
+
+##################################################
+# TODO Example programs for C.
+##################################################
+
+##################################################
+# Opcodes are generated from the vdbe.[ch] files.
+##################################################
+opcodes.c: $(srcdir)/vdbe.c
+	@echo '/* Automatically generated file.  Do not edit */' >opcodes.c
+	@echo 'char *__opcode_names[] = { "???", ' >>opcodes.c
+	@$(grep) '^case OP_' $(srcdir)/vdbe.c | \
+	  $(sed) -e 's/^.*OP_/  "/' -e 's/:.*$$/", /' >>opcodes.c
+	@echo '};' >>opcodes.c
+
+opcodes.h: $(srcdir)/vdbe.c
+	@echo '/* Automatically generated file.  Do not edit */' >opcodes.h
+	@$(grep) '^case OP_' $(srcdir)/vdbe.c | \
+	  $(sed) -e 's/://' | \
+	  $(awk) '{printf "#define %-30s %3d\n", $$2, ++cnt}' >>opcodes.h
+
+##################################################
+# C API build rules.
+##################################################
+api@o@: $(srcdir)/api.c
+	 $(CC) $(CFLAGS) $?
+api_table@o@: $(srcdir)/api_table.c
+	 $(CC) $(CFLAGS) $?
+cg_attach@o@: $(srcdir)/cg_attach.c
+	 $(CC) $(CFLAGS) $?
+cg_auth@o@: $(srcdir)/cg_auth.c
+	 $(CC) $(CFLAGS) $?
+cg_build@o@: $(srcdir)/cg_build.c
+	 $(CC) $(CFLAGS) $?
+cg_copy@o@: $(srcdir)/cg_copy.c
+	 $(CC) $(CFLAGS) $?
+cg_date@o@: $(srcdir)/cg_date.c
+	 $(CC) $(CFLAGS) $?
+cg_delete@o@: $(srcdir)/cg_delete.c
+	 $(CC) $(CFLAGS) $?
+cg_expr@o@: $(srcdir)/cg_expr.c
+	 $(CC) $(CFLAGS) $?
+cg_insert@o@: $(srcdir)/cg_insert.c
+	 $(CC) $(CFLAGS) $?
+cg_pragma@o@: $(srcdir)/cg_pragma.c
+	 $(CC) $(CFLAGS) $?
+cg_select@o@: $(srcdir)/cg_select.c
+	 $(CC) $(CFLAGS) $?
+cg_trigger@o@: $(srcdir)/cg_trigger.c
+	 $(CC) $(CFLAGS) $?
+cg_update@o@: $(srcdir)/cg_update.c
+	 $(CC) $(CFLAGS) $?
+cg_where@o@: $(srcdir)/cg_where.c
+	 $(CC) $(CFLAGS) $?
+cg_vacuum@o@: $(srcdir)/cg_vacuum.c
+	 $(CC) $(CFLAGS) $?
+db_int.h: $(srcdir)/inc/db_int.h
+	@$(sed) -e 's/__DB_UNIQUE_NAME__/@DB_UNIQUE_NAME@/g' \
+		$(srcdir)/inc/db_int.h > db_int.h
+dbsql_atof@o@: $(srcdir)/common/dbsql_atof.c
+	 $(CC) $(CFLAGS) $?
+dbsql_atoi@o@: $(srcdir)/common/dbsql_atoi.c
+	 $(CC) $(CFLAGS) $?
+dbsql_err@o@: $(srcdir)/common/dbsql_err.c
+	 $(CC) $(CFLAGS) $?
+str@o@: $(srcdir)/common/str.c
+	 $(CC) $(CFLAGS) $?
+hash@o@: $(srcdir)/common/hash.c
+	 $(CC) $(CFLAGS) $?
+opcodes.c: opcodes.h
+opcodes@o@: opcodes.c
+	 $(CC) $(CFLAGS) $?
+dbsql_alloc@o@: $(srcdir)/common/dbsql_alloc.c
+	 $(CC) $(CFLAGS) $?
+os_jtime@o@: $(srcdir)/os/os_jtime.c
+	 $(CC) $(CFLAGS) $?
+lemon@o@: $(srcdir)/lemon/lemon.c
+	 $(CC) $(CFLAGS) $?
+memcmp@o@: $(srcdir)/clib/memcmp.c
+	 $(CC) $(CFLAGS) $?
+xvprintf@o@: $(srcdir)/clib/xvprintf.c
+	 $(CC) $(CFLAGS) $?
+random@o@: $(srcdir)/clib/random.c
+	 $(CC) $(CFLAGS) $?
+safety@o@: $(srcdir)/safety.c
+	 $(CC) $(CFLAGS) $?
+sm@o@: $(srcdir)/sm.c
+	 $(CC) $(CFLAGS) $?
+snprintf@o@: $(srcdir)/clib/snprintf.c
+	 $(CC) $(CFLAGS) $?
+sql_fns@o@: $(srcdir)/sql_fns.c
+	 $(CC) $(CFLAGS) $?
+sql_parser.c: $(srcdir)/sql_parser.y lemon
+	@$(cp) $(srcdir)/sql_parser.y .
+	@$(LEMON) $(LEMON_FLAGS) sql_parser.y
+	@$(cp) ./sql_parser.c ./_sql_parser.c
+	@$(sed) -e 's/dbsql_parserAlloc/__sql_parser_alloc/g' \
+		-e 's/dbsql_parserFree/__sql_parser_free/g' \
+		-e 's/dbsql_parserTrace/__sql_parser_trace/g' \
+		-e 's/dbsql_parser(/__sql_parser(/g' \
+		-e 's/__set_stringn/__str_nappend/g' \
+		-e 's/__set_string/__str_append/g' \
+		./_sql_parser.c > ./sql_parser.c
+	@$(rm) -f ./_sql_parser.c
+	@$(rm) -f ./sql_parser.y
+sql_parser.h: sql_parser.c
+sql_parser@o@: sql_parser.c
+	 $(CC) $(CFLAGS) $?
+sql_tokenize@o@: $(srcdir)/sql_tokenize.c
+	 $(CC) $(CFLAGS) $?
+strcasecmp@o@: $(srcdir)/clib/strcasecmp.c
+	 $(CC) $(CFLAGS) $?
+strdup@o@: $(srcdir)/clib/strdup.c
+	 $(CC) $(CFLAGS) $?
+vdbe@o@: $(srcdir)/vdbe.c
+	 $(CC) $(CFLAGS) $?
+vdbe_method@o@: $(srcdir)/vdbe_method.c
+	 $(CC) $(CFLAGS) $?
+dbsql.h: $(srcdir)/dbsql.in
+	@echo dbsql.h is out of date, re-configure to regenerate it.
+
+
+##################################################
+# Utility build rules.
+##################################################
+dbsql@o@: $(srcdir)/dbsql/dbsql.c
+	$(CC) $(CFLAGS) $?
+
+
+##################################################
+# Lint.
+##################################################
+
+splint:
+	$(splint) -nof -f $(distdir)/splint.rc -strict \
+		$(CPPFLAGS) @CFLAGS@ -I. $(C_FILES)
+
+lint: splint
+
+##################################################
+# Dependencies
+##################################################
+
+#depend:
+#	@$(depend) -o @o@ $(CPPFLAGS) @CFLAGS@ $(C_FILES)
+#	@$(perl) -p -i -e 's#^@srcdir@/../src/common/##g' Makefile
+#	@$(perl) -p -i -e 's#^@srcdir@/../src/os/##g' Makefile
+#	@$(perl) -p -i -e 's#^@srcdir@/../src/clib/##g' Makefile
+#	@$(perl) -p -i -e 's#^@srcdir@/../src/lemon/##g' Makefile
+#	@$(perl) -p -i -e 's#^@srcdir@/../src/##g' Makefile
+
+# DO NOT DELETE THIS LINE -- make depend depends on it.

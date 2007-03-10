@@ -1,0 +1,148 @@
+-------------------------------------------------
+pydbsql installation guide - source distribution
+-------------------------------------------------
+
+\(c\) 2005 Gerhard Häring
+\(c\) 2007 The DBSQL Group, Inc.
+
+Note: For Windows users, it is recommended that you use the win32 binary
+  distribution of pydbsql!
+
+Steps:
+
+  - `Step 1: Satisfy the dependencies`_
+  - `Step 2: Compile pydbsql`_
+  - `Step 3: Install pydbsql`_
+  - `Step 4: Test your pydbsql installation`_
+
+Step 1: Satisfy The Dependencies
+================================
+
+pydbsql requires a valid combination of the dependencies in the list below.
+
+Detailed instructions on how to install each dependency are beyond the scope of
+this document; consult the dependency distributor for installation
+instructions.
+
+Dependencies:
+
+ 1. Operating System and C Compiler - one of:
+
+    * Linux/FreeBSD/NetBSD/OpenBSD and GCC
+
+    * Other POSIX-compliant operating system and a C compiler
+
+ 2. DBSQL:
+
+    * DBSQL version 3.0.8 or later (as of pydbsql 2.2.0). This means we need
+      the DBSQL library installed - either statically or dynamically linked -
+      and the DBSQL header files. On Linux, the chances are very high that
+      your distribution offers packages for DBSQL 3. Be sure to verify the
+      package is recent enough (version 3.0.8 or higher) and that you're
+      installing the development package as well, which will be need for
+      building pydbsql. On Debian and derivatives, the package to look for is
+      called libdbsql3-dev.
+
+ 3. Python:
+
+    * Python 2.3 or later
+
+Step 2: Compile pydbsql
+========================
+
+Once you have successfully installed the dependencies, you may proceed with the
+installation of pydbsql itself.
+
+pydbsql has full support for the distutils_, the standard facility for Python
+package distribution and installation. Full instructions for using the
+distutils are available in `this section of the Python documentation`_, but you
+can skip them unless you have an otherwise insoluble problem.
+
+Open a command prompt, change to the directory where you decompressed the
+pydbsql source distribution, and type::
+
+  python setup.py build
+
+The installation script, setup.py, will attempt to automatically detect the
+information needed by the C compiler; then it will invoke the distutils to
+perform the actual compilation. If you installed automatic distributions of the
+dependencies that place themselves in standard locations (on UNIX-style
+operating systems), the compilation should proceed without incident.
+
+Otherwise you will have to customize the build process. That's what the file
+*setup.cfg* is meant for. It's contains a few lines that you can customize so
+your C compiler will find the library and header files and you can also do a
+few other tweaks, like build pydbsql in debug mode.
+
+After you've customized *setup.cfg* apprporiately, try invoking ``python
+setup.py build`` again.
+
+If setup.py raises no errors and its output concludes with something like
+"Creating library...", then you are ready to proceed to the next step.
+
+If you receive an error message from the compiler, then try to look at the
+first error it reports. Other errors will most likely be aftereffects from the
+first error (like not finding the dbsql3.h header file).
+
+
+Step 3: Install pydbsql
+========================
+
+During this step, the setup script moves the *pydbsql* package (including the
+newly compiled C extension) to the standard package directory of your Python
+installation so that Python will be able to import pydbsql.dbapi2 and
+pydbsql.test.
+
+In addition to the Python code and shared library files actually used by the
+Python interpreter, the setup script typically installs some supporting files,
+such as documentation. Depending on your system configuration, these supporting
+files may be placed in the same directory or a different directory from the
+files used by the Python interpreter.
+
+Run the following command::
+
+  python setup.py install
+
+The setup script will install pydbsql, listing each file it installs.
+
+Errors during this step are rare because compilation (the finicky part of this
+process) has already taken place; installation is really just a matter of
+copying files. However, there will be file system permission errors if the
+Python installation directory is not writable by the user running the setup
+script. If you encounter such an error, try one of the following:
+
+- Log in as a user who has the required file system permissions and repeat the
+  installation step.
+- Manually copy the directory build/lib.platform-pyver/pydbsql (which
+  contains the Python modules and compiled library files created during the
+  compilation step) to a directory in your PYTHONPATH. This approach will not
+  install the supporting files, but they are for the benefit of the programmer
+  rather than the Python interpreter anyway. 
+
+Step 4: Test Your pydbsql Installation
+=======================================
+
+Switch to a directory other than the temporary directory into which you
+decompressed the source distribution (to avoid conflict between the copy of
+pydbsql in that directory and the copy placed under the standard Python
+site-packages directory), then run the pydbsql test suite by starting a Python
+interpreter for the Python version you installed pydbsql for and entering the
+following::
+
+    >>> from pydbsql import test
+    >>> test.test()
+    .....................................................................................................
+    ----------------------------------------------------------------------
+    Ran 101 tests in 0.182s
+
+If the test suite runs without any errors, you are finished.
+
+You should not encounter any errors at this stage since you have already
+completed the compilation and installation steps successfully. If you do,
+please report them to the `pydbsql bug tracker`_ or the `pydbsql mailing
+list`_.
+
+.. _distutils: http://www.python.org/sigs/distutils-sig/
+.. _this section of the Python documentation: http://www.python.org/doc/current/inst/inst.html
+.. _pydbsql bug tracker: http://initd.org/tracker/pydbsql
+.. _pydbsql mailing list: http://lists.initd.org/mailman/listinfo/pydbsql

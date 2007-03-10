@@ -1,0 +1,434 @@
+/*-
+ * DBSQL - A SQL database engine.
+ *
+ * Copyright (C) 2007  The DBSQL Group, Inc. - All rights reserved.
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * There are special exceptions to the terms and conditions of the GPL as it
+ * is applied to this software. View the full text of the exception in file
+ * LICENSE_EXCEPTIONS in the directory of this software distribution.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * http://creativecommons.org/licenses/GPL/2.0/
+ * 
+ * $Id: dbsql.in 7 2007-02-03 13:34:17Z gburd $
+ */
+
+#ifndef	_DBSQL_H_
+#define	_DBSQL_H_
+
+#ifndef __NO_SYSTEM_INCLUDES
+#include <sys/types.h>
+#include <stdlib.h>     /* Needed for drand48 */
+#include <stdarg.h>     /* Needed for the definition of va_list */
+
+@inttypes_decl@
+#include <stdio.h>
+#endif
+
+#include <db.h>
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
+@DB_CONST@
+@DB_PROTO1@
+@DB_PROTO2@
+
+/*
+ * DBSQL version information.
+ */
+#define	DBSQL_VERSION_MAJOR	@DBSQL_VERSION_MAJOR@
+#define	DBSQL_VERSION_MINOR	@DBSQL_VERSION_MINOR@
+#define	DBSQL_VERSION_PATCH	@DBSQL_VERSION_PATCH@
+#define	DBSQL_VERSION_STRING	@DBSQL_VERSION_STRING@
+
+/*
+ * !!!
+ * DBSQL uses specifically sized types.  If they're not provided by
+ * the system, typedef them here.
+ *
+ * We protect them against multiple inclusion using __BIT_TYPES_DEFINED__,
+ * as does BIND and Kerberos, since we don't know for sure what #include
+ * files the user is using.
+ *
+ * !!!
+ * We also provide the standard u_int, u_long etc., if they're not provided
+ * by the system.
+ */
+#ifndef	__BIT_TYPES_DEFINED__
+#define	__BIT_TYPES_DEFINED__
+@u_int8_decl@
+@int16_decl@
+@u_int16_decl@
+@int32_decl@
+@u_int32_decl@
+#endif
+
+@u_char_decl@
+@u_short_decl@
+@u_int_decl@
+@u_long_decl@
+@ssize_t_decl@
+@long_double_decl@
+
+/*
+ * Forward structure declarations, so we can declare pointers and
+ * applications can get type checking.
+ */
+struct __dbsql;         typedef struct __dbsql DBSQL;
+struct __dbsql_func;    typedef struct __dbsql_func dbsql_func_t;
+struct __dbsql_stmt;    typedef struct __dbsql_vm dbsql_stmt_t;
+struct __dbsql_db;      typedef struct __dbsql_db dbsql_db_t;
+struct __dbsql_value;   typedef struct __dbsql_value dbsql_value_t;
+typedef int (*dbsql_callback)(void *, int, char **, char **);
+
+/*
+ * Name of the master database table.  The master database table
+ * is a special table that holds the names and attributes of all
+ * user tables and indices.
+ */
+#define MASTER_NAME       "master"
+#define TEMP_MASTER_NAME  "temp_master"
+
+/*
+ * If the following macro is set to 1, then NULL values are considered
+ * distinct for the SELECT DISTINCT statement and for UNION or EXCEPT
+ * compound queries.  No other SQL database engine (among those tested) 
+ * works this way except for OCELOT.  But the SQL92 spec implies that
+ * this is how things should work.
+ *
+ * If the following macro is set to 0, then NULLs are indistinct for
+ * SELECT DISTINCT and for UNION.
+ */
+#define NULL_ALWAYS_DISTINCT 0
+
+/*
+ * If the following macro is set to 1, then NULL values are considered
+ * distinct when determining whether or not two entries are the same
+ * in a UNIQUE index.  This is the way PostgreSQL, Oracle, DB2, MySQL,
+ * OCELOT, and Firebird all work.  The SQL92 spec explicitly says this
+ * is the way things are suppose to work.
+ *
+ * If the following macro is set to 0, the NULLs are indistinct for
+ * a UNIQUE index.  In this mode, you can only have a single NULL entry
+ * for a column declared UNIQUE.  This is the way Informix and SQL Server
+ * work.
+ */
+#define NULL_DISTINCT_FOR_UNIQUE 1
+
+/*
+ * The name of the schema tables.
+ */
+#define SCHEMA_TABLE(x)  (x?TEMP_MASTER_NAME:MASTER_NAME)
+
+/*
+ * Character Encoding:
+ * DBSQL supports the major character encodings.
+ *  - ASCII       (American Standard Code for Information Interchange)
+ *  - UTF-8       (8-bit UCS/Unicode Transformation Format)
+ *  - UTF-16      (16-bit UCS/Unicode Transformation Format)
+ *  - ISO-8859-1  (The IANA registered the character map ISO_8859-1:1987)
+ *
+ * The following constant holds one of two strings, "UTF-8" or "iso8859",
+ * depending on which character encoding the library expects to see.
+ * The character encoding makes a difference for the LIKE and GLOB
+ * operators and for the LENGTH() and SUBSTR() functions.
+ */
+extern const char dbsql_encoding[];
+
+#define DBSQL_ASCII_ENCODED     1
+#define DBSQL_UTF8_ENCODED      2
+#define DBSQL_UTF16_ENCODED     3
+#define DBSQL_ISO8859_ENCODED   4
+
+/*
+ * The DBSQL_UTF8_ENCODING macro is defined if the library expects to see
+ * UTF-8 encoded data.  The DBSQL_ISO8859_ENCODING macro is defined if the
+ * iso8859 encoding should be used.
+ */
+#define DBSQL_@ENCODING@_ENCODING 1
+
+
+/* DBSQL (user visible) successful return code. */
+#define DBSQL_SUCCESS      0
+
+/*
+ * DBSQL (user visible) error return codes.
+ *
+ * !!!
+ * We don't want our error returns to conflict with other packages where
+ * possible, so pick a base error value that's hopefully not common.  We
+ * document that we own the error name space from -50,800 to -50,999.
+ */
+/* DBSQL (public) error return codes. */
+#define DBSQL_ERROR        (-50999)/* SQL error or missing database */
+#define DBSQL_INTERNAL     (-50998)/* An internal logic error */
+#define DBSQL_PERM         (-50997)/* Access permission denied */
+#define DBSQL_ABORT        (-50996)/* Callback routine requested an abort */
+#define DBSQL_BUSY         (-50995)/* The database file is locked */
+#define DBSQL_LOCKED       (-50994)/* A table in the database is locked */
+#define DBSQL_NOMEM        (-50993)/* A call to allocate memory failed */
+#define DBSQL_READONLY     (-50992)/* Attempt to write a readonly database */
+#define DBSQL_INTERRUPTED  (-50991)/* Operation terminated by interrupt() */
+#define DBSQL_IOERR        (-50990)/* Some kind of disk I/O error occurred */
+#define DBSQL_FULL         (-50989)/* Failed because database is full */
+#define DBSQL_CANTOPEN     (-50988)/* Unable to open the database file */
+#define DBSQL_PROTOCOL     (-50987)/* Database lock protocol error */
+#define DBSQL_SCHEMA       (-50986)/* The database schema changed */
+#define DBSQL_CONSTRAINT   (-50985)/* Abort due to contraint violation */
+#define DBSQL_MISMATCH     (-50984)/* Data type mismatch */
+#define DBSQL_MISUSE       (-50983)/* Library used incorrectly */
+#define DBSQL_AUTH         (-50982)/* Authorization denied */
+#define DBSQL_FORMAT       (-50981)/* Auxiliary database format error */
+#define DBSQL_RANGE        (-50980)/* 2nd parameter to bind() out of range */
+#define DBSQL_ROW          (-50979)/* step() has another row ready */
+#define DBSQL_DONE         (-50978)/* step() has finished executing */
+#define DBSQL_CORRUPT      (-50977)/* The data record is malformed */
+#define DBSQL_RUNRECOVERY  (-50976)/* Database environment requires recovery */
+#define DBSQL_INVALID_NAME (-50975)/* Empty or invalid file name supplied */
+
+/* DBSQL (private) error return codes. */
+#define DBSQL_NOTFOUND     (-50801)/* Table or record not found */
+#define DBSQL_EMPTY        (-50800)/* Database table is empty */
+
+/*
+ * SQL Database Environment handle.
+ */
+struct __dbsql {
+    void *app_private;		/* For use by the application. */
+
+	/* Basic API functions. */
+	const char *(*encoding)(void);
+	int (*open) __P((DBSQL *, const char *, int, char **));
+	int (*close) __P((DBSQL *));
+	int (*rowid) __P((DBSQL *));
+	int (*last_change_count) __P((DBSQL *));
+	int (*total_change_count) __P((DBSQL *));
+	void (*interrupt) __P((DBSQL *));
+	void (*set_errcall) __P((DBSQL *, void (*)(const char *, char *)));
+	void (*set_errfile) __P((DBSQL *, FILE *));
+	void (*get_errfile) __P((DBSQL *, FILE **));
+	void (*set_errpfx) __P((DBSQL *, const char *));
+	void (*get_errpfx) __P((DBSQL *, const char **));
+	DB_ENV *(*get_dbenv) __P((DBSQL *));
+
+					/* Callback access functions. */
+	void *(*set_tracecall) __P((DBSQL *, void(*)(void *, const char *),\
+				    void *));
+#ifndef DBSQL_NO_PROGRESS
+	void (*set_progresscall) __P((DBSQL *, int, int(*)(void*), void*));
+#endif
+	void *(*set_commitcall) __P((DBSQL *, int(*)(void*), void*));
+	void (*set_busycall) __P((DBSQL *, int(*)(int, const char *, int),\
+				  void *));
+	void (*set_timeout) __P((DBSQL *, int ms));
+
+	int (*get_table) __P((DBSQL *, const char *, char ***, int *,\
+			      int *, char **));
+	void (*free_table) __P((char **));
+	int (*exec_printf) __P((DBSQL *, const char *, dbsql_callback,\
+				void *, char **, ...));
+	int (*exec_vprintf) __P((DBSQL *, const char *, dbsql_callback,\
+				 void *, char **, va_list ap));
+	int (*exec_table_printf) __P((DBSQL *, const char *, char ***,\
+				     int *, int *, char **, ...));
+	int (*exec_table_vprintf) __P((DBSQL *, const char *, char ***,\
+				      int *, int *, char **, va_list));
+	int (*exec) __P((DBSQL *, const char *, dbsql_callback, void *,\
+			 char **));
+
+	int (*step) __P((dbsql_stmt_t *, int *, const char ***,\
+			 const char ***));
+
+	int (*create_function) __P((DBSQL *, const char *, int, int, void *,\
+                            void (*)(dbsql_func_t *, int, const char**),\
+                            void (*)(dbsql_func_t *, int, const char**),\
+                            void (*)(dbsql_func_t *)));
+	int (*func_return_type) __P((DBSQL *, const char *, int));
+#define DBSQL_NUMERIC     (-1)
+#define DBSQL_TEXT        (-2)
+#define DBSQL_ARGS        (-3)
+
+	int (*set_authorizer) __P((DBSQL *, int (*)(void *, int, const char *,\
+						  const char *, const char *,\
+						  const char *), void *));
+
+/*
+ * The return value of the authorization function should be one of the
+ * following constants:
+ *
+ define DBSQL_SUCCESS 0      Allow access (This is actually defined above) */
+#define DBSQL_DENY    1   /* Abort the SQL statement with an error */
+#define DBSQL_IGNORE  2   /* Don't allow access, but don't generate an error */
+
+/*
+ * The second parameter to the access authorization function above will
+ * be one of the values below.  These values signify what kind of operation
+ * is to be authorized.  The 3rd and 4th parameters to the authorization
+ * function will be parameters or NULL depending on which of the following
+ * codes is used as the second parameter.  The 5th parameter is the name
+ * of the database ("main", "temp", etc.) if applicable.  The 6th parameter
+ * is the name of the inner-most trigger or view that is responsible for
+ * the access attempt or NULL if this access attempt is directly from 
+ * input SQL code.
+ *                                          Arg-3           Arg-4
+ */
+#define DBSQL_COPY                  0   /* Table Name      File Name       */
+#define DBSQL_CREATE_INDEX          1   /* Index Name      Table Name      */
+#define DBSQL_CREATE_TABLE          2   /* Table Name      NULL            */
+#define DBSQL_CREATE_TEMP_INDEX     3   /* Index Name      Table Name      */
+#define DBSQL_CREATE_TEMP_TABLE     4   /* Table Name      NULL            */
+#define DBSQL_CREATE_TEMP_TRIGGER   5   /* Trigger Name    Table Name      */
+#define DBSQL_CREATE_TEMP_VIEW      6   /* View Name       NULL            */
+#define DBSQL_CREATE_TRIGGER        7   /* Trigger Name    Table Name      */
+#define DBSQL_CREATE_VIEW           8   /* View Name       NULL            */
+#define DBSQL_DELETE                9   /* Table Name      NULL            */
+#define DBSQL_DROP_INDEX           10   /* Index Name      Table Name      */
+#define DBSQL_DROP_TABLE           11   /* Table Name      NULL            */
+#define DBSQL_DROP_TEMP_INDEX      12   /* Index Name      Table Name      */
+#define DBSQL_DROP_TEMP_TABLE      13   /* Table Name      NULL            */
+#define DBSQL_DROP_TEMP_TRIGGER    14   /* Trigger Name    Table Name      */
+#define DBSQL_DROP_TEMP_VIEW       15   /* View Name       NULL            */
+#define DBSQL_DROP_TRIGGER         16   /* Trigger Name    Table Name      */
+#define DBSQL_DROP_VIEW            17   /* View Name       NULL            */
+#define DBSQL_INSERT               18   /* Table Name      NULL            */
+#define DBSQL_PRAGMA               19   /* Pragma Name     1st arg or NULL */
+#define DBSQL_READ                 20   /* Table Name      Column Name     */
+#define DBSQL_SELECT               21   /* NULL            NULL            */
+#define DBSQL_TRANSACTION          22   /* NULL            NULL            */
+#define DBSQL_UPDATE               23   /* Table Name      Column Name     */
+#define DBSQL_ATTACH               24   /* Filename        NULL            */
+#define DBSQL_DETACH               25   /* Database Name   NULL            */
+
+					/* Non-callback access functions. */
+	int (*prepare) __P((DBSQL *, const char *, const char **, dbsql_stmt_t **,\
+			        char **));
+	int (*finalize) __P((dbsql_stmt_t *, char **));
+	int (*reset) __P((dbsql_stmt_t *, char **));
+	int (*bind) __P((dbsql_stmt_t *, int, const char *, int, int));
+
+	/*
+	 * From here on out, fields are internal and subject to change.
+	 */
+	DB_ENV *dbenv;                  /* The Berkeley DB Environment */
+	int txn_flags;
+	void (*dbsql_errcall)(const char *, char *); /* Error callback */
+	FILE *dbsql_errfile;            /* The error file */
+	char *dbsql_errpfx;             /* The error prefix string */
+	void (*dbsql_paniccall)(DBSQL *, int); /* The panic callback */
+	struct drand48_data rand;       /* Random generator state */
+	int panic;               /* If non-zero, shut down the application */
+	dbsql_db_t *aDb;         /* One for each open SQL database + 2 */
+	int nDb;                 /* Number of open dbsql_db_t's open */
+	int flags;               /* Flags, see below */
+#define DBSQL_VdbeTrace      0x00000001  /* True to trace VDBE execution */
+#define DBSQL_Initialized    0x00000002  /* True after initialization */
+#define DBSQL_Interrupt      0x00000004  /* Cancel current operation */
+#define DBSQL_InTrans        0x00000008  /* True if in a transaction */
+#define DBSQL_InternChanges  0x00000010  /* Uncommitted Hash table changes */
+#define DBSQL_FullColNames   0x00000020  /* Show full column names on SELECT */
+#define DBSQL_CountRows      0x00000040  /* Count rows changed by INSERT,
+					    DELETE, or UPDATE and return
+					    the count using a callback. */
+#define DBSQL_NullCallback   0x00000080  /* Invoke the callback once if the
+					    result set is empty */
+#define DBSQL_ReportTypes    0x00000200  /* Include information on datatypes
+					    in 4th argument of callback */
+#define DBSQL_DurableTemp    0x00000400  /* Back temp databases on disk. */
+#define DBSQL_Threaded       0x00000800  /* Set when we're expected to be
+                                            thread safe. */
+	u_int8_t want_to_close;  /* Close after all VDBEs are deallocated */
+	int next_sig;            /* Next value of aDb[0].schema_sig */
+	int nTable;              /* Number of tables in the database */
+	void *pBusyArg;          /* 1st Argument to the busy callback */
+	int (*xBusyCallback)(DBSQL *, void *, const char*, int);
+	void *pCommitArg;        /* Argument to xCommitCallback() */
+	int (*xCommitCallback)(void*);/* Invoked at every commit. */
+	void *aFunc;             /* All functions that can be in SQL exprs */
+	int lastRowid;           /* ROWID of most recent insert */
+	int priorNewRowid;       /* Last generated ROWID */
+	int onError;             /* Default conflict algorithm */
+	int magic;               /* Magic number to detect library misuse */
+#define DBSQL_STATUS_OPEN     0xa029a697  /* Database is open */
+#define DBSQL_STATUS_CLOSED   0x9f3c2d33  /* Database is closed */
+#define DBSQL_STATUS_BUSY     0xf03b7906  /* Database currently in use */
+#define DBSQL_STATUS_ERROR    0xb5357930  /* An DBSQL_MISUSE error occurred */
+	u_int32_t _num_last_changes;  /* Number of rows changed */
+	u_int32_t _num_total_changes; /* Total number of rows changed */
+	struct vdbe *pVdbe;      /* List of active virtual machines */
+	void (*xTrace)(void*,const char*); /* Trace function */
+	void *pTraceArg;         /* Argument to the trace function */
+#ifndef DBSQL_NO_AUTH /* Access authorization functions */
+	int (*auth)(void*,int,const char*,const char*,const char*,const char*);
+	void *pAuthArg;          /* 1st argument to the access auth function */
+#endif
+#ifndef DBSQL_NO_PROGRESS
+	int (*xProgress)(void *);/* The progress callback */
+	void *pProgressArg;      /* Argument to the progress callback */
+	int nProgressOps;        /* Number of opcodes for progress callback */
+#endif
+	u_int32_t format_version;/* The version of the representation */
+};
+
+#define DBSQL_THREAD         0x00001     /* When set the library is thread
+                                            safe. */
+#define DBSQL_DURABLE_TEMP   0x00002     /* Store temp data on disk rather
+                                            than in memory */
+
+int dbsql_create_env __P((DBSQL **, const char *, const char *, int, u_int32_t));
+int dbsql_create __P((DBSQL **, DB_ENV *, u_int32_t));
+int dbsql_complete_stmt __P((const char *));
+char *dbsql_strerror __P((int));
+const char * dbsql_version __P((int *, int *, int *));
+
+void dbsql_set_result_null __P((dbsql_func_t *));
+char *dbsql_set_result_string __P((dbsql_func_t *, const char *, int));
+void dbsql_set_result_int __P((dbsql_func_t *, int));
+void dbsql_set_result_int64 __P((dbsql_func_t *, int64_t));
+void dbsql_set_result_blob __P((dbsql_func_t *, const void *, size_t,\
+    void(*)(void*)));
+void dbsql_set_result_varchar __P((dbsql_func_t *, const char *, size_t,\
+    void(*)(void*)));
+void dbsql_set_result_double __P((dbsql_func_t *, double));
+void dbsql_set_result_error __P((dbsql_func_t *, const char *, int));
+void *dbsql_user_data __P((dbsql_func_t *));
+void *dbsql_aggregate_context __P((dbsql_func_t *, int));
+int dbsql_aggregate_count __P((dbsql_func_t *));
+
+/* 
+ * The fifth parameter to dbsql_set_result_blob(), and
+ * dbsql_set_result_varchar() is a destructor used to dispose of the BLOB
+ * or text after DBSQL has finished with it.  If the fifth argument is the
+ * special value DBSQL_STATIC, then the library assumes that the information
+ * is in static, unmanaged space and does not need to be freed.  If the fifth
+ * argument has the value DBSQL_TRANSIENT, then DBSQL makes its own private
+ * copy of the data.
+ */
+#define DBSQL_STATIC      ((void(*)(void *))0)
+#define DBSQL_TRANSIENT   ((void(*)(void *))-1)
+
+/*
+ * Values are stored in the database in one of the following fundamental
+ * types. TODO
+ */
+#define DBSQL_INTEGER  1
+#define DBSQL_FLOAT    2
+#define DBSQL_VARCHAR  3
+#define DBSQL_BLOB     4
+#define DBSQL_NULL     5
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* !_DBSQL_H_ */

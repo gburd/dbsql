@@ -1,0 +1,49 @@
+#!/bin/sh -
+# DBSQL - A SQL database engine.
+#
+# Copyright (C) 2007  The DBSQL Group, Inc. - All rights reserved.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# There are special exceptions to the terms and conditions of the GPL as it
+# is applied to this software. View the full text of the exception in file
+# LICENSE_EXCEPTIONS in the directory of this software distribution.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# http://creativecommons.org/licenses/GPL/2.0/
+#
+# $Id: s_perm 7 2007-02-03 13:34:17Z gburd $
+
+d=..
+echo 'Updating DBSQL source tree permissions...'
+
+run()
+{
+	#echo "	$1 ($2)"
+	if [ -f "$d/$1" ]; then
+		chmod "$2" "$d/$1"
+	else
+		echo "$d/$1: no such file or directory"
+		exit 1
+	fi
+}
+
+run dist/config.guess 555
+run dist/config.sub 555
+run dist/configure 555
+run dist/install-sh 555
+run dist/s_all 555
+run dist/s_config 555
+run dist/s_include 555
+run dist/s_perm 555
+run dist/s_readme 555
+run dist/s_symlink 555
+run dist/s_tags 555
+run dist/s_test 555

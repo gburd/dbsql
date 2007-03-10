@@ -1,0 +1,77 @@
+# 2004 Feb 8
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# This file implements regression tests for SQLite library.  The
+# focus of this script is the sqlite_interrupt() API.
+#
+# $Id: interrupt.test_ 7 2007-02-03 13:34:17Z gburd $
+
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+
+# Compute a checksum on the entire database.
+#
+proc cksum {{db db}} {
+  set txt [$db eval {SELECT name, type, sql FROM master}]\n
+  foreach tbl [$db eval {SELECT name FROM master WHERE type='table'}] {
+    append txt [$db eval "SELECT * FROM $tbl"]\n
+  }
+  foreach prag {default_synchronous default_cache_size} {
+    append txt $prag-[$db eval "PRAGMA $prag"]\n
+  }
+  set cksum [string length $txt]-[md5 $txt]
+  # puts $cksum-[file size test.db]
+  return $cksum
+}
+
+# This routine attempts to execute the sql in $sql.  It triggers an
+# interrupt a progressively later and later points during the processing
+# and checks to make sure SQLITE_INTERRUPT is returned.  Eventually,
+# the routine completes successfully.
+#
+proc interrupt_test {testid sql result} {
+  set orig_sum [cksum]
+  set i 0
+  while 1 {
+    incr i
+    set ::sqlite_interrupt_count $i
+    do_test $testid.$i.1 [format {
+      set ::r [catchsql %s]
+      set ::code [lindex $::r 0]
+      expr {$::code==0 || $::code==9}
+    } [list $sql]] 1
+    if {$::code==9} {
+      do_test $testid.$i.2 {
+        cksum
+      } $orig_sum
+    } else {
+      do_test $testid.$i.99 {
+        set ::r
+      } [list 0 $result]
+      break
+    }
+  }
+}
+
+do_test interrupt-1.1 {
+  execsql {
+    CREATE TABLE t1(a,b);
+    SELECT name FROM master;
+  }
+} {t1}
+interrupt_test interrupt-1.2 {DROP TABLE t1} {}
+do_test interrupt-1.3 {
+  execsql {
+    SELECT name FROM master;
+  }
+} {}
+
+finish_test

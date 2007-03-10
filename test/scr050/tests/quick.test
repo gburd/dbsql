@@ -1,0 +1,44 @@
+# 2001 September 15
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# This file runs all tests.
+#
+# $Id: quick.test 7 2007-02-03 13:34:17Z gburd $
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+rename finish_test really_finish_test
+proc finish_test {} {}
+set ISQUICK 1
+
+set EXCLUDE {
+  all.test
+  quick.test
+  btree2.test
+  malloc.test
+  memleak.test
+  misuse.test
+}
+
+foreach testfile [lsort -dictionary [glob $testdir/*.test]] {
+  set tail [file tail $testfile]
+  if {[lsearch -exact $EXCLUDE $tail]>=0} continue
+  source $testfile
+  catch {db close}
+  if {$dbsql_open_file_count>0} {
+    puts "$tail did not close all files: $dbsql_open_file_count"
+    incr nErr
+    lappend ::failList $tail
+  }
+}
+source $testdir/misuse.test
+
+set dbsql_open_file_count 0
+really_finish_test

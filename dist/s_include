@@ -1,0 +1,109 @@
+#!/bin/sh -
+# DBSQL - A SQL database engine.
+#
+# Copyright (C) 2007  The DBSQL Group, Inc. - All rights reserved.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# There are special exceptions to the terms and conditions of the GPL as it
+# is applied to this software. View the full text of the exception in file
+# LICENSE_EXCEPTIONS in the directory of this software distribution.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# http://creativecommons.org/licenses/GPL/2.0/
+#
+# $Id: s_include 7 2007-02-03 13:34:17Z gburd $
+#
+# Build the automatically generated function prototype files.
+
+msgc="/* DO NOT EDIT: automatically built by dist/s_include. */"
+
+head()
+{
+	defonly=0
+	while :
+		do case "$1" in
+		space)
+			echo ""; shift;;
+		defonly)
+			defonly=1; shift;;
+		*)
+			name="$1"; break;;
+		esac
+	done
+
+	echo "$msgc"
+	echo "#ifndef	$name"
+	echo "#define	$name"
+	echo ""
+	if [ $defonly -eq 0 ]; then
+		echo "#if defined(__cplusplus)"
+		echo "extern \"C\" {"
+		echo "#endif"
+		echo ""
+	fi
+}
+
+tail()
+{
+	defonly=0
+	while :
+		do case "$1" in
+		defonly)
+			defonly=1; shift;;
+		*)
+			name="$1"; break;;
+		esac
+	done
+
+	echo ""
+	if [ $defonly -eq 0 ]; then
+		echo "#if defined(__cplusplus)"
+		echo "}"
+		echo "#endif"
+	fi
+	echo "#endif /* !$name */"
+}
+
+# We are building several files:
+#	1 external #define file
+#	1 external prototype file
+#	1 internal #define file
+#	N internal prototype files
+e_dfile=/tmp/__db_c.$$
+e_pfile=/tmp/__db_a.$$
+i_dfile=/tmp/__db_d.$$
+i_pfile=/tmp/__db_b.$$
+trap 'rm -f $e_dfile $e_pfile $i_dfile $i_pfile; exit 0' 0 1 2 3 13 15
+
+head defonly space _DBSQL_EXT_DEF_IN_ > $e_dfile
+head space _DBSQL_EXT_PROT_IN_ > $e_pfile
+head defonly _DBSQL_INT_DEF_IN_ > $i_dfile
+
+# Process the standard directories, creating per-directory prototype
+# files and adding to the external prototype and #define files.
+for i in dbsql os clib common ; do
+	head "_${i}_ext_h_" > $i_pfile
+
+	f="../src/$i/*.c"
+	[ "$f" = "../src/dbsql/*.c" ] && f="../src/*.c"
+	awk -f gen_inc.awk \
+	    -v e_dfile=$e_dfile \
+	    -v e_pfile=$e_pfile \
+	    -v i_dfile=$i_dfile \
+	    -v i_pfile=$i_pfile $f
+
+	tail "_${i}_ext_h_" >> $i_pfile
+
+	f="../src/inc/${i}_ext.h"
+	cmp $i_pfile $f > /dev/null 2>&1 ||
+	    (echo "Building $f" && rm -f $f && cp $i_pfile $f && chmod 444 $f)
+done
+

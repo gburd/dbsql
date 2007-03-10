@@ -1,0 +1,46 @@
+DBSQL 0.2.2: (March 10, 2007)
+
+This is version 0.2.2 of DBSQL.
+
+To view the release and installation documentation, load the distribution
+file docs/index.html into your web browser.
+
+This work started from the SQLite project (found on the web at
+http://www.sqlite.org/).  SQLite and all contributions to the SQLite
+project have been placed in the public domain by its author, Dr. Richard Hipp.
+There was no assertion of copyright at all on the code I used as a starting
+point for my work.  In fact there are statements that explicitly disclaim
+copyright.  I am asserting copyright on this work, DBSQL.  I believe
+that if you examine the extent to which I've changed, updated, and
+modified the SQLite code you'll respect my copyright assertion.  This
+is a new product, heavily inspired by another.
+
+The goal for DBSQL is to provide a small SQL92 relational database layer
+on top of the Berkeley DB database.  Berkeley DB is copyright Oracle
+Corporation (formerly Sleepycat Software, acquired in Feb 2006) and
+licensed under the Sleepycat Public License.  That license is compatible
+with the GPL for open source use.  Recognize that you, as someone using
+DBSQL, will need to review the Sleepycat License and the GPL before you
+use and redistribute your incorporating work.  It is your responsibility
+to comply with those licenses as I am in my work on DBSQL itself.  My
+motivation on a personal level is quite simple, I am in product management
+these days and not in the code itself.  I believe that product managers
+should be engineers at heart with an ability to understand business,
+politics, and software sales and support.  This is my playground to keep
+my engineering skills sharp enough to speak fluent geek.  As a former
+engineer at Sleepycat I understand and value the Berkeley DB programming
+infrasture, design, and methodologies and I have liberally copied and
+reused them in this project to improve SQLite in ways that I hope will
+be of value to open source users out there.  I did this because I see the
+value of SQLite to its userbase, it is a perfect example of the 80/20
+rule and the KISS method and I admire those qualities in software.  My
+hope is that the Berkeley DB database engine will provide some significant
+features that SQLite cannot such as replication for high availability
+while remaining small enough to live comfortably inside applications,
+services, and devices.
+
+Information and resources pertaining to DBSQL can be found at dbsql.org.
+
+Commercial licenses without the restrictions found in the GPL can be
+purchased for this product.  See http://dbsql.org/wiki/CommercialUse
+
