@@ -1,0 +1,72 @@
+# 2003 September 6
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# This file implements regression tests for SQLite library.  The
+# focus of this script testing the dbsql_bind API.
+#
+# $Id: bind.test 7 2007-02-03 13:34:17Z gburd $
+#
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+
+do_test bind-1.1 {
+  db close
+  set DB [dbsql db test.db]
+  execsql {CREATE TABLE t1(a,b,c)}
+  set VM [dbsql_compile $DB {INSERT INTO t1 VALUES(?,?,?)} TAIL]
+  set TAIL
+} {}
+do_test bind-1.2 {
+  dbsql_step $VM N VALUES COLNAMES
+} {DBSQL_DONE}
+do_test bind-1.3 {
+  execsql {SELECT rowid, * FROM t1}
+} {1 {} {} {}}
+do_test bind-1.4 {
+  dbsql_reset_sqlvm $VM
+  dbsql_bind $VM 1 {test value 1} normal
+  dbsql_step $VM N VALUES COLNAMES
+} DBSQL_DONE
+do_test bind-1.5 {
+  execsql {SELECT rowid, * FROM t1}
+} {1 {} {} {} 2 {test value 1} {} {}}
+do_test bind-1.6 {
+  dbsql_reset_sqlvm $VM
+  dbsql_bind $VM 3 {'test value 2'} normal
+  dbsql_step $VM N VALUES COLNAMES
+} DBSQL_DONE
+do_test bind-1.7 {
+  execsql {SELECT rowid, * FROM t1}
+} {1 {} {} {} 2 {test value 1} {} {} 3 {test value 1} {} {'test value 2'}}
+do_test bind-1.8 {
+  dbsql_reset_sqlvm $VM
+  set dbsql_static_bind_value 123
+  dbsql_bind $VM 1 {} static
+  dbsql_bind $VM 2 {abcdefg} normal
+  dbsql_bind $VM 3 {} null
+  execsql {DELETE FROM t1}
+  dbsql_step $VM N VALUES COLNAMES
+  execsql {SELECT rowid, * FROM t1}
+} {1 123 abcdefg {}}
+do_test bind-1.9 {
+  dbsql_reset_sqlvm $VM
+  dbsql_bind $VM 1 {456} normal
+  dbsql_step $VM N VALUES COLNAMES
+  execsql {SELECT rowid, * FROM t1}
+} {1 123 abcdefg {} 2 456 abcdefg {}}
+
+
+do_test bind-1.99 {
+  dbsql_close_sqlvm $VM
+} {}
+
+
+finish_test

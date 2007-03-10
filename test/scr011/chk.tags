@@ -1,0 +1,34 @@
+#!/bin/sh -
+#
+# $Id: chk.tags 7 2007-02-03 13:34:17Z gburd $
+#
+# Check to make sure we don't need any more symbolic links to tags files.
+
+d=../..
+
+# Test must be run from the top-level directory, not from a test directory.
+[ -f $d/LICENSE ] || {
+	echo 'FAIL: cannot find source distribution directory.'
+	exit 1
+}
+
+t1=__1
+t2=__2
+
+(cd $d && ls -F | egrep / | sort |
+    sed -e 's/\///' \
+	-e '/_\//d' \
+	-e '/^CVS$/d' \
+	-e '/^build_win32$/d' \
+	-e '/^docs$/d' \
+	-e '/^docs_src$/d' \
+	-e '/^test$/d' ) > $t1
+
+(cd $d && ls */tags | sed 's/\/tags$//' | sort) > $t2
+if diff $t1 $t2 > /dev/null; then
+	exit 0
+else
+	echo "<<< source tree >>> tags files"
+	diff $t1 $t2
+	exit 1
+fi

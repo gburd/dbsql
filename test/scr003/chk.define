@@ -1,0 +1,51 @@
+#!/bin/sh -
+#
+# $Id: chk.define 7 2007-02-03 13:34:17Z gburd $
+#
+# Check to make sure that all #defines are actually used.
+# Check to make sure that all #defines start in column 1.
+
+d=../..
+
+[ -f $d/LICENSE ] || {
+	echo 'FAIL: cannot find source distribution directory.'
+	exit 1
+}
+
+exitv=0
+t1=__1
+t2=__2
+t3=__3
+
+find $d -name '*.c' -o -name '*.cpp' |
+    sed -e '/queue.h/d' |
+    xargs egrep '^[	 ][	 ]*#' > $t1
+test -s $t1 && {
+	echo "FAIL: found #defines with leading white space:"
+	cat $t1
+	exit 1
+}
+
+egrep '^#define' $d/src/inc/*.h $d/src/inc/*.in |
+    awk '{print $2}' |
+    sed -e '/_H_/d' \
+	-e 's/(.*//' | sort > $t1
+
+find $d -name '*.c' -o -name '*.cpp' > $t2
+for i in `cat $t1`; do
+	if egrep -w $i `cat $t2` > /dev/null; then
+	    :;
+	else
+	    f=`egrep -l "#define.*$i" $d/src/inc/*.h  $d/src/inc/*.in |
+	    sed 's;\.\.\/\.\.\/inc/;;' | tr -s "[:space:]" " "`
+	    echo "FAIL: $i: $f"
+	fi
+done | sort -k 2 > $t3
+
+test -s $t3 && {
+	cat $t3
+	echo "FAIL: found unused #defines"
+	exit 1
+}
+
+exit $exitv

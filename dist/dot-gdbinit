@@ -1,0 +1,39 @@
+break __db_loadme
+break __db_err
+define dd
+print __db_dump(dbp, "a", "/tmp/o")
+end
+define dc
+print __db_dump(dbc->dbp, "a", "/tmp/o")
+end
+break __sm_create
+break __sm_create_table
+break __sm_create_index
+break __sm_close_db
+break __sm_checkpoint
+break __sm_get_database_name
+break __sm_begin_txn
+break __sm_commit_txn
+break __sm_abort_txn
+break __sm_cursor
+break __sm_close_cursor
+break __sm_moveto
+break __sm_next
+break __sm_prev
+break __sm_key_size
+break __sm_data_size
+break __sm_key_compare
+break __sm_key
+break __sm_data
+break __sm_first
+break __sm_last
+break __sm_insert
+break __sm_delete
+break __sm_drop_table
+break __sm_clear_table
+break __sm_set_format_version
+break __sm_get_format_version
+break __sm_set_schema_sig
+break __sm_get_schema_sig
+break process_input
+break __process_sql

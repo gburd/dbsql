@@ -1,0 +1,174 @@
+# $Id: Makefile.in 7 2007-02-03 13:34:17Z gburd $
+
+srcdir=	./
+tstdir=	./tests
+platform=unix
+builddir=../../build_$(platform)
+
+##################################################
+# Installation directories and permissions.
+##################################################
+prefix=	@prefix@
+exec_prefix=@exec_prefix@
+bindir=	@bindir@
+includedir=@includedir@
+libdir=	@libdir@
+
+dmode=	755
+emode=	555
+fmode=	444
+
+transform=@program_transform_name@
+
+##################################################
+# Paths for standard user-level commands.
+##################################################
+SHELL=	@db_cv_path_sh@
+ar=	@db_cv_path_ar@
+awk=	@db_cv_path_awk@
+chmod=	@db_cv_path_chmod@
+cp=	@db_cv_path_cp@
+depend= @db_cv_path_makedepend@
+grep=	@db_cv_path_grep@
+ln=	@db_cv_path_ln@
+mkdir=	@db_cv_path_mkdir@
+ranlib=	@db_cv_path_ranlib@
+rm=	@db_cv_path_rm@
+rpm=	@db_cv_path_rpm@
+sed=	@db_cv_path_sed@
+splint= @db_cv_path_splint@
+strip=	@db_cv_path_strip@
+
+##################################################
+# General library information.
+##################################################
+DEF_LIB=	@DEFAULT_LIB@
+DEF_LIB_CXX=	@DEFAULT_LIB_CXX@
+INSTALLER=	@INSTALLER@
+LIBTOOL=	$(SHELL) $(builddir)/libtool
+
+
+POSTLINK=	@POSTLINK@
+SOLINK=		@MAKEFILE_SOLINK@
+SOFLAGS=	@SOFLAGS@
+LIBMAJOR=	@DBSQL_VERSION_MAJOR@
+LIBVERSION=	@DBSQL_VERSION_MAJOR@.@DBSQL_VERSION_MINOR@
+
+CPPFLAGS=	-I$(builddir) -I$(srcdir) -I../../src \
+			@TCL_CFLAGS@ \
+			@CPPFLAGS@
+
+##################################################
+# C API.
+##################################################
+CFLAGS=	 	-c $(CPPFLAGS) @CFLAGS@
+CC=		@MAKEFILE_CC@
+CCLINK=		@MAKEFILE_CCLINK@
+LDFLAGS=	@LDFLAGS@ @TCL_LD_FLAGS@
+LIBS=		@LIBS@ @TCL_LIBS@ @TCL_LIB_SPEC@ @LIBSO_LIBS@
+
+##################################################
+# TCL testing harness.
+##################################################
+libtso_base=	libdbsql_tcl
+libtso=		$(libtso_base)-$(LIBVERSION)@MODSUFFIX@
+libtso_static=	$(libtso_base)-$(LIBVERSION).a
+libtso_target=	$(libtso_base)-$(LIBVERSION).la
+libtso_default=	$(libtso_base)@MODSUFFIX@
+libtso_major=	$(libtso_base)-$(LIBMAJOR)@MODSUFFIX@
+
+##################################################
+# NOTHING BELOW THIS LINE SHOULD EVER NEED TO BE MODIFIED.
+##################################################
+
+##################################################
+# Source file lists.
+##################################################
+
+TCL_FILES=\
+	$(scrdir)/tcl_internal.c \
+	$(scrdir)/tcl_dbsql.c $(scrdir)/tcl_printf.c \
+	$(scrdir)/tcl_randstr.c $(scrdir)/tcl_sql_funcs.c \
+	$(scrdir)/tcl_test_sh.c $(scrdir)/tcl_threads.c \
+	$(scrdir)/tcl_md5.c
+
+TCL_OBJS=\
+	tcl_md5@o@ tcl_printf@o@ tcl_randstr@o@ tcl_threads@o@ \
+	tcl_sql_funcs@o@ tcl_internal@o@ \
+	tcl_dbsql@o@ 
+
+##################################################
+# Note: "all" must be the first target in the Makefile.
+##################################################
+all: @BUILD_TARGET@ dbsql_tclsh
+
+##################################################
+# Library and standard utilities build.
+##################################################
+library_build: @INSTALL_LIBS@ @ADDITIONAL_LANG@ $(UTIL_PROGS)
+
+# Shared Tcl library.
+$(libtso_target): $(builddir)/dbsql_int.h $(builddir)/sql_parser.h $(builddir)/opcodes.h $(TCL_OBJS) $(C_OBJS)
+	$(SOLINK) @LIBTSO_MODULE@ $(SOFLAGS) $(LDFLAGS) \
+	    -o $@ $(TCL_OBJS) $(C_OBJS)
+
+##################################################
+# Utilities
+##################################################
+
+dbsql_tclsh: $(libtso_target) dbsql_tclsh@o@
+	$(CCLINK) -o $@ $(LDFLAGS) dbsql_tclsh@o@\
+	    .libs/$(libtso_static)\
+	    -L../../build_unix -ldbsql-0.2\
+	    $(LIBS)
+	$(POSTLINK) $@
+
+##################################################
+# Testing.
+##################################################
+test: dbsql_tclsh
+	./dbsql_tclsh $(tstdir)/quick.test
+
+##################################################
+# Remaining standard Makefile targets.
+##################################################
+CLEAN_LIST=\
+	dbsql_tclsh
+
+mostly-clean clean:
+	$(rm) -rf $(C_OBJS)
+	$(rm) -rf $(TCL_OBJS)
+	$(rm) -rf dbsql_tclsh
+	$(rm) -rf *.o *.lo *.loT *.la
+	$(rm) -rf test.db test?.db test.db-journal test.tcl test1.bt data?.txt
+
+REALCLEAN_LIST=\
+	Makefile
+
+##################################################
+# Tcl API build rules.
+##################################################
+tcl_dbsql@o@: $(srcdir)/tcl_dbsql.c
+	$(CC) $(CFLAGS) $(TCL_CFLAGS) $?
+tcl_dbsql_pkg@o@: $(srcdir)/tcl_dbsql_pkg.c
+	$(CC) $(CFLAGS) $(TCL_CFLAGS) $?
+tcl_internal@o@: $(srcdir)/tcl_internal.c
+	$(CC) $(CFLAGS) $(TCL_CFLAGS) $?
+tcl_md5@o@: $(srcdir)/tcl_md5.c
+	$(CC) $(CFLAGS) $(TCL_CFLAGS) $?
+tcl_printf@o@: $(srcdir)/tcl_printf.c
+	$(CC) $(CFLAGS) $(TCL_CFLAGS) $?
+tcl_randstr@o@: $(srcdir)/tcl_randstr.c
+	$(CC) $(CFLAGS) $(TCL_CFLAGS) $?
+tcl_sql_funcs@o@: $(srcdir)/tcl_sql_funcs.c
+	$(CC) $(CFLAGS) $(TCL_CFLAGS) $?
+tcl_threads@o@: $(srcdir)/tcl_threads.c
+	$(CC) $(CFLAGS) $(TCL_CFLAGS) $?
+
+##################################################
+# Utility build rules.
+##################################################
+
+dbsql_tclsh@o@: $(srcdir)/dbsql_tclsh.c
+	$(CC) $(CFLAGS) $?
+

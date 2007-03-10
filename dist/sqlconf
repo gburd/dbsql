@@ -1,0 +1,61 @@
+#!/bin/sh -
+#
+# This is how I normally configure DBSQL when I'm doing daily work.
+#
+# Note that I'm usually using the latest copy of Mac OS/X for
+# devlelopment work, so some of this may be specific to that.
+#
+
+[ -d build_unix ] && {
+	echo 'You cannot build in the top-level directory.'
+	exit 1
+}
+[ -d aclocal ] && {
+	echo 'You cannot build in the dist directory.'
+	exit 1
+}
+args=""
+#args="--disable-shared $args"
+#args="--disable-static $args"
+args="--enable-vacuum $args"
+args="--enable-datetime $args"
+args="--enable-authentication $args"
+args="--enable-incore-databases $args"
+args="--enable-incore-temp-databases $args"
+args="--enable-debug $args"
+args="--enable-diagnostic $args"
+args="--enable-test $args"
+args="--enable-tcl $args"
+#args="--enable-sqlite-compat $args"
+args="--enable-soundex-sqlfn $args"
+args="--enable-posix-mutexes $args"
+args="--with-tcl=/usr/lib/tcl8.4 $args"
+args="--with-berkeleydb=/usr/local/db $args"
+#args="--with-db-uniquename=FOO $args"
+#args="LD_TWOLEVEL_NAMESPACE=1 LIBTSO_LIBS=-ltcl8.4 $args" # Mac OS/X
+
+echo "env $cppflags $ldflags $libs ../dist/configure $args"
+env $cppflags $ldflags $libs sh ../dist/configure -C $args
+
+# (echo "break __db_loadme" &&
+#  echo "break __db_err" &&
+#  echo "define dd" &&
+#  echo 'print __db_dump(dbp, "a", "/tmp/o")' &&
+#  echo "end" &&
+#  echo "define dc" &&
+#  echo 'print __db_dump(dbc->dbp, "a", "/tmp/o")' &&
+#  echo "end") > .gdbinit
+
+(echo "set environment LD_LIBRARY_PATH=.:.libs" &&
+ echo "dir ../src" &&
+ echo "dir ../src/dbsql" &&
+ echo "dir /usr/local/db/src" &&
+ echo "path /usr/local/db/lib" &&
+ echo "path .") > .gdbinit
+
+rm -f tags
+ln -s ../dist/tags tags
+mkdir .libs && /bin/true
+ln -s .gdbinit .libs/.gdbinit
+ln -s ./.libs/dbsql dbsql-bin && /bin/true
+

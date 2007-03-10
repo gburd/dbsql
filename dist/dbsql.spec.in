@@ -1,0 +1,51 @@
+# DBSQL - A SQL database engine.
+#
+# Copyright (C) 2007  The DBSQL Group, Inc.
+#
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+#
+# DBSQL @DBSQL_VERSION_MAJOR@.@DBSQL_VERSION_MINOR@.@DBSQL_VERSION_PATCH@
+
+Summary: DBSQL - A SQL database library.
+Name: dbsql
+Version: @DBSQL_VERSION_MAJOR@.@DBSQL_VERSION_MINOR@.@DBSQL_VERSION_PATCH@
+Release: 1
+Copyright: GPL - Freely redistributable, see LICENSE for details.
+Source: http://www.dbsql.org/update/@DBSQL_VERSION_MAJOR@.@DBSQL_VERSION_MINOR@.@DBSQL_VERSION_PATCH@/dbsql-@DBSQL_VERSION_MAJOR@.@DBSQL_VERSION_MINOR@.@DBSQL_VERSION_PATCH@.tar.gz
+URL: http://www.dbsql.org
+Group: System Environment/Libraries
+BuildRoot: @CONFIGURATION_PATH@/RPM_INSTALL
+
+%define _unpackaged_files_terminate_build       0
+
+%description
+DBSQL is a programmatic toolkit that provides fast, scalable and
+reliable SQL implementation.
+
+%prep
+%setup
+
+%build
+cd build_unix
+CFLAGS="$RPM_OPT_FLAGS" ../dist/configure @CONFIGURATION_ARGS@
+make library_build
+
+%install
+cd build_unix
+make prefix=@CONFIGURATION_PATH@/RPM_INSTALL install
+
+@RPM_POST_INSTALL@
+
+@RPM_POST_UNINSTALL@
+
+%changelog
