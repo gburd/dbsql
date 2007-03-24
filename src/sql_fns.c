@@ -351,12 +351,12 @@ __random_func(context, argc, argv)
 	int argc;
 	const char **argv;
 {
-	int n;
+	u_int32_t n;
 	static struct drand48_data rand;
 	static int first_time = 1;
 	if (first_time) {
 		first_time = 0;
-		srand48_r(1, &rand); /* TODO seed our random number generator */
+		srand48_r(&rand);
 	}
 	rand32_r(&rand, &n);
 	dbsql_set_result_int(context, n);

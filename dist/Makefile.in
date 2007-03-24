@@ -136,15 +136,14 @@ C_FILES=\
 # Object and utility lists.
 ##################################################
 
-C_OBJS= @ADDITIONAL_OBJS@ @REPLACEMENT_OBJS@ \
-	cg_attach@o@ cg_insert@o@ sql_tokenize@o@ cg_auth@o@ \
+C_OBJS= cg_attach@o@ cg_insert@o@ sql_tokenize@o@ cg_auth@o@ \
 	cg_copy@o@ api_table@o@ cg_date@o@ api@o@ xvprintf@o@ \
 	cg_pragma@o@ cg_where@o@ cg_trigger@o@ cg_build@o@ \
 	sql_fns@o@ random@o@ cg_update@o@ cg_delete@o@ hash@o@ \
 	cg_expr@o@ opcodes@o@ sql_parser@o@ cg_vacuum@o@ \
 	vdbe@o@ vdbe_method@o@ sm@o@ snprintf@o@ dbsql_err@o@ cg_select@o@ \
-	os_jtime@o@ memcmp@o@ dbsql_atof@o@ safety@o@ \
-	strcasecmp@o@ strdup@o@ dbsql_alloc@o@ str@o@ dbsql_atoi@o@ 
+	os_jtime@o@ memcmp@o@ dbsql_atof@o@ safety@o@ dbsql_atoi@o@ \
+	strcasecmp@o@ strdup@o@ dbsql_alloc@o@ str@o@
 
 LEMON_OBJS=\
 	lemon@o@

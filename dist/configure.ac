@@ -490,10 +490,7 @@ esac
 
 # We need to add the additional object files into the Makefile with the correct
 # suffix.  We can't use $LTLIBOBJS itself, because that variable has $U encoded
-# in it for automake, and that's not what we want.  See SR #7227 for additional
-# information.
-#
-# XXX: I'm not sure this is correct.
+# in it for automake, and that's not what we want.
 REPLACEMENT_OBJS=`echo "$LIB@&t@OBJS" |
 		 sed "s,\.[[^.]]* ,$o ,g;s,\.[[^.]]*$,$o,"`
 

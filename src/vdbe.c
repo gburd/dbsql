@@ -2445,7 +2445,7 @@ case OP_SetSchemaSignature: {
 ** everyone (and their data).
 */
 case OP_VerifySchemaSignature: {
-	int sig;
+	u_int32_t sig;
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < db->nDb);
 	rc = __sm_get_schema_sig(db->aDb[pOp->p1].pBt, &sig);
 	if (rc == DBSQL_SUCCESS && sig != pOp->p2) {
@@ -2943,8 +2943,14 @@ case OP_NotExists: {
 ** onto the stack.
 */
 case OP_NewRecno: {
+	static struct drand48_data rand;
+	static int first_time = 1;
+	if (first_time) {
+		first_time = 0;
+		srand48_r(&rand);
+	}
 	int i = pOp->p1;
-	int v = 0;
+	u_int32_t v = 0;
 	cursor_t *pC;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	if ((pC = &p->aCsr[i])->pCursor == 0) {
@@ -3017,12 +3023,12 @@ case OP_NewRecno: {
 			cnt = 0;
 			do {
 				if (v == 0 || cnt > 2) {
-					rand32_r(&db->rand, &v);
+					rand32_r(&rand, &v);
 					if (cnt < 5)
 						v &= 0xffffff;
 				} else {
 					u_int8_t rb;
-					rand8_r(&db->rand, &rb);
+					rand8_r(&rand, &rb);
 					v += rb + 1;
 				}
 				if (v == 0)

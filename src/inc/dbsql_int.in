@@ -37,16 +37,17 @@
 
 #include <db.h>
 
-#include "dbsql.h"
 #include "sql_parser.h"
-
 #include "inc/queue.h"
 #include "inc/hash.h"
 #include "inc/str.h"
+#include "inc/random.h"
 #include "inc/vdbe.h"
 #include "inc/debug.h"
 #include "inc/xvprintf.h"
 #include "inc/globals.h"
+
+#include "dbsql.h"
 
 /*
  * Forward references to structures.
@@ -184,7 +185,7 @@ typedef struct sm_cursor {
 struct __dbsql_db {
 	char *zName;       /* Name of this database */
 	sm_t *pBt;         /* The storage manager for this database */
-	int schema_sig;    /* Database schema version number for this file */
+	u_int32_t schema_sig;/* Database schema version number for this file */
 	hash_t tblHash;    /* All tables indexed by name */
 	hash_t idxHash;    /* All (named) indices indexed by name */
 	hash_t trigHash;   /* All triggers indexed by name */

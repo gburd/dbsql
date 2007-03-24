@@ -789,7 +789,7 @@ __default_busy_callback(dbp, arg, not_used, count)
 #if defined(__LP64) || defined(__LP64__)
 	u_int64_t timeout = (u_int64_t)arg;
 #else
-	u_int32_t timeout = (u_int32_)t)arg;
+	u_int32_t timeout = (u_int32_t)arg;
 #endif
 #if DBSQL_MIN_SLEEP_MS==1
 	static const char delays[] =
@@ -1438,13 +1438,11 @@ dbsql_create(dbpp, dbenv, flags)
 	DBSQL_GLOBAL(encoding) = "iso8859";
 #endif
 	
-	if (__dbsql_calloc(NULL, 1, sizeof(*dbp) + sizeof(hash_t), &dbp)
+	if (__dbsql_calloc(NULL, 1, sizeof(DBSQL) + sizeof(hash_t), &dbp)
 	    == ENOMEM)
 		return DBSQL_NOMEM;
 
-	dbp->aFunc = dbp + sizeof(hash_t);
-
-	srand48_r(1, &dbp->rand); /* seed our random number generator TODO */
+	dbp->aFunc = dbp + sizeof(DBSQL);
 
 	if (LF_ISSET(DBSQL_THREAD))
 		F_SET(dbp, DBSQL_Threaded);

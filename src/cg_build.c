@@ -1053,9 +1053,15 @@ void __change_schema_signature(dbp, v)
 	DBSQL *dbp;
 	vdbe_t *v;
 {
+	static struct drand48_data rand;
+	static int first_time = 1;
+	if (first_time) {
+		first_time = 0;
+		srand48_r(&rand);
+	}
 	if (dbp->next_sig == dbp->aDb[0].schema_sig) {
 		u_int8_t n;
-		rand8_r(&dbp->rand, &n);
+		rand8_r(&rand, &n);
 		dbp->next_sig = dbp->aDb[0].schema_sig + n + 1;
 		dbp->flags |= DBSQL_InternChanges;
 		__vdbe_add_op(v, OP_Integer, dbp->next_sig, 0);

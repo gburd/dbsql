@@ -129,7 +129,7 @@ __rng_seed(buf)
 #ifdef CONFIG_TEST
 	return;
 #else
-	__os_pid(&pid);
+	__os_id(NULL, &pid, NULL);
 	__os_jtime(&jt);
 	for (i = 0; i < SEED_SZ; i++) {
 		if (i % 2)
@@ -152,7 +152,7 @@ __rng_seed(buf)
  */
 #ifndef HAVE_SRAND48_R
 int
-srand48_r(seedval, buffer)
+srand48_r(buffer)
 	struct drand48_data *buffer;
 {
 	int i;

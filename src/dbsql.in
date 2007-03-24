@@ -326,7 +326,6 @@ struct __dbsql {
 	FILE *dbsql_errfile;            /* The error file */
 	char *dbsql_errpfx;             /* The error prefix string */
 	void (*dbsql_paniccall)(DBSQL *, int); /* The panic callback */
-	struct drand48_data rand;       /* Random generator state */
 	int panic;               /* If non-zero, shut down the application */
 	dbsql_db_t *aDb;         /* One for each open SQL database + 2 */
 	int nDb;                 /* Number of open dbsql_db_t's open */

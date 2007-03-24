@@ -46,6 +46,7 @@ extern int __os_urealloc__DB_UNIQUE_NAME__ __P((DB_ENV *, size_t, void *));
 extern int __os_umalloc__DB_UNIQUE_NAME__ __P((DB_ENV *, size_t, void *));
 extern int __os_exists__DB_UNIQUE_NAME__ __P((const char *, int *));
 extern int __db_omode__DB_UNIQUE_NAME__ __P((const char *));
+extern int __os_id__DB_UNIQUE_NAME__  __P((DB_ENV *, pid_t *, db_threadid_t*));
 
 #if defined(__cplusplus)
 }
