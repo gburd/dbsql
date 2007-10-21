@@ -353,7 +353,7 @@ struct __dbsql {
 	int (*xBusyCallback)(DBSQL *, void *, const char*, int);
 	void *pCommitArg;        /* Argument to xCommitCallback() */
 	int (*xCommitCallback)(void*);/* Invoked at every commit. */
-	void *aFunc;             /* All functions that can be in SQL exprs */
+	void *fns;               /* All functions that can be in SQL exprs */
 	int lastRowid;           /* ROWID of most recent insert */
 	int priorNewRowid;       /* Last generated ROWID */
 	int onError;             /* Default conflict algorithm */

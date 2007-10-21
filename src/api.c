@@ -414,7 +414,7 @@ __api_open(dbp, filename, mode, err_msgs)
 	dbp->nDb = 2;
 	
 	if (__dbsql_calloc(dbp, 2, sizeof(dbsql_db_t), &dbp->aDb) == ENOMEM)
-		goto no_mem_on_open;
+		goto no_mem_on_open1;
 
 	if (filename[0] == ':' && strcmp(filename, ":memory:") == 0)
 		mem = 1;
@@ -435,13 +435,15 @@ __api_open(dbp, filename, mode, err_msgs)
 	dbp->aDb[1].zName = "temp";
 
 	/* Attempt to read the schema. */
-	__hash_init((hash_t*)dbp->aFunc, DBSQL_HASH_STRING, 1);
+	if (__dbsql_calloc(dbp, 1, sizeof(hash_t), &dbp->fns) == ENOMEM)
+		goto no_mem_on_open2;
+	__hash_init((hash_t*)dbp->fns, DBSQL_HASH_STRING, 1);
 	__register_builtin_funcs(dbp);
 	rc = __init_databases(dbp, err_msgs);
 	dbp->magic = DBSQL_STATUS_OPEN;
 	if (rc == ENOMEM) {
 		dbp->close(dbp);
-		goto no_mem_on_open;
+		goto no_mem_on_open2;
 	} else if (rc != DBSQL_SUCCESS && rc != DBSQL_BUSY) {
 		dbp->close(dbp);
 		__str_urealloc(err_msgs);
@@ -454,7 +456,9 @@ __api_open(dbp, filename, mode, err_msgs)
 	/* Return a pointer to the newly opened database structure */
 	return DBSQL_SUCCESS;
 
-  no_mem_on_open:
+  no_mem_on_open2:
+	__dbsql_free(NULL, dbp);
+  no_mem_on_open1:
 	__str_append(err_msgs, "out of memory", (char*)0);
 	__str_urealloc(err_msgs);
 	return DBSQL_NOMEM;
@@ -531,7 +535,7 @@ __api_close(dbp)
 	}
 	__reset_internal_schema(dbp, 0);
 	DBSQL_ASSERT(dbp->nDb <= 2);
-	for (i = __hash_first((hash_t*)dbp->aFunc); i; i = __hash_next(i)){
+	for (i = __hash_first((hash_t*)dbp->fns); i; i = __hash_next(i)){
 		func_def_t *func, *next;
 		for (func = (func_def_t*)__hash_data(i); func; func = next){
 			next = func->pNext;
@@ -541,8 +545,9 @@ __api_close(dbp)
 	if (dbp->dbsql_errpfx)
 		__dbsql_free(dbp, dbp->dbsql_errpfx);
 	__dbsql_free(dbp, dbp->aDb);
-	__hash_clear((hash_t*)dbp->aFunc);
-	__dbsql_free(dbp, dbp);
+	__hash_clear((hash_t*)dbp->fns);
+	__dbsql_free(dbp, dbp->fns);
+	__dbsql_free(NULL, dbp);
 	return DBSQL_SUCCESS;
 }
 
@@ -1161,7 +1166,7 @@ __api_func_return_type(dbp, name, data_type)
 	const char *name;
 	int data_type;
 {
-	func_def_t *p = (func_def_t*)__hash_find((hash_t*)dbp->aFunc, name,
+	func_def_t *p = (func_def_t*)__hash_find((hash_t*)dbp->fns, name,
 						 strlen(name));
 	while(p) {
 		p->dataType = data_type; 
@@ -1438,11 +1443,8 @@ dbsql_create(dbpp, dbenv, flags)
 	DBSQL_GLOBAL(encoding) = "iso8859";
 #endif
 	
-	if (__dbsql_calloc(NULL, 1, sizeof(DBSQL) + sizeof(hash_t), &dbp)
-	    == ENOMEM)
+	if (__dbsql_calloc(NULL, 1, sizeof(DBSQL), &dbp) == ENOMEM)
 		return DBSQL_NOMEM;
-
-	dbp->aFunc = dbp + sizeof(DBSQL);
 
 	if (LF_ISSET(DBSQL_THREAD))
 		F_SET(dbp, DBSQL_Threaded);

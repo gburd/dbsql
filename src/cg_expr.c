@@ -1949,7 +1949,10 @@ __find_function(dbp, name, len, nargs, create)
 	int create;
 {
 	func_def_t *first, *p, *maybe;
-	first = p = (func_def_t *)__hash_find((hash_t*)dbp->aFunc, name, len);
+
+	DBSQL_ASSERT(dbp->fns != 0);
+	p = (func_def_t *)__hash_find((hash_t*)dbp->fns, name, len);
+	first = p;
 	if (p && !create && nargs < 0) {
 		while (p && p->xFunc==0 && p->xStep == 0) {
 			p = p->pNext;
@@ -1974,7 +1977,7 @@ __find_function(dbp, name, len, nargs, create)
 		p->nArg = nargs;
 		p->pNext = first;
 		p->dataType = first ? first->dataType : DBSQL_NUMERIC;
-		__hash_insert((hash_t*)dbp->aFunc, name, len, (void*)p);
+		__hash_insert((hash_t*)dbp->fns, name, len, (void*)p);
 	}
 	return p;
 }
