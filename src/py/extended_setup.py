@@ -1,4 +1,3 @@
-#-*- coding: ISO-8859-1 -*-
 # ext_setup.py: setuptools extensions for the distutils script
 #
 # DBSQL - A SQL database engine.

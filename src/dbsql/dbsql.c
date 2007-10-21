@@ -16,6 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
  * $Id: dbsql.c 7 2007-02-03 13:34:17Z gburd $
+ *
  */
 
 

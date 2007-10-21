@@ -15,10 +15,11 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 # $Id: buildrel 7 2007-02-03 13:34:17Z gburd $
+
 #
 # Build the distribution package.
-#
 # A set of commands intended to be cut and pasted into a csh window.
+#
 
 # Development tree, release home.
 setenv D `pwd`
