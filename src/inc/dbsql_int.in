@@ -183,16 +183,16 @@ typedef struct sm_cursor {
  * the ATTACH statement during the session.
  */
 struct __dbsql_db {
-	char *zName;       /* Name of this database */
-	sm_t *pBt;         /* The storage manager for this database */
-	u_int32_t schema_sig;/* Database schema version number for this file */
+	char  *zName;      /* Name of this database */
+	sm_t  *pBt;        /* The storage manager for this database */
+	int    schema_sig; /* Database schema version number for this file */
 	hash_t tblHash;    /* All tables indexed by name */
 	hash_t idxHash;    /* All (named) indices indexed by name */
 	hash_t trigHash;   /* All triggers indexed by name */
 	hash_t aFKey;      /* Foreign keys indexed by to-table */
-	u_int8_t inTrans;  /* 0: not writable. 1: Transaction. 2: Checkpoint */
+	int    inTrans;    /* 0: not writable. 1: Transaction. 2: Checkpoint */
 	DBSQL *dbp;        /* A reference to our managing DBSQL */
-	u_int16_t flags;   /* Flags associated with this database */
+	int    flags;      /* Flags associated with this database */
 /*
  * The DBSQL_SCHEMA_LOCKED flag is set when the first OP_Transaction or
  * OP_Checkpoint opcode is emitted for a database.  This prevents multiple

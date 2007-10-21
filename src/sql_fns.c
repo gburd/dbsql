@@ -351,7 +351,7 @@ __random_func(context, argc, argv)
 	int argc;
 	const char **argv;
 {
-	u_int32_t n;
+	int n;
 	static struct drand48_data rand;
 	static int first_time = 1;
 	if (first_time) {

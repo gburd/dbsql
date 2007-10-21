@@ -2445,7 +2445,7 @@ case OP_SetSchemaSignature: {
 ** everyone (and their data).
 */
 case OP_VerifySchemaSignature: {
-	u_int32_t sig;
+	int sig;
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < db->nDb);
 	rc = __sm_get_schema_sig(db->aDb[pOp->p1].pBt, &sig);
 	if (rc == DBSQL_SUCCESS && sig != pOp->p2) {
@@ -2950,7 +2950,7 @@ case OP_NewRecno: {
 		srand48_r(1, &rand); /* XXX create a portable rand function */
 	}
 	int i = pOp->p1;
-	u_int32_t v = 0;
+	int v = 0;
 	cursor_t *pC;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	if ((pC = &p->aCsr[i])->pCursor == 0) {
@@ -3396,7 +3396,7 @@ case OP_Recno: {
 		break;
 	} else {
 		DBSQL_ASSERT(pC->pCursor != 0);
-		__sm_key(pC->pCursor, 0, sizeof(u_int32_t), (char*)&v);
+		__sm_key(pC->pCursor, 0, sizeof(int), (char*)&v);
 		v = KEY_TO_INT(v);
 	}
 	pTos->i = v;

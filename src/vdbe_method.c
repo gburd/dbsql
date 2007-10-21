@@ -533,7 +533,7 @@ dbsql_set_result_string(p, result, n)
 			p->s.flags = MEM_Str | MEM_Short;
 			p->s.z = p->s.zShort;
 		} else {
-			if (__dbsql_calloc(NULL, 1, n + 1, &p->s.z) != ENOMEM){
+			if (__dbsql_calloc(NULL, 1, n + 1, &p->s.z) != ENOMEM) {
 				memcpy(p->s.z, result, n);
 				p->s.z[n] = 0;
 			}

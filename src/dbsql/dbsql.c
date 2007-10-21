@@ -589,7 +589,8 @@ open_db(p)
 		filename = p->db_filename;
 		if (!strcmp(p->db_filename, ":memory:"))
 			filename = 0;
-		rc = dbsql_create_env(&p->db, filename, p->crypt_key,0,flags);
+		rc = dbsql_create_env(&p->db, filename,
+				      p->crypt_key, 0, flags);
 		switch (rc) {
 		case DB_RUNRECOVERY:
 			fprintf(g.errfp, "Database requires recovery.\n");
@@ -966,7 +967,7 @@ do_meta_command(line, p)
 		fprintf(p->out, "\n\n");
 	} else if (c == 't' && n > 1 && strncmp(args[0], "tables", n) == 0) {
 		char **results;
-		int nRow, rc;
+		int nRow, nCol, rc;
 		char *err_msgs;
 		open_db(p);
 		if (num_args == 1) {
@@ -977,7 +978,7 @@ do_meta_command(line, p)
 				       "SELECT name FROM " TEMP_MASTER_NAME " "
 				       "WHERE type IN ('table','view') "
 				       "ORDER BY 1",
-					     &results, &nRow, 0, &err_msgs);
+					     &results, &nRow, &nCol, &err_msgs);
 		} else {
 			rc = p->db->exec_table_printf(p->db,
 		       "SELECT name FROM " MASTER_NAME " "
