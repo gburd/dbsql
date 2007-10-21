@@ -3,10 +3,10 @@
  *
  * Copyright (C) 2007  The DBSQL Group, Inc. - All rights reserved.
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
  * There are special exceptions to the terms and conditions of the GPL as it
  * is applied to this software. View the full text of the exception in file
@@ -16,8 +16,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * http://creativecommons.org/licenses/GPL/2.0/
  *
  * $Id: cg_expr.c 7 2007-02-03 13:34:17Z gburd $
  */

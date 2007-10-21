@@ -1,11 +1,32 @@
+/*-
+ * Lempar - The LEMON parser generator.
+ *
+ * Copyright (C) 2007  DBSQL Group, Inc - All rights reserved.
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * There are special exceptions to the terms and conditions of the GPL as it
+ * is applied to this software. View the full text of the exception in file
+ * LICENSE_EXCEPTIONS in the directory of this software distribution.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * $Id: $
+ */
+
 /*
-** This file contains all sources (including headers) to the LEMON
-** LALR(1) parser generator.  The sources have been combined into a
-** single file to make it easy to include LEMON in the source tree
-** and Makefile of another program.
-**
-** The author of this program disclaims copyright.
-*/
+ * This file contains all sources (including headers) to the LEMON
+ * LALR(1) parser generator.  The sources have been combined into a
+ * single file to make it easy to include LEMON in the source tree
+ * and Makefile of another program.
+ */
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
