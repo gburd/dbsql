@@ -1353,7 +1353,12 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
 	if (dir == 0 || dir[0] == '\0') {
 		/* When dir is NULL, place all resources in memory. */
 		env_open_flags |=  DB_PRIVATE;
-		dbenv->set_flags(dbenv, DB_TXN_NOT_DURABLE, 1);
+		dbenv->set_flags(dbenv, DB_LOG_INMEMORY, 1);
+                /* Specify the size of the in-memory log buffer. */
+		if ((rc = dbenv->set_lg_bsize(dbenv, 10 * 1024 * 1024)) != 0) {
+			__dbsql_err(NULL, db_strerror(rc));
+			return DBSQL_CANTOPEN;
+		}
 	} else {
 		if (__os_exists(dir, &dir_p) == 0) {
 			if (dir_p) {
@@ -1382,7 +1387,7 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
 		return DBSQL_CANTOPEN;
 	}
 
-	if ((rc = dbenv->set_cachesize(dbenv, 0, 256 * 1024, 0)) != 0) {
+	if ((rc = dbenv->set_cachesize(dbenv, 0, 1 * 1024 * 1024, 1)) != 0) {
 		__dbsql_err(NULL, db_strerror(rc));
 		dbenv->close(dbenv, 0);
 		return DBSQL_CANTOPEN;
