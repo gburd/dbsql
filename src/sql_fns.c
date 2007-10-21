@@ -356,7 +356,7 @@ __random_func(context, argc, argv)
 	static int first_time = 1;
 	if (first_time) {
 		first_time = 0;
-		srand48_r(&rand);
+		srand48_r(1, &rand); /* XXX create a portable rand function */
 	}
 	rand32_r(&rand, &n);
 	dbsql_set_result_int(context, n);

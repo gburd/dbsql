@@ -1057,7 +1057,7 @@ void __change_schema_signature(dbp, v)
 	static int first_time = 1;
 	if (first_time) {
 		first_time = 0;
-		srand48_r(&rand);
+		srand48_r(1, &rand); /* XXX create a portable rand function */
 	}
 	if (dbp->next_sig == dbp->aDb[0].schema_sig) {
 		u_int8_t n;

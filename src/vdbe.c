@@ -2947,7 +2947,7 @@ case OP_NewRecno: {
 	static int first_time = 1;
 	if (first_time) {
 		first_time = 0;
-		srand48_r(&rand);
+		srand48_r(1, &rand); /* XXX create a portable rand function */
 	}
 	int i = pOp->p1;
 	u_int32_t v = 0;
