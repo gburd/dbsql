@@ -2,7 +2,7 @@
 #
 # DBSQL - A SQL database engine.
 #
-# Copyright (C) 2007-2008  The DBSQL Group, Inc. - All rights reserved.
+# Copyright (C) 2007  The DBSQL Group, Inc. - All rights reserved.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public
