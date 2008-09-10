@@ -44,6 +44,7 @@ env $cppflags $ldflags $libs sh ../dist/configure -C $args
 #  echo "end" &&
 #  echo "define dc" &&
 #  echo 'print __db_dump(dbc->dbp, "a", "/tmp/o")' &&
+#  echo "set breakpoint pending on" &&
 #  echo "end") > .gdbinit
 
 (echo "set environment LD_LIBRARY_PATH=.:.libs" &&
@@ -51,6 +52,7 @@ env $cppflags $ldflags $libs sh ../dist/configure -C $args
  echo "dir ../src/dbsql" &&
  echo "dir /usr/local/db/src" &&
  echo "path /usr/local/db/lib" &&
+ echo "set breakpoint pending on" &&
  echo "path .") > .gdbinit
 
 rm -f tags
