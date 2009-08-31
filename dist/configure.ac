@@ -1,6 +1,6 @@
 # DBSQL - A SQL database engine.
 #
-# Copyright (C) 2007-2008  The DBSQL Group, Inc.
+# Copyright (C) 2007-2009  The DBSQL Group, Inc.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -291,14 +291,13 @@ if test "$db_cv_cxx" = "yes"; then
 	###### WORKAROUND: SEE SR #7938
 	AC_PROG_CXXCPP
 	###############################
-	AC_CXX_HAVE_STDHEADERS
+	AC_CXX_STDHEADERS
 	MAKEFILE_CXX="${CXX}"
 	MAKEFILE_CXXLINK="${CXX}"
 fi
 
 # Do some gcc specific configuration.
 AC_GCC_CONFIG1
-AC_GCC_CONFIG2
 
 # We need the -Kthread/-pthread flag when compiling on SCO/Caldera's UnixWare
 # and OpenUNIX releases.  We can't make the test until we know which compiler

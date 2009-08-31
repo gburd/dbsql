@@ -15,8 +15,6 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
-# $Id: s_test 7 2007-02-03 13:34:17Z gburd $
-#
 # Build the Tcl test files.
 
 msg1="# Automatically built by dist/s_test; may require local editing."
