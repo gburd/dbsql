@@ -17,8 +17,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # General Public License for more details.
 #
-# $Id: s_config 7 2007-02-03 13:34:17Z gburd $
-#
 # Build the autoconfiguration files.
 
 trap 'rm -f aclocal.m4 ; exit 0' 0 1 2 3 13 15
@@ -26,11 +24,11 @@ trap 'rm -f aclocal.m4 ; exit 0' 0 1 2 3 13 15
 . ./RELEASE
 
 echo "autoconf: building aclocal.m4..."
-cat aclocal/*.ac > aclocal.m4
+cat aclocal/*.m4 > aclocal.m4
 
 echo "autoconf: running autoheader to build config.hin..."
 rm -f config.hin
-autoheader
+autoheader --warnings=all
 chmod 444 config.hin
 
 echo "autoconf: running autoconf to build configure"

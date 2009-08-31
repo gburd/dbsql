@@ -17,8 +17,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # General Public License for more details.
 #
-# $Id: s_test 7 2007-02-03 13:34:17Z gburd $
-#
 # Build the Tcl test files.
 
 msg1="# Automatically built by dist/s_test; may require local editing."
