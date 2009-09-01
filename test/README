@@ -22,8 +22,6 @@ Each line within a test should be no more than 80 characters long.
 
 Each test starts with a section like the following:
 
-# $Id: README 7 2007-02-03 13:34:17Z gburd $
-#
 # TEST	test001
 # TEST	Small keys/data
 # TEST		Put/get per key

@@ -1,7 +1,5 @@
 #!/bin/sh -
 #
-# $Id: chk.srcfiles 7 2007-02-03 13:34:17Z gburd $
-#
 # Check to make sure we haven't forgotten to add any files to the list
 # of source files Win32 uses to build its dsp files.
 

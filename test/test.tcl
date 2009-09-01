@@ -2,8 +2,6 @@
 #
 # Copyright (c) 1996-2004
 #	Sleepycat Software.  All rights reserved.
-#
-# $Id: test.tcl 7 2007-02-03 13:34:17Z gburd $
 
 source ./include.tcl
 

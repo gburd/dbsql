@@ -1,7 +1,5 @@
 #!/bin/sh -
 #
-# $Id: chk.inc 7 2007-02-03 13:34:17Z gburd $
-#
 # Check for inclusion of dbsql_config.h after "const" or other includes.
 
 d=../..

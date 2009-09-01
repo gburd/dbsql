@@ -16,8 +16,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * $Id: db_int.h 7 2007-02-03 13:34:17Z gburd $
  */
 
 #ifndef	_DB_INT_H_

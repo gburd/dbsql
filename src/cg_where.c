@@ -16,8 +16,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * $Id: cg_where.c 7 2007-02-03 13:34:17Z gburd $
  */
 
 /*
@@ -33,12 +31,12 @@
  * clause subexpression is separated from the others by an AND operator.
  */
 typedef struct expr_info {
-	expr_t *p;             /* Pointer to the subexpression */
-	u_int8_t indexable;    /* True if this subexprssion is usable
-				  by an index */
-	short int idxLeft;     /* p->pLeft is a column in this table
-				  number. -1 if p->pLeft is not the
-				  column of any table */
+	expr_t *p;              /* Pointer to the subexpression */
+	u_int8_t indexable;     /* True if this subexprssion is usable
+				   by an index */
+	short int idxLeft;      /* p->pLeft is a column in this table
+				   number. -1 if p->pLeft is not the
+				   column of any table */
 	short int idxRight;     /* p->pRight is a column in this table
 				   number. -1 if p->pRight is not the
 				   column of any table */

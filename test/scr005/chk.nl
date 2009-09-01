@@ -1,7 +1,5 @@
 #!/bin/sh -
 #
-# $Id: chk.nl 7 2007-02-03 13:34:17Z gburd $
-#
 # Check to make sure that there are no trailing newlines in __dbsql_err calls.
 
 d=../..

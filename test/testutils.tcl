@@ -1,4 +1,3 @@
-# $Id: testutils.tcl 7 2007-02-03 13:34:17Z gburd $
 #
 # Test system utilities
 #

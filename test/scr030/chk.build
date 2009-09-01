@@ -1,7 +1,5 @@
 #!/bin/sh -
 #
-# $Id: chk.build 7 2007-02-03 13:34:17Z gburd $
-#
 # Build a program that calls the run-time API configuration functions.
 
 trap 'rm -rf scr030 ; exit 0' 0

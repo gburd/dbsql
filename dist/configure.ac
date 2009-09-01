@@ -15,8 +15,6 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # General Public License for more details.
-#
-# $Id: configure.ac 7 2007-02-03 13:34:17Z gburd $
 
 # Process this file with autoconf to produce a configure script.
 

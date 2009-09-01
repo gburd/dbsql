@@ -1,7 +1,5 @@
 #!/bin/sh -
 #
-# $Id: chk.err 7 2007-02-03 13:34:17Z gburd $
-#
 # Check to make sure all of the error values have corresponding error
 # message strings in db_strerror().
 

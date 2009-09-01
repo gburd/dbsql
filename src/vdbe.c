@@ -16,11 +16,9 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * $Id: vdbe.c 7 2007-02-03 13:34:17Z gburd $
  */
 
-/* The code in this file implements execution method of the 
+/* The code in this file implements execution method of the
  * Virtual Database Engine (VDBE).  A separate file ("vdbe_aux.c")
  * handles housekeeping details such as creating and deleting
  * VDBE instances.  This file is solely interested in executing
@@ -30,10 +28,10 @@
  * to a VDBE.
  *
  * The SQL parser generates a program which is then executed by
- * the VDBE to do the work of the SQL statement.  VDBE programs are 
+ * the VDBE to do the work of the SQL statement.  VDBE programs are
  * similar in form to assembly language.  The program consists of
- * a linear sequence of operations.  Each operation has an opcode 
- * and 3 operands.  Operands P1 and P2 are integers.  Operand P3 
+ * a linear sequence of operations.  Each operation has an opcode
+ * and 3 operands.  Operands P1 and P2 are integers.  Operand P3
  * is a null-terminated string.   The P2 operand must be non-negative.
  * Opcodes will typically ignore one or more operands.  Many opcodes
  * ignore all three operands.
@@ -42,7 +40,7 @@
  * stack is either an integer, a null-terminated string, a floating point
  * number, or the SQL "NULL" value.  An inplicit conversion from one
  * type to the other occurs as necessary.
- * 
+ *
  * Most of the code in this file is taken up by the __vdbe_exec()
  * function which does the work of interpreting a VDBE program.
  * But other routines are also provided to help in building up
@@ -91,7 +89,7 @@ int dbsql_interrupt_count = 0;
  * __api_step --
  *	Advance the virtual machine to the next output row.
  *
- *	The return vale will be either DBSQL_BUSY, DBSQL_DONE, 
+ *	The return vale will be either DBSQL_BUSY, DBSQL_DONE,
  *	DBSQL_ROW, DBSQL_ERROR, or DBSQL_MISUSE.
  *
  *	DBSQL_BUSY means that the virtual machine attempted to open
@@ -365,7 +363,7 @@ __pop_stack(stack, n)
 /*
  * __entity_to_int --
  *	Convert the given stack entity into a integer if it isn't one
- *	already.  Any prior string or real representation is invalidated.  
+ *	already.  Any prior string or real representation is invalidated.
  *	NULLs are converted into 0.
  *
  * STATIC: static void __entity_to_int __P((mem_t *));
@@ -676,7 +674,7 @@ switch(pOp->opcode) {
 /* Opcode:  Goto * P2 *
 **
 ** An unconditional jump to address P2.
-** The next instruction executed will be 
+** The next instruction executed will be
 ** the one at index P2 from the beginning of
 ** the program.
 */
@@ -738,7 +736,7 @@ case OP_Return: {
 ** rollback the current transaction.  Do not rollback if P2==OE_Fail.
 ** Do the rollback if P2==OE_Rollback.  If P2==OE_Abort, then back
 ** out all changes that have occurred during this execution of the
-** VDBE, but do not rollback the transaction. 
+** VDBE, but do not rollback the transaction.
 **
 ** There is an implied "Halt 0 0 0" instruction inserted at the very end of
 ** every program.  So a jump past the last instruction of the program
@@ -830,7 +828,7 @@ case OP_Pop: {
 
 /* Opcode: Dup P1 P2 *
 **
-** A copy of the P1-th element of the stack 
+** A copy of the P1-th element of the stack
 ** is made and pushed onto the top of the stack.
 ** The top of the stack is element 0.  So the
 ** instruction "Dup 0 0 0" will make a copy of the
@@ -869,7 +867,7 @@ case OP_Dup: {
 
 /* Opcode: Pull P1 * *
 **
-** The P1-th element is removed from its current location on 
+** The P1-th element is removed from its current location on
 ** the stack and pushed back on top of the stack.  The
 ** top of the stack is element 0, so "Pull 0 0 0" is
 ** a no-op.  "Pull 1 0 0" swaps the top two elements of
@@ -974,7 +972,7 @@ case OP_Callback: {
 		return DBSQL_ROW;
 	}
 	if (__safety_off(db))
-		goto abort_due_to_misuse; 
+		goto abort_due_to_misuse;
 	if (p->xCallback(p->pCbArg, pOp->p1, azArgv, p->azColName) != 0) {
 		rc = DBSQL_ABORT;
 	}
@@ -1005,7 +1003,7 @@ case OP_Callback: {
 case OP_NullCallback: {
 	if (p->nCallback == 0 && p->xCallback != 0) {
 		if (__safety_off(db))
-			goto abort_due_to_misuse; 
+			goto abort_due_to_misuse;
 		if (p->xCallback(p->pCbArg, pOp->p1, 0, p->azColName) != 0) {
 			rc = DBSQL_ABORT;
 		}
@@ -1019,8 +1017,8 @@ case OP_NullCallback: {
 
 /* Opcode: Concat P1 P2 P3
 **
-** Look at the first P1 elements of the stack.  Append them all 
-** together with the lowest element first.  Use P3 as a separator.  
+** Look at the first P1 elements of the stack.  Append them all
+** together with the lowest element first.  Use P3 as a separator.
 ** Put the result on the top of the stack.  The original P1 elements
 ** are popped from the stack if P2==0 and retained if P2==1.  If
 ** any element of the stack is NULL, then the result is NULL.
@@ -1319,7 +1317,7 @@ case OP_ShiftRight: {
 }
 
 /* Opcode: AddImm  P1 * *
-** 
+**
 ** Add the value P1 to whatever is on top of the stack.  The result
 ** is always an integer.
 **
@@ -1369,7 +1367,7 @@ case OP_ForceInt: {
 }
 
 /* Opcode: MustBeInt P1 P2 *
-** 
+**
 ** Force the top of the stack to be an integer.  If the top of the
 ** stack is not an integer and cannot be converted into an integer
 ** with out data loss, then jump immediately to P2, or if P2==0
@@ -1773,13 +1771,13 @@ case OP_StrGe: {
 **
 ** Pop two values off the stack.  Take the logical AND of the
 ** two values and push the resulting boolean value back onto the
-** stack. 
+** stack.
 */
 /* Opcode: Or * * *
 **
 ** Pop two values off the stack.  Take the logical OR of the
 ** two values and push the resulting boolean value back onto the
-** stack. 
+** stack.
 */
 case OP_And: /* FALLTHROUGH */
 case OP_Or: {
@@ -2119,7 +2117,7 @@ case OP_MakeRecord: {
 **
 ** Convert the top P1 entries of the stack into a single entry suitable
 ** for use as the key in an index.  The top P1 records are
-** converted to strings and merged.  The null-terminators 
+** converted to strings and merged.  The null-terminators
 ** are retained and used as separators.
 ** The lowest entry in the stack is the first field and the top of the
 ** stack becomes the last.
@@ -2135,7 +2133,7 @@ case OP_MakeRecord: {
 ** lowest element on the stack.  If P3 is NULL then all arguments are
 ** assumed to be of the numeric type.
 **
-** The type makes a difference in that text-type fields may not be 
+** The type makes a difference in that text-type fields may not be
 ** introduced by 'b' (as described in the next paragraph).  The
 ** first character of a text-type field must be either 'a' (if it is NULL)
 ** or 'c'.  Numeric fields will be introduced by 'b' if their content
@@ -2359,7 +2357,7 @@ case OP_Commit: {
 	DBSQL_ASSERT(i >= 0 && i < db->nDb);
 	if (db->xCommitCallback != 0) {
 		if (__safety_off(db))
-			goto abort_due_to_misuse; 
+			goto abort_due_to_misuse;
 		if (db->xCommitCallback(db->pCommitArg) != 0) {
 			rc = DBSQL_CONSTRAINT;
 		}
@@ -2463,9 +2461,9 @@ case OP_VerifySchemaSignature: {
 /* Opcode: OpenRead P1 P2 P3
 **
 ** Open a read-only cursor for the database table whose root page is
-** P2 in a database file.  The database file is determined by an 
+** P2 in a database file.  The database file is determined by an
 ** integer from the top of the stack.  0 means the main database and
-** 1 means the database used for temporary tables.  Give the new 
+** 1 means the database used for temporary tables.  Give the new
 ** cursor an identifier of P1.  The P1 values need not be contiguous
 ** but all P1 values should be small integers.  It is an error for
 ** P1 to be negative.
@@ -2512,7 +2510,7 @@ case OP_OpenWrite: {
 	int wrFlag;
 	sm_t *pX;
 	int iDb;
-  
+
 	DBSQL_ASSERT(pTos >= p->aStack);
 	__entity_to_int(pTos);
 	iDb = pTos->i;
@@ -2574,7 +2572,7 @@ case OP_OpenWrite: {
 /* Opcode: OpenTemp P1 P2 *
 **
 ** Open a new cursor to a transient table.
-** The transient cursor is always opened read/write even if 
+** The transient cursor is always opened read/write even if
 ** the main database is read-only.  The transient table is deleted
 ** automatically when the cursor is closed.
 **
@@ -2943,7 +2941,7 @@ case OP_NotExists: {
 **
 ** Get a new integer record number to be used as the key to a table.
 ** The record number is not previously used as a key in the database
-** table that cursor P1 points to.  The new record number is pushed 
+** table that cursor P1 points to.  The new record number is pushed
 ** onto the stack.
 */
 case OP_NewRecno: {
@@ -3379,7 +3377,7 @@ case OP_Column: {
 **
 ** Push onto the stack an integer which is the first 4 bytes of the
 ** the key to the current entry in a sequential scan of the database
-** file P1.  The sequential scan should have been started using the 
+** file P1.  The sequential scan should have been started using the
 ** Next opcode.
 */
 case OP_Recno: {
@@ -3455,7 +3453,7 @@ case OP_FullKey: {
 /* Opcode: NullRow P1 * *
 **
 ** Move the cursor P1 to a null row.  Any OP_Column operations
-** that occur while the cursor is on the null row will always push 
+** that occur while the cursor is on the null row will always push
 ** a NULL onto the stack.
 */
 case OP_NullRow: {
@@ -3469,7 +3467,7 @@ case OP_NullRow: {
 
 /* Opcode: Last P1 P2 *
 **
-** The next use of the Recno or Column or Next instruction for P1 
+** The next use of the Recno or Column or Next instruction for P1
 ** will refer to the last entry in the database table or index.
 ** If the table or index is empty and P2>0, then jump immediately to P2.
 ** If P2 is 0 or if the table or index is not empty, fall through
@@ -3498,7 +3496,7 @@ case OP_Last: {
 
 /* Opcode: Rewind P1 P2 *
 **
-** The next use of the Recno or Column or Next instruction for P1 
+** The next use of the Recno or Column or Next instruction for P1
 ** will refer to the first entry in the database table or index.
 ** If the table or index is empty and P2>0, then jump immediately to P2.
 ** If P2 is 0 or if the table or index is not empty, fall through
@@ -3700,8 +3698,8 @@ case OP_IdxRecno: {
 **
 ** Compare the top of the stack against the key on the index entry that
 ** cursor P1 is currently pointing to.  Ignore the last 4 bytes of the
-** index entry.  If the index entry is greater than or equal to 
-** the top of the stack
+** index entry.  If the index entry is greater than or equal to the top
+** of the stack
 ** then jump to P2.  Otherwise fall through to the next instruction.
 ** In either case, the stack is popped once.
 */
@@ -3723,7 +3721,7 @@ case OP_IdxGE: {
 	DBSQL_ASSERT(pTos >= p->aStack);
 	if ((pCrsr = p->aCsr[i].pCursor) != 0) {
 		int res, rc;
- 
+
 		__entity_as_string(pTos);
 		DBSQL_ASSERT(p->aCsr[i].deferredMoveto == 0);
 		rc = __sm_key_compare(pCrsr, pTos->z, pTos->n, 4, &res);
@@ -3887,7 +3885,7 @@ case OP_ListWrite: {
 
 /* Opcode: ListRewind * * *
 **
-** Rewind the temporary buffer back to the beginning.  This is 
+** Rewind the temporary buffer back to the beginning.  This is
 ** now a no-op.
 */
 case OP_ListRewind: {
@@ -3898,7 +3896,7 @@ case OP_ListRewind: {
 /* Opcode: ListRead * P2 *
 **
 ** Attempt to read an integer from the temporary storage buffer
-** and push it onto the stack.  If the storage buffer is empty, 
+** and push it onto the stack.  If the storage buffer is empty,
 ** push nothing but instead jump to P2.
 */
 case OP_ListRead: {
@@ -3934,7 +3932,7 @@ case OP_ListReset: {
 	break;
 }
 
-/* Opcode: ListPush * * * 
+/* Opcode: ListPush * * *
 **
 ** Save the current vdbe_t list such that it can be restored by a ListPop
 ** opcode. The list is empty after this is executed.
@@ -3950,7 +3948,7 @@ case OP_ListPush: {
 	break;
 }
 
-/* Opcode: ListPop * * * 
+/* Opcode: ListPop * * *
 **
 ** Restore the vdbe_t list to the state it was in when ListPush was last
 ** executed.
@@ -4042,7 +4040,7 @@ case OP_SortMakeRec: {
 /* Opcode: SortMakeKey * * P3
 **
 ** Convert the top few entries of the stack into a sort key.  The
-** number of stack entries consumed is the number of characters in 
+** number of stack entries consumed is the number of characters in
 ** the string P3.  One character from P3 is prepended to each entry.
 ** The first character of P3 is prepended to the element lowest in
 ** the stack and the last character of P3 is prepended to the top of
@@ -4140,7 +4138,7 @@ case OP_Sort: {
 **
 ** Push the data for the topmost element in the sorter onto the
 ** stack, then remove the element from the sorter.  If the sorter
-** is empty, push nothing on the stack and instead jump immediately 
+** is empty, push nothing on the stack and instead jump immediately
 ** to instruction P2.
 */
 case OP_SortNext: {
@@ -4591,7 +4589,7 @@ case OP_AggFocus: {
 	}
 	__entity_release_mem(pTos);
 	pTos--;
-	break; 
+	break;
 }
 
 /* Opcode: AggSet * P2 *
@@ -4750,7 +4748,7 @@ case OP_SetFound: {
 /* Opcode: SetNotFound P1 P2 *
 **
 ** Pop the stack once and compare the value popped off with the
-** contents of set P1.  If the element popped does not exists in 
+** contents of set P1.  If the element popped does not exists in
 ** set P1, then jump to P2.  Otherwise fall through.
 */
 case OP_SetNotFound: {
@@ -4818,7 +4816,7 @@ case OP_SetNext: {
 */
 case OP_Vacuum: {
 	if (__safety_off(db))
-		goto abort_due_to_misuse; 
+		goto abort_due_to_misuse;
 	rc = __execute_vacuum(&p->zErrMsg, db);
 	if (__safety_on(db))
 		goto abort_due_to_misuse;
@@ -4877,19 +4875,20 @@ default: {
 		     * mem_t.z points to mem_t.zShort iff the subtype is
 		     * MEM_Short
 		     */
-		    DBSQL_ASSERT((pTos->flags & MEM_Short) == 0 ||
-			   pTos->z==pTos->zShort);
-		    DBSQL_ASSERT((pTos->flags & MEM_Short) != 0 ||
-			   pTos->z!=pTos->zShort);
+		    DBSQL_ASSERT((pTos->flags & MEM_Short) == 0
+				 || pTos->z==pTos->zShort);
+		    DBSQL_ASSERT((pTos->flags & MEM_Short) != 0
+				 || pTos->z!=pTos->zShort);
 	    } else {
 		    /*
 		     * Cannot define a string subtype for non-string objects.
 		     */
 		    DBSQL_ASSERT((pTos->flags &
-		         (MEM_Static | MEM_Dyn | MEM_Ephem | MEM_Short)) == 0);
+			 (MEM_Static | MEM_Dyn | MEM_Ephem | MEM_Short)) == 0);
 	    }
 	    /* MEM_Null excludes all other types. */
-	    DBSQL_ASSERT(pTos->flags == MEM_Null || (pTos->flags&MEM_Null) == 0);
+	    DBSQL_ASSERT(pTos->flags == MEM_Null
+			 || (pTos->flags&MEM_Null) == 0);
     }
     if (pc < -1 || pc >= p->nOp) {
 	    __str_append(&p->zErrMsg, "jump destination out of range",

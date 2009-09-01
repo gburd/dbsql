@@ -1,7 +1,5 @@
 #!/bin/sh -
 #
-# $Id: chk.def 7 2007-02-03 13:34:17Z gburd $
-#
 # Check to make sure we haven't forgotten to add any interfaces
 # to the Win32 libdb.def file.
 

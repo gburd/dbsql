@@ -1,7 +1,5 @@
 #!/bin/sh -
 #
-# $Id: chk.comma 7 2007-02-03 13:34:17Z gburd $
-#
 # Look for trailing commas in declarations.  Some compilers can't handle:
 #	enum {
 #		foo,
