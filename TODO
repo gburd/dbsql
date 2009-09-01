@@ -1,0 +1,25 @@
+
+* Check all DB API calls
+   Make sure a) we check return codes for for all calls into DB and
+    that b) when there is an error we output it only when configured
+    to be verbose and c) then return the proper DBSQL error indicating
+    what went wrong at a higher level.
+
+* Review all reused DB code
+   Make sure that we're up to date with the latest in DB.  Things such
+    as hashing, etc.
+
+* splint
+
+* makedepend
+
+* valgrind
+
+* Review SQLite's latest lemon.c and lempar.c code
+
+* Review code for trailing spaces, tab characters, lines > 79 col
+
+* api.c/__os_sleep()
+  This is now static in DB's code, so to hack the compile I commented
+   out the use of __os_sleep() in api.c
+
