@@ -18,7 +18,7 @@ args=""
 #args="--disable-shared $args"
 #args="--disable-static $args"
 args="--enable-vacuum $args"
-args="--enable-datetime $args"
+#args="--enable-datetime $args"
 args="--enable-authentication $args"
 args="--enable-incore-databases $args"
 args="--enable-incore-temp-databases $args"
@@ -28,8 +28,7 @@ args="--enable-test $args"
 args="--enable-tcl $args"
 #args="--enable-sqlite-compat $args"
 args="--enable-soundex-sqlfn $args"
-args="--enable-posix-mutexes $args"
-args="--with-tcl=/usr/lib/tcl8.4 $args"
+args="--with-tcl=/usr/lib/tcl8.5 $args"
 args="--with-berkeleydb=/usr/local/db $args"
 #args="--with-db-uniquename=FOO $args"
 #args="LD_TWOLEVEL_NAMESPACE=1 LIBTSO_LIBS=-ltcl8.4 $args" # Mac OS/X
@@ -44,20 +43,17 @@ env $cppflags $ldflags $libs sh ../dist/configure -C $args
 #  echo "end" &&
 #  echo "define dc" &&
 #  echo 'print __db_dump(dbc->dbp, "a", "/tmp/o")' &&
-#  echo "set breakpoint pending on" &&
 #  echo "end") > .gdbinit
 
 (echo "set environment LD_LIBRARY_PATH=.:.libs" &&
  echo "dir ../src" &&
  echo "dir ../src/dbsql" &&
- echo "dir /usr/local/db/src" &&
+ echo "dir ../src/dbsql/rl/src" &&
+ echo "dir /usr/local/db/src/dist" &&
  echo "path /usr/local/db/lib" &&
- echo "set breakpoint pending on" &&
  echo "path .") > .gdbinit
 
 rm -f tags
 ln -s ../dist/tags tags
 mkdir .libs && /bin/true
-ln -s .gdbinit .libs/.gdbinit
-ln -s ./.libs/dbsql dbsql-bin && /bin/true
 

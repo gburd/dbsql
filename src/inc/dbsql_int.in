@@ -247,7 +247,7 @@ struct __dbsql_db {
 /*
  * Aligning items to particular sizes or in pages or memory.
  *
- * db_align_t --
+ * uintmax_t --
  * Largest integral type, used to align structures in memory.  We don't store
  * floating point types in structures, so integral types should be sufficient
  * (and we don't have to worry about systems that store floats in other than
@@ -256,26 +256,29 @@ struct __dbsql_db {
  * that happen to require alignment.  Note: this alignment isn't sufficient for
  * mutexes, which depend on things like cache line alignment.  Mutex alignment
  * is handled separately, in mutex.h.
+ */
+@uintmax_t_decl@
+
+/*
  *
- * db_alignp_t --
+ * uint_ptr_t --
  * Integral type that's the same size as a pointer.  There are places where
  * DB modifies pointers by discarding the bottom bits to guarantee alignment.
- * We can't use db_align_t, it may be larger than the pointer, and compilers
+ * We can't use uintmax_t, it may be larger than the pointer, and compilers
  * get upset about that.  So far we haven't run on any machine where there
  * isn't an integral type the same size as a pointer -- here's hoping.
  */
-@db_align_t_decl@
-@db_alignp_t_decl@
+@uint_ptr_t_decl@
 
 /*
  * Convert a pointer to a small integral value.
  *
- * The (u_int16_t)(db_alignp_t) cast avoids warnings: the (db_alignp_t) cast
+ * The (u_int16_t)(uint_ptr_t) cast avoids warnings: the (uint_ptr_t) cast
  * converts the value to an integral type, and the (u_int16_t) cast converts
  * it to a small integral type so we don't get complaints when we assign the
- * final result to an integral type smaller than db_alignp_t.
+ * final result to an integral type smaller than uint_ptr_t.
  */
-#define	P_TO_UINT32(p)	((u_int32_t)(db_alignp_t)(p))
+#define	P_TO_UINT32(p)	((u_int32_t)(uint_ptr_t)(p))
 
 #define	PATH_SEPARATOR	"@PATH_SEPARATOR@"
 
@@ -289,10 +292,10 @@ struct func_def {
 	void (*xFunc)(dbsql_func_t*,int,const char**); /* Regular fn */
 	void (*xStep)(dbsql_func_t*,int,const char**); /* Aggregate fn step */
 	void (*xFinalize)(dbsql_func_t*);       /* Aggregate fn finializer */
-	int nArg;                               /* Number of arguments */
-	int dataType;                           /* Datatype of the result */
-	void *pUserData;                        /* User data parameter */
-	func_def_t *pNext;                      /* Next function with same name. */
+	int nArg;                           /* Number of arguments */
+	int dataType;                       /* Datatype of the result */
+	void *pUserData;                    /* User data parameter */
+	func_def_t *pNext;                  /* Next function with same name. */
 };
 
 /*

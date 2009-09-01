@@ -26,7 +26,7 @@
 #include <stdlib.h>     /* Needed for drand48 */
 #include <stdarg.h>     /* Needed for the definition of va_list */
 
-@inttypes_decl@
+@inttypes_h_decl@
 #include <stdio.h>
 #endif
 
@@ -75,7 +75,6 @@ extern "C" {
 @u_int_decl@
 @u_long_decl@
 @ssize_t_decl@
-@long_double_decl@
 
 /*
  * Forward structure declarations, so we can declare pointers and
