@@ -145,7 +145,7 @@ local_getline(prompt, in)
  * attempt to use "readline" for command-line editing.  If "isatty"
  * is false, use "local_getline" instead of "readline" and issue no prompt.
  *
- * zPrior is a string of prior text retrieved.  If not the empty
+ * prior is a string of prior text retrieved.  If not the empty
  * string, then issue a continuation prompt.
  */
 static char *
@@ -865,6 +865,7 @@ do_meta_command(line, p)
 		if (p->db) {
 			p->db->close(p->db);
 		}
+		free(line);
 		g.dbenv->close(g.dbenv, 0);
 		exit(0);
 	} else if (c == 'r' && strncmp(args[0], "read", n) == 0 &&
@@ -1134,9 +1135,9 @@ process_input(p, in)
 			continue;
 		if (line && line[0] == '.' && line_len == 0) {
 			int rc = do_meta_command(line, p);
-			free(line);
 			if (rc)
 				break;
+			free(line);
 			continue;
 		}
 		if (_is_command_terminator(line)) {
@@ -1194,7 +1195,7 @@ process_input(p, in)
 
 /*
  * Return a pathname which is the user's home directory.  A
- * 0 return indicates an error of some kind.  Space to hold the
+ * NULL return indicates an error of some kind.  Space to hold the
  * resulting string is obtained from malloc().  The calling
  * function should free the result.
  */
@@ -1234,51 +1235,47 @@ find_home_dir(void)
 }
 
 /*
- * Read input from the file given by rc_override.  Or if that
+ * Read input from the file given by 'path'.  Or if that
  * parameter is NULL, take input from ~/.dbsqlrc
  */
 static void
-process_rc(p, rc_override) 
+process_rc(p, path)
 	struct callback_data *p;        /* Configuration data */
-	const char *rc_override;        /* Name of config file.  NULL to use
-					   default */
+	const char *path;               /* Path to custom config file,
+					   NULL to use default '~/.dbsqlrc' */
 {
 	char *home_dir = NULL;
-	const char *rc = rc_override;
 	char *buf;
 	FILE *in = NULL;
 
-	if (rc == NULL) {
+	if (path == NULL) {
 		home_dir = find_home_dir();
-		if (home_dir == 0) {
-			fprintf(stderr,"%s: unable to locate home directory\n",
-				g.progname);
-			return;
-		}
 		buf = malloc(strlen(home_dir) + 15);
-		if (buf == 0) {
+		if (buf == NULL) {
 			fprintf(stderr,"%s: out of memory\n", g.progname);
 			exit(1);
 		}
 		sprintf(buf,"%s/.dbsqlrc", home_dir);
 		free(home_dir);
-		rc = (const char*)buf;
+		path = (const char*)buf;
 	}
-	in = fopen(rc, "r");
+	in = fopen(path, "r");
 	if (in) {
 		if (isatty(fileno(stdout))) {
-			printf("Loading resources from %s\n", rc);
+			printf("Loading resources from %s\n", path);
 		}
 		process_input(p, in);
 		fclose(in);
 	}
+	if (buf == path)
+		free(buf);
 	return;
 }
 
 /*
 ** Show available command line options
 */
-static const char options[] = 
+static const char options[] =
   "\t--init filename       read/process named file\n"
   "\t--echo                print commands before execution\n"
   "\t--[no]header          turn headers on or off\n"
@@ -1462,9 +1459,13 @@ main(argc, argv)
 			printf("%s\nEnter \".help\" for instructions\n",
 			       dbsql_version(&major, &minor, &patch));
 			home = find_home_dir();
-			if (home &&
-			    (history = malloc(strlen(home) + 20)) != 0) {
-				sprintf(history, "%s/.dbsql_history", home);
+			if (home) {
+				history = malloc(strlen(home) + 20);
+				if (history) {
+					sprintf(history, "%s/.dbsql_history",
+						home);
+				}
+				free(home);
 			}
 			if (history)
 				read_history(history);
