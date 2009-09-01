@@ -1,25 +1,43 @@
 
 * Check all DB API calls
-   Make sure a) we check return codes for for all calls into DB and
+    Make sure a) we check return codes for for all calls into DB and
     that b) when there is an error we output it only when configured
     to be verbose and c) then return the proper DBSQL error indicating
     what went wrong at a higher level.
 
 * Review all reused DB code
-   Make sure that we're up to date with the latest in DB.  Things such
+    Make sure that we're up to date with the latest in DB.  Things such
     as hashing, etc.
 
+* Find printf/fprintf calls which print error messages
+   The library should never print messages unless configured to be
+   verbose.
+
 * splint
+   Clean up all items pointed out by splint.
 
 * makedepend
 
 * valgrind
+   Fix all memory related bugs.
+
+* review dbsql/dbsql.c
+   General clean-up including changing calls to malloc, free, etc to
+   __os_malloc, __os_free, etc.
 
 * Review SQLite's latest lemon.c and lempar.c code
 
 * Review code for trailing spaces, tab characters, lines > 79 col
 
 * api.c/__os_sleep()
-  This is now static in DB's code, so to hack the compile I commented
+   This is now static in DB's code, so to hack the compile I commented
    out the use of __os_sleep() in api.c
+
+* test/scr026
+   This test has not been updated to check for DBSQL API calls rather
+   than DB API calls.  Review and fix it.
+
+* test/scr030
+   Update this test to match the configure script.  Augment it so that
+   as the configure script changes the script reports options not tested.
 

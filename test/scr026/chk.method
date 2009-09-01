@@ -4,7 +4,9 @@
 
 d=../..
 
-t=__1
+t1=__1
+
+trap 'rm -f $t1' 0 1 2 3 13 15
 
 echo ============================================================
 echo "Check that DBSQL doesn't call DBSQL_ENV methods internally."
@@ -80,10 +82,10 @@ sed \
     -e '/db_iface.c:.*if ((t_ret = txn->abort(txn)) != 0)/d' \
     -e '/db_iface.c:.*return (dbenv->txn_begin(dbenv, NULL, txnidp, 0));/d' \
     -e '/rep_util.c:.*ret = dbenv->rep_send(dbenv, &cdbt, dbtp, &cntrl.lsn,/d' \
->$t
+>$t1
 
-test -s $t && {
-        cat $t
+test -s $t1 && {
+        cat $t1
 	echo "FAIL: found DB/DB_ENV method calls DB library."
 	exit 1
 }
