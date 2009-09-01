@@ -61,7 +61,7 @@ Check that pubdef.in has everything listed in dbsql.in.
 =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 END_OF_TEXT
 
-f=$d/src/db.in
+f=$d/src/dbsql.in
 sed -n \
     -e 's/^#define[	 ]*\(DBSQL_[A-Z_0-9][A-Z_0-9]*\).*/\1/p' \
     -e 's/^[	 ]*\(DBSQL_[A-Z_]*\)=[0-9].*/\1/p' \
@@ -77,7 +77,7 @@ done
 
 cat <<END_OF_TEXT
 =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-Check that db.in has everything listed in pubdef.in.
+Check that dbsql.in has everything listed in pubdef.in.
 =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 END_OF_TEXT
 

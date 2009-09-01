@@ -11,6 +11,8 @@ d=../..
 
 t=__1
 
+trap 'rm -f $t1' 0 1 2 3 13 15
+
 egrep -w off_t $d/*/*.[ch] $d/*/*.in |
 sed -e "/_/d" > $t
 

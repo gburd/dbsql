@@ -260,13 +260,13 @@ int pydbsql_statement_recompile(pydbsql_Statement* self, PyObject* params)
          * version 3.2.2 or later. For older DBSQL releases, that might not
          * even define DBSQL_VERSION_NUMBER, we do it the manual way.
          */
-        #ifdef DBSQL_VERSION_NUMBER
-        #if DBSQL_VERSION_NUMBER >= 3002002
+#ifdef DBSQL_VERSION_NUMBER
+#if DBSQL_VERSION_NUMBER >= 3002002
         (void)dbsql_transfer_bindings(self->st, new_st);
-        #endif
-        #else
+#endif
+#else
         statement_bind_parameters(self, params);
-        #endif
+#endif
 
         (void)dbsql_finalize(self->st);
         self->st = new_st;
