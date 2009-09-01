@@ -812,13 +812,13 @@ __default_busy_callback(dbp, arg, not_used, count)
 		if (delay <= 0)
 			return 0;
 	}
-	__os_sleep(dbp, 0, delay);
+/*	__os_sleep(dbp, 0, delay); FIXME */
 	return 1;
 #else
 	if ((count + 1) * 1000 > timeout) {
 		return 0;
 	}
-	__os_sleep(dbp, 1, 0);
+/*	__os_sleep(dbp, 1, 0); FIXME */
 	return 1;
 #endif
 }
@@ -1341,7 +1341,7 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
 
         /* Setup the DB_ENV with that directory as DB_HOME */
 	if ((rc = db_env_create(&dbenv, 0)) != 0) {
-		__dbsql_err(NULL, db_strerror(rc));
+		__dbsql_err(NULL, "%s", db_strerror(rc));
 		return DBSQL_CANTOPEN;
 	}
 
@@ -1349,10 +1349,13 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
 	if (dir == 0 || dir[0] == '\0') {
 		/* When dir is NULL, place all resources in memory. */
 		env_open_flags |=  DB_PRIVATE;
-		dbenv->set_flags(dbenv, DB_LOG_INMEMORY, 1);
+		if ((rc = dbenv->log_set_config(dbenv, DB_LOG_IN_MEMORY, 1))!= 0) {
+			__dbsql_err(NULL, "%s\n", db_strerror(rc));
+			return DBSQL_CANTOPEN;
+		}
                 /* Specify the size of the in-memory log buffer. */
 		if ((rc = dbenv->set_lg_bsize(dbenv, 10 * 1024 * 1024)) != 0) {
-			__dbsql_err(NULL, db_strerror(rc));
+			__dbsql_err(NULL, "%s\n", db_strerror(rc));
 			return DBSQL_CANTOPEN;
 		}
 	} else {
@@ -1378,13 +1381,13 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
 		env_open_flags |= DB_THREAD;
 
 	if ((rc = dbenv->set_lk_detect(dbenv, DB_LOCK_DEFAULT)) != 0) {
-		__dbsql_err(NULL, db_strerror(rc));
+		__dbsql_err(NULL, "%s\n", db_strerror(rc));
 		dbenv->close(dbenv, 0);
 		return DBSQL_CANTOPEN;
 	}
 
 	if ((rc = dbenv->set_cachesize(dbenv, 0, 1 * 1024 * 1024, 1)) != 0) {
-		__dbsql_err(NULL, db_strerror(rc));
+		__dbsql_err(NULL, "%s\n", db_strerror(rc));
 		dbenv->close(dbenv, 0);
 		return DBSQL_CANTOPEN;
 	}
@@ -1392,14 +1395,14 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
 	if (crypt && crypt[0]) {
 		if ((rc = dbenv->set_encrypt(dbenv, crypt,
 					     DB_ENCRYPT_AES)) != 0) {
-			__dbsql_err(NULL, db_strerror(rc));
+			__dbsql_err(NULL, "%s\n", db_strerror(rc));
 			dbenv->close(dbenv, 0);
 			return DBSQL_CANTOPEN;
 		}
 	}
 
 	if ((rc = dbenv->open(dbenv, dir, env_open_flags, mode)) != 0) {
-		__dbsql_err(NULL, db_strerror(rc));
+		__dbsql_err(NULL, "%s\n", db_strerror(rc));
 		dbenv->close(dbenv, 0);
 		return DBSQL_CANTOPEN;
 	}
