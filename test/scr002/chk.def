@@ -15,7 +15,14 @@ f=$d/build_win32/libdb.def
 t1=__1
 t2=__2
 
+trap 'rm -f $t1 $t2' 0 1 2 3 13 15
+
 exitv=0
+
+[ -f $f ] || {
+        echo 'FAIL: unable to find or build' $f
+        exit 1
+}
 
 sed '/; /d' $f |
     egrep @ |

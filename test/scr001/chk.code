@@ -2,14 +2,15 @@
 #
 # Check to make sure that the code samples in the documents build.
 
-d=../../../db_docs
+d=../../docs
+b=../../build_unix
 
 [ -d $d ] || {
 	echo 'FAIL: cannot find source distribution directory.'
 	exit 1
 }
-[ -f ../libsqldb.a ] || (cd .. && make libsqldb.a) || {
-	echo 'FAIL: unable to find or build libsqldb.a'
+[ -f $b/libdbsql.a ] || (cd $b && make libdbsql.a) || {
+	echo 'FAIL: unable to find or build libdbsql.a'
 	exit 1
 }
 

@@ -9,11 +9,14 @@ d=../..
 	exit 1
 }
 
+trap 'rm -f t t.c' 0 1 2 3 13 15
+
 cat << END_OF_CODE > t.c
 #include <sys/types.h>
 
 #include <errno.h>
 #include <stdio.h>
+#include <string.h>
 
 int chk(FILE *, char *);
 

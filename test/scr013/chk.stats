@@ -16,11 +16,13 @@ docs=$d/docs_src
 exitv=0
 t=__tmp
 
+trap 'rm -f $t1 IGNORE' 0 1 2 3 13 15
+
 # Extract the field names for a structure from the dbsql.h file.
 inc_fields()
 {
 	sed -e "/struct $1 {/,/^};$/p" \
-	    -e d < $d/src/inc/dbsql.in |
+	    -e d < $d/src/dbsql.in |
 	sed -e 1d \
 	    -e '$d' \
 	    -e '/;/!d' \

@@ -13,7 +13,10 @@ t1=__1
 t2=__2
 t3=__3
 
+trap 'rm -f $t1 $t2 $t3' 0 1 2 3 13 15
+
 egrep '__P' $d/src/inc/*.h |
+    sed -e '/db_int.h/d' |
     sed -e 's/[	 ][	 ]*__P.*//' \
     -e 's/^.*[	 *]//' \
     > $t1
