@@ -594,7 +594,7 @@ open_db(p)
 		case 0:
 			break;
 		default:
-			fprintf(g.errfp, dbsql_strerror(rc));
+			fprintf(g.errfp, "%s\n", dbsql_strerror(rc));
 			exit(1);
 		}
 		g.dbenv = p->db->get_dbenv(p->db);
@@ -784,7 +784,7 @@ do_meta_command(line, p)
 		}
 		p->show_header = val;
 	} else if (c == 'h' && strncmp(args[0], "help", n) == 0) {
-		fprintf(stderr, help_message);
+		fprintf(stderr, "%s\n", help_message);
 	} else if(c == 'i' && strncmp(args[0], "indices", n) == 0 &&
 		  num_args > 1) {
 		struct callback_data data;
@@ -1299,7 +1299,7 @@ static void
 usage(show_detail)
 	int show_detail;
 {
-	fprintf(stderr, "Usage: db_isql [OPTIONS] FILENAME [SQL]\n");
+	fprintf(stderr, "Usage: dbsql [OPTIONS] FILENAME [SQL]\n");
 	if (show_detail) {
 		fprintf(stderr, "%s", options);
 	} else {
