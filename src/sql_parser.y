@@ -14,8 +14,6 @@
  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- *
- * $Id: sql_parser.y 7 2007-02-03 13:34:17Z gburd $
  */
 
 /*
@@ -31,7 +29,7 @@
 %syntax_error {
   if( pParse->zErrMsg==0 ){
     if( TOKEN.z[0] ){
-      __set_stringn(&pParse->zErrMsg, 
+      __set_stringn(&pParse->zErrMsg,
           "near \"", -1, TOKEN.z, TOKEN.n, "\": syntax error", -1, 0);
     }else{
       __set_string(&pParse->zErrMsg, "incomplete SQL statement", (char*)0);

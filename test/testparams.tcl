@@ -1,4 +1,3 @@
-# $Id: testparams.tcl 7 2007-02-03 13:34:17Z gburd $
 
 global one_test
 

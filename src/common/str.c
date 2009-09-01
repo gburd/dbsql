@@ -14,8 +14,6 @@
  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- *
- * $Id: str.c 7 2007-02-03 13:34:17Z gburd $
  */
 /*
  * Copyright (c) 1990-2004
@@ -54,7 +52,7 @@
  */
 /*
  * Copyright (c) 1990, 1993, 1994, 1995
- *The Regents of the University of California.  All rights reserved.
+ * The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -82,14 +80,14 @@
  */
 /*
  * Copyright (c) 1995, 1996
- *The President and Fellows of Harvard University.  All rights reserved.
+ * The President and Fellows of Harvard University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions 
+ * 2. Redistributions
  */
 
 #include "dbsql_config.h"

@@ -1,7 +1,5 @@
 #!/bin/sh -
 #
-# $Id: chk.include 7 2007-02-03 13:34:17Z gburd $
-#
 # Check for inclusion of files already included in dbsql_int.h.
 
 d=../..

@@ -1,7 +1,7 @@
 /*-
  * DBSQL - A SQL database engine.
  *
- * Copyright (C) 2007  DBSQL Group, Inc.
+ * Copyright (C) 2007-2008  The DBSQL Group, Inc.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,8 +14,6 @@
  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- *
- * $Id: api.c 7 2007-02-03 13:34:17Z gburd $
  */
 
 /*

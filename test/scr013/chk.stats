@@ -1,7 +1,5 @@
 #!/bin/sh -
 #
-# $Id: chk.stats 7 2007-02-03 13:34:17Z gburd $
-#
 # Check to make sure all of the stat structure members are included in
 # all of the possible formats.
 

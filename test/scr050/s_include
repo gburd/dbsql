@@ -1,5 +1,4 @@
 #!/bin/sh -
-#	$Id: s_include 7 2007-02-03 13:34:17Z gburd $
 #
 # Build the automatically generated function prototype files.
 

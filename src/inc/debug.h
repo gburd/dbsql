@@ -3,8 +3,6 @@
  *
  * Copyright (c) 1998-2004
  *	Sleepycat Software.  All rights reserved.
- *
- * $Id: debug.h 7 2007-02-03 13:34:17Z gburd $
  */
 
 #ifndef _DBSQL_DEBUG_H_
