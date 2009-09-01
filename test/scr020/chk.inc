@@ -13,6 +13,8 @@ d=../..
 t1=__1
 t2=__2
 
+trap 'rm -f $t1 $t2' 0 1 2 3 13 15
+
 (cd $d && find . -name '*.[chys]' -o -name '*.cpp' |
     xargs egrep -l '#include.*dbsql_config.h') | tee /tmp/o > $t1
 

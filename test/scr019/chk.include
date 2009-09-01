@@ -13,6 +13,8 @@ d=../..
 t1=__1
 t2=__2
 
+trap 'rm -f $t1 $t2' 0 1 2 3 13 15
+
 egrep -- '#include[	 ]' $d/src/inc/dbsql_int.in |
 sed -e '/[	 ]db\.h'/d \
     -e 's/^#include.//' \

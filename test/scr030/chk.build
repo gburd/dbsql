@@ -2,8 +2,10 @@
 #
 # Build a program that calls the run-time API configuration functions.
 
-trap 'rm -rf scr030 ; exit 0' 0
-trap 'rm -rf scr030 ; exit 1' 1 2 3 13 15
+t=__1
+
+trap 'rm -rf $t ; exit 0' 0
+trap 'rm -rf $t ; exit 1' 1 2 3 13 15
 
 [ -d ../../dist ] || {
 	echo 'FAIL: unable to find top-level dist directory'
@@ -38,9 +40,9 @@ s="\
 r()
 {
 	echo "run: $1 (`date`)"
-	rm -rf scr030
-	mkdir scr030
-	cd scr030
+	rm -rf $t
+	mkdir $t
+	cd $t
 	../../../dist/configure $1 > config.OUT 2>&1
 	if test $? -ne 0; then
 		echo "$i: FAILED in configure"
@@ -67,7 +69,7 @@ r()
 		exit 1
 	fi
 	cd ..
-	rm -rf scr030
+	rm -rf $t
 }
 
 # Run through all of the standard single options.

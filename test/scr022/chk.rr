@@ -1,25 +1,26 @@
 #!/bin/sh -
 #
-# Check for DB_RUNRECOVERY being specified instead of a call
-# to dbsql_panic.
+# Check for DB_RUNRECOVERY being specified instead of a call to dbsql_panic.
 
 d=../..
 
 t1=__1
 
-egrep DB_RUNRECOVERY $d/*/*.c |
-    sed -e '/__db_panic(.*, DB_RUNRECOVERY)/d' \
-	-e '/case DB_RUNRECOVERY:/d' \
-	-e '/db_dispatch.c:.*if (ret == DB_RUNRECOVERY/d' \
+trap 'rm -f $t1' 0 1 2 3 13 15
+
+egrep DBSQL_RUNRECOVERY $d/*/*.c $d/*/*/*.c |
+    sed -e '/__db_panic(.*, DBSQL_RUNRECOVERY)/d' \
+	-e '/case DBSQL_RUNRECOVERY:/d' \
+	-e '/db_dispatch.c:.*if (ret == DBSQL_RUNRECOVERY/d' \
 	-e '/db_err.c:/d' \
-	-e '/os_errno.c:.*evalue == DB_RUNRECOVERY/d' \
+	-e '/os_errno.c:.*evalue == DBSQL_RUNRECOVERY/d' \
 	-e '/\/php_db4\//d' \
-	-e '/rep_backup.c:.*Panic the env and return DB_RUNRECOVERY/d' \
-	-e '/txn.c:.* \* DB_RUNRECOVERY and we need to/d' \
-	-e '/txn.c:.*returned DB_RUNRECOVERY and we need to/d' \
+	-e '/rep_backup.c:.*Panic the env and return DBSQL_RUNRECOVERY/d' \
+	-e '/txn.c:.* \* DBSQL_RUNRECOVERY and we need to/d' \
+	-e '/txn.c:.*returned DBSQL_RUNRECOVERY and we need to/d' \
 	> $t1
 [ -s $t1 ] && {
-	echo "DB_RUNRECOVERY used; should be a call to dbsql_panic."
+	echo "DBSQL_RUNRECOVERY used; should be a call to dbsql_panic."
 	cat $t1
 	exit 1
 }
