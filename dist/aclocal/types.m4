@@ -124,6 +124,7 @@ AC_CHECK_SIZEOF(unsigned long,, $db_includes)
 AC_CHECK_SIZEOF(long long,, $db_includes)
 AC_CHECK_SIZEOF(unsigned long long,, $db_includes)
 AC_CHECK_SIZEOF(char *,, $db_includes)
+AC_CHECK_SIZEOF(long double,, $db_includes)
 
 # We look for u_char, u_short, u_int, u_long -- if we can't find them,
 # we create our own.
@@ -171,6 +172,11 @@ AC_CHECK_TYPE(u_int64_t,,
 AC_SUBST(int64_decl)
 AC_CHECK_TYPE(int64_t,,
     [AM_SEARCH_SSIZES(int64_decl, int64_t, 8, notfatal)], $db_includes)
+
+AC_SUBST(long_double_decl)
+AC_CHECK_TYPE(long double,
+    [long_double_decl="typedef long double long_double_t;"],
+    [long_double_decl="typedef long double long_double_t;"], $db_includes)
 
 # No currently autoconf'd systems lack FILE, off_t pid_t, size_t, time_t.
 #
