@@ -261,24 +261,24 @@ struct __dbsql_db {
 
 /*
  *
- * uint_ptr_t --
+ * uintptr_t --
  * Integral type that's the same size as a pointer.  There are places where
  * DB modifies pointers by discarding the bottom bits to guarantee alignment.
  * We can't use uintmax_t, it may be larger than the pointer, and compilers
  * get upset about that.  So far we haven't run on any machine where there
  * isn't an integral type the same size as a pointer -- here's hoping.
  */
-@uint_ptr_t_decl@
+@uintptr_t_decl@
 
 /*
  * Convert a pointer to a small integral value.
  *
- * The (u_int16_t)(uint_ptr_t) cast avoids warnings: the (uint_ptr_t) cast
+ * The (u_int16_t)(uintptr_t) cast avoids warnings: the (uintptr_t) cast
  * converts the value to an integral type, and the (u_int16_t) cast converts
  * it to a small integral type so we don't get complaints when we assign the
- * final result to an integral type smaller than uint_ptr_t.
+ * final result to an integral type smaller than uintptr_t.
  */
-#define	P_TO_UINT32(p)	((u_int32_t)(uint_ptr_t)(p))
+#define	P_TO_UINT32(p)	((u_int32_t)(uintptr_t)(p))
 
 #define	PATH_SEPARATOR	"@PATH_SEPARATOR@"
 
