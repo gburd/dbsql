@@ -39,5 +39,7 @@
 
 * test/scr030
    Update this test to match the configure script.  Augment it so that
-   as the configure script changes the script reports options not tested.
+   as the configure script changes the script reports options not
+   tested.
+
 
