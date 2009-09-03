@@ -1,0 +1,6 @@
+To get the SQLite sources:
+
+1) cvs -d :pserver:anonymous@www.sqlite.org:/sqlite login
+   When prompted for a password, enter "anonymous".
+2) cvs -d :pserver:anonymous@www.sqlite.org:/sqlite checkout sqlite
+3) cvs update -r version_2
