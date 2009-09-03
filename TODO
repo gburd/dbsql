@@ -42,4 +42,19 @@
    as the configure script changes the script reports options not
    tested.
 
+* Use LIST/QUEUE macros for linked lists, queues, etc.
+   Find/replace all custom code implementing these simple data
+   structures.
+
+* Review memory allocation code in general
+
+* A few scr??? < 050 examine source but do not include the TCL testing code
+
+* Consider using MPOOL to manage some of DBSQL state across processes
+   Function pools and other aspects of the DBSQL runtime need not be
+   re-created in-memory across multiple processes.  When doing this
+   revisit data structures using the LIST/QUEUE macros and shift them
+   to the SH_ equivalents.
+
+* Investigate the TCL Extension Architecture (http://www.tcl.tk/doc/tea/)
 
