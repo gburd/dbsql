@@ -2980,12 +2980,8 @@ case OP_NewRecno: {
 		 * than for this algorithm to fail.
 		 *
 		 * The analysis in the previous paragraph assumes that you
-		 * have a good source of random numbers.  Is a library
-		 * function like lrand48() good enough?  Maybe. Maybe not.
-		 * It's hard to know whether there might be subtle bugs is
-		 * some implementations of lrand48() that could cause problems.
-		 * To avoid uncertainty, we implement our own  random number
-		 * generator based on the RC4 algorithm.
+		 * have a good source of random numbers.  We depend on the
+		 * operating system's implementation of rand32_r().
 		 *
 		 * To promote locality of reference for repetitive inserts, the
 		 * first few attempts at chosing a random rowid pick values

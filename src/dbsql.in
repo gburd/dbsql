@@ -218,7 +218,7 @@ struct __dbsql {
 	void (*get_errpfx) __P((DBSQL *, const char **));
 	DB_ENV *(*get_dbenv) __P((DBSQL *));
 
-					/* Callback access functions. */
+				/* Callback access functions. */
 	void *(*set_tracecall) __P((DBSQL *, void(*)(void *, const char *),\
 				    void *));
 #ifndef DBSQL_NO_PROGRESS
@@ -247,9 +247,9 @@ struct __dbsql {
 			 const char ***));
 
 	int (*create_function) __P((DBSQL *, const char *, int, int, void *,\
-                            void (*)(dbsql_func_t *, int, const char**),\
-                            void (*)(dbsql_func_t *, int, const char**),\
-                            void (*)(dbsql_func_t *)));
+			       void (*)(dbsql_func_t *, int, const char**), \
+			       void (*)(dbsql_func_t *, int, const char**), \
+			       void (*)(dbsql_func_t *)));
 	int (*func_return_type) __P((DBSQL *, const char *, int));
 #define DBSQL_NUMERIC     (-1)
 #define DBSQL_TEXT        (-2)
@@ -307,8 +307,8 @@ struct __dbsql {
 #define DBSQL_DETACH               25   /* Database Name   NULL            */
 
 					/* Non-callback access functions. */
-	int (*prepare) __P((DBSQL *, const char *, const char **, dbsql_stmt_t **,\
-			        char **));
+	int (*prepare) __P((DBSQL *, const char *, const char **,\
+			    dbsql_stmt_t **, char **));
 	int (*finalize) __P((dbsql_stmt_t *, char **));
 	int (*reset) __P((dbsql_stmt_t *, char **));
 	int (*bind) __P((dbsql_stmt_t *, int, const char *, int, int));
@@ -400,7 +400,7 @@ void *dbsql_user_data __P((dbsql_func_t *));
 void *dbsql_aggregate_context __P((dbsql_func_t *, int));
 int dbsql_aggregate_count __P((dbsql_func_t *));
 
-/* 
+/*
  * The fifth parameter to dbsql_set_result_blob(), and
  * dbsql_set_result_varchar() is a destructor used to dispose of the BLOB
  * or text after DBSQL has finished with it.  If the fifth argument is the

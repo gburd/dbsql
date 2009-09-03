@@ -98,12 +98,12 @@ __init_callback(init, argc, argv, col_name)
 	case 'v': /* FALLTHROUGH */
 	case 'i': /* FALLTHROUGH */
 	case 't':
-                /* CREATE TABLE, CREATE INDEX, or CREATE VIEW statements */
+		/* CREATE TABLE, CREATE INDEX, or CREATE VIEW statements */
 		if (argv[2] == 0 || argv[4] == 0) {
 			__corrupt_schema(data);
 			return 1;
 		}
-		/* 
+		/*
 		 * Call the parser to process a CREATE TABLE, INDEX or VIEW.
 		 * But because sParse.initFlag is set to 1, no VDBE code is
 		 * generated or executed.  All the parser does is build the
@@ -185,7 +185,7 @@ __init_db_file(dbp, dbi, err_msgs)
 	/*
 	 * The master database table has a structure like this
 	 */
-	static char master_schema[] = 
+	static char master_schema[] =
 		"CREATE TABLE " MASTER_NAME "(\n"
 		"  type text,\n"
 		"  name text,\n"
@@ -298,7 +298,7 @@ __init_db_file(dbp, dbi, err_msgs)
  *	used to store temporary tables, and any additional database files
  *	created using ATTACH statements.  Return a success code.  If an
  *	error occurs, write an error message into *pzErrMsg.
- *	
+ *
  *	After the database is initialized, the DBSQL_Initialized
  *	bit is set in the flags field of the dbsql_t structure.  An
  *	attempt is made to initialize the database as soon as it
@@ -315,7 +315,7 @@ __init_databases(dbp, err_msgs)
 {
 	int i = 0;
 	int rc = DBSQL_SUCCESS;
-  
+
 	DBSQL_ASSERT((dbp->flags & DBSQL_Initialized) == 0);
 
 	for(i = 0; rc == DBSQL_SUCCESS && i < dbp->nDb; i++) {
@@ -408,7 +408,7 @@ __api_open(dbp, filename, mode, err_msgs)
 	dbp->priorNewRowid = 0;
 	dbp->magic = DBSQL_STATUS_BUSY;
 	dbp->nDb = 2;
-	
+
 	if (__dbsql_calloc(dbp, 2, sizeof(dbsql_db_t), &dbp->aDb) == ENOMEM)
 		goto no_mem_on_open1;
 
@@ -598,7 +598,7 @@ __process_sql(dbp, sql, callback, arg, tail, vm, err_msgs)
 			*err_msgs = 0;
 		}
 	}
-        /* TODO: in the __meta subdatabase get:'format_version'
+	/* TODO: in the __meta subdatabase get:'format_version'
 	if (dbp->file_format < 3) {
 		__safety_off(dbp);
 		__str_append(err_msgs, "obsolete database file format",
@@ -700,7 +700,7 @@ int __api_exec(dbp, sql, callback, arg, err_msgs)
  * err_msgs		OUT: Write error messages here
  */
 int
-__api_prepare(dbp, sql, tail, stmt, err_msgs)	
+__api_prepare(dbp, sql, tail, stmt, err_msgs)
 	DBSQL *dbp;
 	const char *sql;
 	const char **tail;
@@ -965,7 +965,7 @@ __api_get_encoding()
  * user_data		User data
  * func			The function's implementation
  * step			Step is used by aggregate functions
- * finalize	                When finished with 
+ * finalize	                When finished with
  */
 int
 __api_create_function(dbp, name, num_arg, user_data, encoding, func,
@@ -1165,7 +1165,7 @@ __api_func_return_type(dbp, name, data_type)
 	func_def_t *p = (func_def_t*)__hash_find((hash_t*)dbp->fns, name,
 						 strlen(name));
 	while(p) {
-		p->dataType = data_type; 
+		p->dataType = data_type;
 		p = p->pNext;
 	}
 	return DBSQL_SUCCESS;
@@ -1174,7 +1174,7 @@ __api_func_return_type(dbp, name, data_type)
 /*
  * __api_set_trace_callback --
  *	Register a trace function.  The 'arg' from the previously
- *	registered trace is returned.  
+ *	registered trace is returned.
  *	A NULL trace function means that no tracing is executes.  A non-NULL
  *	trace is a pointer to a function that is invoked at the start of each
  *	__api_exec().
@@ -1339,7 +1339,7 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
 	int env_open_flags = DB_INIT_LOCK | DB_INIT_LOG | DB_INIT_MPOOL |
 		DB_INIT_TXN | DB_CREATE;
 
-        /* Setup the DB_ENV with that directory as DB_HOME */
+	/* Setup the DB_ENV with that directory as DB_HOME */
 	if ((rc = db_env_create(&dbenv, 0)) != 0) {
 		__dbsql_err(NULL, "%s", db_strerror(rc));
 		return DBSQL_CANTOPEN;
@@ -1349,11 +1349,12 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
 	if (dir == 0 || dir[0] == '\0') {
 		/* When dir is NULL, place all resources in memory. */
 		env_open_flags |=  DB_PRIVATE;
-		if ((rc = dbenv->log_set_config(dbenv, DB_LOG_IN_MEMORY, 1))!= 0) {
+		rc = dbenv->log_set_config(dbenv, DB_LOG_IN_MEMORY, 1);
+		if (rc) {
 			__dbsql_err(NULL, "%s\n", db_strerror(rc));
 			return DBSQL_CANTOPEN;
 		}
-                /* Specify the size of the in-memory log buffer. */
+		/* Specify the size of the in-memory log buffer. */
 		if ((rc = dbenv->set_lg_bsize(dbenv, 10 * 1024 * 1024)) != 0) {
 			__dbsql_err(NULL, "%s\n", db_strerror(rc));
 			return DBSQL_CANTOPEN;
@@ -1430,7 +1431,7 @@ dbsql_create(dbpp, dbenv, flags)
 {
 	DBSQL *dbp;
 	DBSQL_ASSERT(dbpp != 0);
-	
+
 	if (dbenv == NULL)
 		return EINVAL; /* TODO better error message */
 
@@ -1446,7 +1447,7 @@ dbsql_create(dbpp, dbenv, flags)
 #else
 	DBSQL_GLOBAL(encoding) = "iso8859";
 #endif
-	
+
 	if (__dbsql_calloc(NULL, 1, sizeof(DBSQL), &dbp) == ENOMEM)
 		return DBSQL_NOMEM;
 

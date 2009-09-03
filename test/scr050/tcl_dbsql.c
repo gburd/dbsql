@@ -1035,7 +1035,7 @@ __tcl_dbsql_cmd_impl(_dbctx, interp, objc, objv)
  *          The mode of the database to be created.
  *
  * ?-key KEY?
- *          
+ *
  *
  * -encoding
  *          Return the encoding used by LIKE and GLOB operators.  Choices
@@ -1046,7 +1046,7 @@ __tcl_dbsql_cmd_impl(_dbctx, interp, objc, objv)
  *
  * -tcl-uses-utf
  *          Return "1" if compiled with a Tcl uses UTF-8.  Return "0" if
- *          not.  Used by tests to make sure the library was compiled 
+ *          not.  Used by tests to make sure the library was compiled
  *          correctly.
  */
 static int
@@ -1100,7 +1100,7 @@ __tcl_dbsql_impl(_dbctx, interp, objc, objv)
 		}
 	}
 	if (objc != 3 && objc != 4) {
-		Tcl_WrongNumArgs(interp, 1, objv, 
+		Tcl_WrongNumArgs(interp, 1, objv,
 				 "HANDLE FILENAME ?MODE? ?-key CRYPTOKEY?");
 		return TCL_ERROR;
 	}
@@ -1117,8 +1117,8 @@ __tcl_dbsql_impl(_dbctx, interp, objc, objv)
 	}
 	memset(dbctx, 0, sizeof(*dbctx));
 	filename = Tcl_GetStringFromObj(objv[2], 0);
-	
-        /* First setup the DB_ENV */
+
+	/* First setup the DB_ENV */
 	if ((rc = db_env_create(&dbctx->dbenv, 0)) != 0) {
 		Tcl_SetResult(interp, db_strerror(rc), TCL_STATIC);
 		return TCL_ERROR;

@@ -1026,8 +1026,8 @@ int __expr_resolve_ids(parser, slist, elist, expr)
  * __get_function_name --
  *	'expr' is a node that defines a function of some kind.  It might
  *	be a syntactic function like "count(x)" or it might be a function
- *	that implements an operator, like "a LIKE b".  
- *	This routine makes 'name' point to the name of the function and 
+ *	that implements an operator, like "a LIKE b".
+ *	This routine makes 'name' point to the name of the function and
  *	'len' hold the number of characters in the function name.
  *
  * STATIC: static void __get_function_name __P((expr_t *, const char **,
@@ -1107,7 +1107,7 @@ __expr_check(parser, expr, agg_allowed, agg)
 			def = __find_function(parser->db, id, nid, -1, 0);
 			if (def == 0) {
 				if (n == 1 && nid == 6 &&
-			         strncasecmp(id, "typeof",6) == 0) {
+				    strncasecmp(id, "typeof",6) == 0) {
 					is_type_of = 1;
 				} else {
 					no_such_func = 1;
@@ -1131,7 +1131,7 @@ __expr_check(parser, expr, agg_allowed, agg)
 			parser->nErr++;
 			nerr++;
 		} else if (wrong_num_args) {
-			__str_nappend(&parser->zErrMsg, 
+			__str_nappend(&parser->zErrMsg,
 				      "wrong number of arguments to function ",
 				      -1, id, nid, "()", 2, NULL);
 			parser->nErr++;
@@ -1159,8 +1159,7 @@ __expr_check(parser, expr, agg_allowed, agg)
 			}
 		} else if (def->dataType >= 0) {
 			if (def->dataType < n) {
-				expr->dataType = 
-					__expr_type(expr->pList->a[def->dataType].pExpr);
+				expr->dataType = __expr_type(expr->pList->a[def->dataType].pExpr);
 			} else {
 				expr->dataType = DBSQL_SO_NUM;
 			}

@@ -42,7 +42,7 @@ __min_func(context, argc, argv)
 	int argc;
 	const char **argv;
 {
-	const char *best; 
+	const char *best;
 	int i;
 
 	if (argc == 0)
@@ -70,7 +70,7 @@ __max_func(context, argc, argv)
 	int argc;
 	const char **argv;
 {
-	const char *best; 
+	const char *best;
 	int i;
 
 	if (argc == 0)
@@ -324,7 +324,7 @@ __lower_func(context, argc, argv)
 
 /*
  * __ifnull_func --
- *	Implementation of the IFNULL(), NVL(), and COALESCE() functions.  
+ *	Implementation of the IFNULL(), NVL(), and COALESCE() functions.
  *	All three do the same thing.  They return the first non-NULL
  *	argument.
  */
@@ -345,7 +345,7 @@ __ifnull_func(context, argc, argv)
 
 /*
  * __random_func --
- *	Implementation of random().  Return a random integer.  
+ *	Implementation of random().  Return a random integer.
  */
 static void
 __random_func(context, argc, argv)
@@ -397,7 +397,7 @@ __like_func(context, argc, argv)
 {
 	if (argv[0] == 0 || argv[1] == 0)
 		return;
-	dbsql_set_result_int(context, 
+	dbsql_set_result_int(context,
 			     __str_like_cmp((const unsigned char*)argv[0],
 					    (const unsigned char*)argv[1]));
 }
