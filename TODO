@@ -1,4 +1,9 @@
 
+* Rename dbsql_strerror to dbsql_strerr
+
+* Fix logic issue in query processing
+   tests/smoke2.sql produces incorrect joins
+
 * Check all DB API calls
     Make sure a) we check return codes for for all calls into DB and
     that b) when there is an error we output it only when configured
@@ -13,34 +18,40 @@
    The library should never print messages unless configured to be
    verbose.
 
-* splint
-   Clean up all items pointed out by splint.
+* tests/
+   Fix testing infrastructure.
+   - api.c/__os_sleep()
+      This is now static in DB's code, so to hack the compile I
+      commented out the use of __os_sleep() in api.c
+   - test/scr026
+      This test has not been updated to check for DBSQL API calls
+      rather than DB API calls.  Review and fix it.
+   - test/scr030
+      Update this test to match the configure script.  Augment it so
+      that as the configure script changes the script reports options
+      not tested.
+   - A few scr??? < 050
+      Some of these tests examine source code but do not include the
+      TCL testing code and so produce false positive FAILures.
+  - Add test/scr0?? to highlight code notes
+      FIXME, TODO, and other source source markers
 
-* makedepend
+* Code quality and build tools
+  - valgrind
+      Fix all memory related bugs.
+  - splint
+      Clean up all items pointed out by splint.
+  - makedepend
+      Finish integrating this into the dist/Makefile
 
-* valgrind
-   Fix all memory related bugs.
+* Review code for trailing spaces, tab characters, lines > 79 col
 
 * review dbsql/dbsql.c
    General clean-up including changing calls to malloc, free, etc to
    __os_malloc, __os_free, etc.
 
 * Review SQLite's latest lemon.c and lempar.c code
-
-* Review code for trailing spaces, tab characters, lines > 79 col
-
-* api.c/__os_sleep()
-   This is now static in DB's code, so to hack the compile I commented
-   out the use of __os_sleep() in api.c
-
-* test/scr026
-   This test has not been updated to check for DBSQL API calls rather
-   than DB API calls.  Review and fix it.
-
-* test/scr030
-   Update this test to match the configure script.  Augment it so that
-   as the configure script changes the script reports options not
-   tested.
+   Consider updating to the newest versions of the parser generator.
 
 * Use LIST/QUEUE macros for linked lists, queues, etc.
    Find/replace all custom code implementing these simple data
@@ -48,13 +59,20 @@
 
 * Review memory allocation code in general
 
-* A few scr??? < 050 examine source but do not include the TCL testing code
-
 * Consider using MPOOL to manage some of DBSQL state across processes
    Function pools and other aspects of the DBSQL runtime need not be
    re-created in-memory across multiple processes.  When doing this
    revisit data structures using the LIST/QUEUE macros and shift them
    to the SH_ equivalents.
 
-* Investigate the TCL Extension Architecture (http://www.tcl.tk/doc/tea/)
+* Random number generator
+   SQLite implements its own suggesting that rand32_r() (and other
+   random number generators) are both truely random and bug free.
+   Some portion of the VDBE requires random numbers to be,
+   well... random, or as close as possible.
+
+* Review src/vdbe, finish converting to DBSQL-style
+
+* Investigate the TCL Extension Architecture
+   http://www.tcl.tk/doc/tea/
 

@@ -1,6 +1,6 @@
 /*
  * Code for testing the xprintf() function.  This code is used for testing
- * only and will not be included when the library is built without 
+ * only and will not be included when the library is built without
  * CONFIG_TEST set.
  */
 
@@ -14,7 +14,7 @@
 #include "dbsql_int.h"
 #include "tcl.h"
 
-
+/* __testset_1 --------------------------------------------------------------*/
 #ifdef DB_WIN32
 #define PTR_FMT "%x"
 #else
@@ -31,7 +31,7 @@ get_dbsql_from_ptr(interp, args, dbsqlp)
 	const char *args;
 	DBSQL **dbsqlp;
 {
-	if (sscanf(args, PTR_FMT, (void**)dbsqlp) != 1 && 
+	if (sscanf(args, PTR_FMT, (void**)dbsqlp) != 1 &&
 	    (args[0] != '0' || args[1] != 'x' ||
 	     sscanf(&args[2], PTR_FMT, (void**)dbsqlp) != 1)) {
 		Tcl_AppendResult(interp,
@@ -120,7 +120,7 @@ test_dbsql_env_create(notused, interp, argc, argv)
 				 argv[0], " FILENAME\"", 0);
 		return TCL_ERROR;
 	}
-  
+
 	if ((rc = dbsql_create_env(&db, argv[1], NULL, 0, DBSQL_THREAD))
 	   != DBSQL_SUCCESS) {
 		Tcl_AppendResult(interp, dbsql_strerror(rc), 0);
@@ -1157,15 +1157,16 @@ TODO
 	for(i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {
 		Tcl_CreateCommand(interp, aCmd[i].zName, aCmd[i].xProc, 0, 0);
 	}
-	Tcl_LinkVar(interp, "dbsql_search_count", 
+	Tcl_LinkVar(interp, "dbsql_search_count",
 		    (char*)&dbsql_search_count, TCL_LINK_INT);
-	Tcl_LinkVar(interp, "dbsql_interrupt_count", 
+	Tcl_LinkVar(interp, "dbsql_interrupt_count",
 		    (char*)&dbsql_interrupt_count, TCL_LINK_INT);
-	Tcl_LinkVar(interp, "dbsql_open_file_count", 
+	Tcl_LinkVar(interp, "dbsql_open_file_count",
 		    (char*)&dbsql_open_file_count, TCL_LINK_INT);
-	Tcl_LinkVar(interp, "dbsql_current_time", 
+	Tcl_LinkVar(interp, "dbsql_current_time",
 		    (char*)&_fake_current_time, TCL_LINK_INT);
 	Tcl_LinkVar(interp, "dbsql_static_bind_value",
 		    (char*)&dbsql_static_bind_value, TCL_LINK_STRING);
 	return TCL_OK;
 }
+/* end of __testset_1 -------------------------------------------------------*/
