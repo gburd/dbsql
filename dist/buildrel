@@ -28,7 +28,7 @@ setenv D `pwd`
 cd $D/dist
 cvs -q update RELEASE
 vi RELEASE
-setenv VERSION `sh -c '. RELEASE; echo $DB_VERSION'`
+setenv VERSION `sh -c '. RELEASE; echo $DBSQL_VERSION'`
 echo "Version: $VERSION"
 
 # Make sure the source tree is up-to-date

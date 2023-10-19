@@ -19,10 +19,8 @@
 # Process this file with autoconf to produce a configure script.
 
 PACKAGE=dbsql
-AC_INIT(DBSQL,
-	__EDIT_DBSQL_VERSION__,
-	support@dbsql.org,
-	dbsql-__EDIT_DBSQL_VERSION__)
+AC_INIT([DBSQL],[__EDIT_DBSQL_VERSION__],[support@dbsql.org],[dbsql-__EDIT_DBSQL_VERSION__])
+AC_LANG(C)
 AC_CONFIG_SRCDIR([../src/clib/memcmp.c])
 AC_CONFIG_HEADERS([dbsql_config.h:config.hin])
 
@@ -244,21 +242,21 @@ AC_PROG_CC(cc gcc)
 AC_SUBST(DB_PROTO1)
 AC_SUBST(DB_PROTO2)
 
+# Clear __P, some other systems use it too.
 DB_PROTO1="#undef __P"
-
-# AC_PROG_CC_STDC only sets ac_cv_prog_cc_stdc if the test fails, so
-# check for "no", not "yes".
-if test "$ac_cv_prog_cc_stdc" = "no"; then
-	DB_PROTO2="#define	__P(protos)	()"
+if test "$ac_cv_prog_cc_c89" = "no"; then
+        DB_PROTO2="#define      __P(protos)     ()"
 else
-	DB_PROTO2="#define	__P(protos)	protos"
+        DB_PROTO2="#define      __P(protos)     protos"
 fi
 
+# Check for "const" and "inline" keywords.
 AC_C_CONST
 AC_SUBST(DB_CONST)
 if test "$ac_cv_c_const" != "yes"; then
 	DB_CONST="#define const"
 fi
+AC_C_INLINE
 
 # Because of shared library building, the ${CC} used for config tests
 # may be different than the ${CC} we want to put in the Makefile.
@@ -318,7 +316,8 @@ export CC CCC
 CCC=CXX
 
 # Libtool configuration.
-AC_PROG_LIBTOOL
+LT_INIT
+AC_SUBST([LIBTOOL_DEPS])
 
 SOFLAGS="-rpath \$(libdir)"
 LIBTOOL_PROG="${SHELL} ./libtool"
@@ -430,15 +429,19 @@ fi
 
 # Checks for include files, structures, C types.
 AC_HEADER_STAT
-AC_HEADER_TIME
+AC_CHECK_HEADERS_ONCE([sys/time.h])
+# End of obsolete code.
+
 AC_HEADER_DIRENT
 AC_CHECK_HEADERS(sys/select.h sys/time.h sys/fcntl.h)
 AC_CHECK_MEMBERS([struct stat.st_blksize])
 AM_TYPES
 
 AC_CACHE_CHECK([for ANSI C exit success/failure values], db_cv_exit_defines, [
-AC_TRY_COMPILE([#include <stdlib.h>], return (EXIT_SUCCESS);,
-    [db_cv_exit_defines=yes], [db_cv_exit_defines=no])])
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+    [[#include <stdlib.h>]],
+    [[return (EXIT_SUCCESS);]])],
+    [db_cv_exit_defines=yes],[db_cv_exit_defines=no])])
 if test "$db_cv_exit_defines" = "yes"; then
 	AC_DEFINE(HAVE_EXIT_SUCCESS)
 	AH_TEMPLATE(HAVE_EXIT_SUCCESS,
@@ -458,10 +461,12 @@ AC_CHECK_FUNC(sched_yield,,
 # library.  Also we can't depend on any specific call existing (pthread_create,
 # for example), as it may be #defined in an include file -- OSF/1 (Tru64) has
 # this problem.
-AC_HAVE_LIBRARY(pthread, LOAD_LIBS="$LOAD_LIBS -lpthread")
+AC_CHECK_LIB([pthread],[main],[LOAD_LIBS="$LOAD_LIBS -lpthread"],[],[])ac_cv_lib_pthread=ac_cv_lib_pthread_main
+
 
 # We use sqrt() so we need the math library -lm
-AC_HAVE_LIBRARY(m, LIBS="$LIBS -lm")
+AC_CHECK_LIB([m],[main],[LIBS="$LIBS -lm"],[],[])ac_cv_lib_m=ac_cv_lib_m_main
+
 
 # Checks for system functions for which we have replacements.
 AC_REPLACE_FUNCS(getopt memcmp memcpy memmove strdup strndup strerror)
