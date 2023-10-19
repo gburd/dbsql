@@ -1,0 +1,11 @@
+build_unix/**
+*~
+TAGS
+tags
+.direnv/
+dist/autom4te.cache/
+dist/config.hin
+dist/configure
+src/py/setup.py
+test/scr050/Makefile
+
