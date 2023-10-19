@@ -1358,12 +1358,12 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
 			return DBSQL_CANTOPEN;
 		}
 	} else {
-		if (__os_exists(dir, &dir_p) == 0) {
+		if (__os_exists(dbenv, dir, &dir_p) == 0) {
 			if (dir_p) {
 				char buf[1024];
 				snprintf(buf, 1024, "%s%s%s", dir,
 					 PATH_SEPARATOR, dir);
-				if (__os_exists(buf, &dir_p) == 0)
+				if (__os_exists(dbenv, buf, &dir_p) == 0)
 					env_open_flags = DB_JOINENV;
 			} else {
 				__dbsql_err(NULL,
