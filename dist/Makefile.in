@@ -320,6 +320,10 @@ distclean maintainer-clean realclean: clean
 	$(rm) -rf $(REALCLEAN_LIST)
 	$(rm) -rf libtool
 
+LIBTOOL_DEPS = @LIBTOOL_DEPS@
+libtool: $(LIBTOOL_DEPS)
+	$(SHELL) ./deps/config.status $(builddir)/libtool
+
 check dvi info obj TAGS:
 	@echo "$@: make target not supported" && true
 

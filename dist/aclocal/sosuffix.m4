@@ -2,7 +2,7 @@
 # Determine shared object suffixes.
 #
 # Our method is to use the libtool variable $library_names_spec,
-# set by using AC_PROG_LIBTOOL.  This variable is a snippet of shell
+# set by using LT_INIT.  This variable is a snippet of shell
 # defined in terms of $versuffix, $release, $libname and $module
 # We want to eval it and grab the suffix used for shared objects.
 # By setting $module to yes/no, we obtain the suffixes

@@ -5,7 +5,7 @@ AC_DEFUN(AM_OPTIONS_SET, [
 
 AC_MSG_CHECKING(if --enable-utf8-encoding option specified)
 AC_ARG_ENABLE(utf8-encoding,
-	AC_HELP_STRING([--enable-utf8-encoding],
+	AS_HELP_STRING([--enable-utf8-encoding],
 	    [Encode strings as UTF-8 or ISO-8859.]),, enableval="yes")
 db_cv_utf8_strings="$enableval"
 case "$enableval" in
@@ -27,7 +27,7 @@ AH_TEMPLATE(DBSQL_UTF8_ENCODING,
 
 AC_MSG_CHECKING(if --enable-incore-databases option specified)
 AC_ARG_ENABLE(incore-databases,
-	AC_HELP_STRING([--enable-incore-databases],
+	AS_HELP_STRING([--enable-incore-databases],
 	    [Enable incore databases for ATTACH and OPEN.]),, enableval="yes")
 db_cv_incore_databases="$enableval"
 case "$enableval" in
@@ -45,7 +45,7 @@ AH_TEMPLATE(INMEMORYDB,
 
 AC_MSG_CHECKING(if --enable-authentication option specified)
 AC_ARG_ENABLE(authentication,
-	AC_HELP_STRING([--enable-authentication],
+	AS_HELP_STRING([--enable-authentication],
 	    [Include authorization validation code.]),, enableval="yes")
 db_cv_auth="$enableval"
 case "$enableval" in
@@ -61,7 +61,7 @@ AH_TEMPLATE(DBSQL_OMIT_AUTHORIZATION,
 
 AC_MSG_CHECKING(if --enable-vacuum option specified)
 AC_ARG_ENABLE(vacuum,
-	AC_HELP_STRING([--enable-vacuum],
+	AS_HELP_STRING([--enable-vacuum],
 	    [Include the VACUUM command.]),, enableval="yes")
 db_cv_auth="$enableval"
 case "$enableval" in
@@ -76,7 +76,7 @@ AH_TEMPLATE(DBSQL_OMIT_VACUUM,
 
 AC_MSG_CHECKING(if --enable-datetime option specified)
 AC_ARG_ENABLE(enable-datetime,
-	AC_HELP_STRING([--enable-datetime],
+	AS_HELP_STRING([--enable-datetime],
 	    [Include datetime functions.]),, enableval="yes")
 db_cv_datetime="$enableval"
 case "$enableval" in
@@ -85,7 +85,7 @@ yes) AC_MSG_RESULT(yes);;
 esac
 if test "$db_cv_datetime" = "no"; then
   AC_DEFINE(DBSQL_OMIT_DATETIME_FUNCS)
-      
+
 fi
 AH_TEMPLATE(DBSQL_OMIT_DATETIME_FUNCS,
     [Define to 1 to omit support for datetime functions from the build.])
@@ -93,7 +93,7 @@ AH_TEMPLATE(DBSQL_OMIT_DATETIME_FUNCS,
 
 AC_MSG_CHECKING([if --with-berkeleydb=DIR option specified])
 AC_ARG_WITH(berkeleydb,
-	[AC_HELP_STRING([--with-berkeleydb=DIR],
+	[AS_HELP_STRING([--with-berkeleydb=DIR],
 		[Path of Berkeley DB. [DIR="/usr/local/BerkeleyDB.4.5"]])],
 	[with_berkeleydb="$withval"], [with_berkeleydb="no"])
 AC_MSG_RESULT($with_berkeleydb)
@@ -129,7 +129,7 @@ fi
 
 AC_MSG_CHECKING([if --with-db-uniquename=NAME option specified])
 AC_ARG_WITH(db-uniquename,
-	[AC_HELP_STRING([--with-db-uniquename=NAME],
+	[AS_HELP_STRING([--with-db-uniquename=NAME],
 			[Unique name used when building DB library.])],
 	[with_db_uniquename="$withval"], [with_db_uniquename="no"])
 if test "$with_db_uniquename" = "no"; then
@@ -148,11 +148,11 @@ fi
 
 AC_MSG_CHECKING(if --enable-incore-temp-databases option specified)
 AC_ARG_ENABLE(incore-temp-databases,
-	AC_HELP_STRING([--enable-incore-temp-databases],
+	AS_HELP_STRING([--enable-incore-temp-databases],
 	    [Enable incore databases for temporary tables.]),, enableval="no")
 db_cv_incore_temp_databases="$enableval"
 case "$db_cv_incore_temp_databases" in
-  never) 
+  never)
     TEMP_STORE=0
     AC_MSG_RESULT([never])
   ;;
@@ -161,12 +161,12 @@ case "$db_cv_incore_temp_databases" in
     TEMP_STORE=1
     AC_MSG_RESULT([no])
   ;;
-  always) 
+  always)
     INMEMORYDB=1
     TEMP_STORE=3
     AC_MSG_RESULT([always])
   ;;
-  *) 
+  *)
     INMEMORYDB=1
     TEMP_STORE=2
     AC_MSG_RESULT([yes])
@@ -181,7 +181,7 @@ AH_TEMPLATE(TEMP_STORE,
 
 AC_MSG_CHECKING(if --disable-statistics option specified)
 AC_ARG_ENABLE(statistics,
-	AC_HELP_STRING([--disable-statistics],
+	AS_HELP_STRING([--disable-statistics],
 	    [Do not build statistics support.]),, enableval="yes")
 db_cv_build_statistics="$enableval"
 case "$enableval" in
@@ -191,7 +191,7 @@ esac
 
 AC_MSG_CHECKING(if --enable-sqlite-compat option specified)
 AC_ARG_ENABLE(sqlite-compat,
-	[AC_HELP_STRING([--enable-sqlite-compat],
+	[AS_HELP_STRING([--enable-sqlite-compat],
 			[Build SQLite compatibility API.])],
 	[db_cv_sqlite_compat="$enable_sqlite_compat"],
 	[db_cv_sqlite_compat="no"])
@@ -199,7 +199,7 @@ AC_MSG_RESULT($db_cv_sqlite_compat)
 
 AC_MSG_CHECKING(if --enable-soundex-sqlfn option specified)
 AC_ARG_ENABLE(soundex-sqlfn,
-	[AC_HELP_STRING([--enable-soundex-sqlfn],
+	[AS_HELP_STRING([--enable-soundex-sqlfn],
 			[Include soundex() sql function support.])],
 	[db_cv_sqlite_compat="$enable_soundex_sqlfn"],
 	[db_cv_sqlite_compat="no"])
@@ -207,42 +207,42 @@ AC_MSG_RESULT($db_cv_soundex_sqlfn)
 
 AC_MSG_CHECKING(if --enable-posixmutexes option specified)
 AC_ARG_ENABLE(posixmutexes,
-	[AC_HELP_STRING([--enable-posixmutexes],
+	[AS_HELP_STRING([--enable-posixmutexes],
 			[Force use of POSIX standard mutexes.])],
 	[db_cv_posixmutexes="$enable_posixmutexes"], [db_cv_posixmutexes="no"])
 AC_MSG_RESULT($db_cv_posixmutexes)
 
 AC_MSG_CHECKING(if --enable-debug option specified)
 AC_ARG_ENABLE(debug,
-	[AC_HELP_STRING([--enable-debug],
+	[AS_HELP_STRING([--enable-debug],
 			[Build a debugging version.])],
 	[db_cv_debug="$enable_debug"], [db_cv_debug="no"])
 AC_MSG_RESULT($db_cv_debug)
 
 AC_MSG_CHECKING(if --enable-diagnostic option specified)
 AC_ARG_ENABLE(diagnostic,
-	[AC_HELP_STRING([--enable-diagnostic],
+	[AS_HELP_STRING([--enable-diagnostic],
 			[Build a version with run-time diagnostics.])],
 	[db_cv_diagnostic="$enable_diagnostic"], [db_cv_diagnostic="no"])
 AC_MSG_RESULT($db_cv_diagnostic)
 
 AC_MSG_CHECKING(if --enable-tcl option specified)
 AC_ARG_ENABLE(tcl,
-	[AC_HELP_STRING([--enable-tcl],
+	[AS_HELP_STRING([--enable-tcl],
 			[Build Tcl API.])],
 	[db_cv_tcl="$enable_tcl"], [db_cv_tcl="no"])
 AC_MSG_RESULT($db_cv_tcl)
 
 AC_MSG_CHECKING([if --with-tcl=DIR option specified])
 AC_ARG_WITH(tcl,
-	[AC_HELP_STRING([--with-tcl=DIR],
+	[AS_HELP_STRING([--with-tcl=DIR],
 			[Directory location of tclConfig.sh.])],
 	[with_tclconfig="$withval"], [with_tclconfig="no"])
 AC_MSG_RESULT($with_tclconfig)
 
 AC_MSG_CHECKING(if --enable-test option specified)
 AC_ARG_ENABLE(test,
-	[AC_HELP_STRING([--enable-test],
+	[AS_HELP_STRING([--enable-test],
 			[Configure to run the test suite.])],
 	[db_cv_test="$enable_test"], [db_cv_test="no"])
 AC_MSG_RESULT($db_cv_test)

@@ -4,9 +4,11 @@ AC_DEFUN(AC_CXX_STDHEADERS, [
 AC_SUBST(cxx_have_stdheaders)
 AC_MSG_CHECKING(whether C++ supports the ISO C++ standard includes)
 AC_LANG_SAVE
-AC_LANG_CPLUSPLUS
-AC_TRY_COMPILE([#include <iostream>],[std::ostream *o; return 0;],
-	db_cv_cxx_have_stdheaders=yes, db_cv_cxx_have_stdheaders=no)
+AC_LANG([C++])
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+    [[#include <iostream>]],
+    [[std::ostream *o; return 0;]])],
+    db_cv_cxx_have_stdheaders=yes, db_cv_cxx_have_stdheaders=no)
 AC_LANG_RESTORE
 AC_MSG_RESULT($db_cv_cxx_have_stdheaders)
 if test "$db_cv_cxx_have_stdheaders" = yes; then
@@ -17,10 +19,11 @@ AC_DEFUN(AC_CXX_WSTRING, [
 AC_MSG_CHECKING(whether C++ supports the wstring class)
 AC_SUBST(WSTRING_decl)
 AC_LANG_SAVE
-AC_LANG_CPLUSPLUS
-AC_LINK_IFELSE(AC_LANG_PROGRAM([#include <string>
-	using std::wstring;],
-	[wstring ws; ws.find_first_of(ws);]),
+AC_LANG([C++])
+AC_LINK_IFELSE(AC_LANG_SOURCE(
+	[[#include <string>]],
+	[[using std::wstring;
+	wstring ws; ws.find_first_of(ws);]]),
 	[WSTRING_decl="#define	HAVE_WSTRING 1" ;
 	 AC_MSG_RESULT(yes)],
 	[WSTRING_decl="#undef	HAVE_WSTRING" ;
@@ -31,11 +34,12 @@ AC_LANG_RESTORE
 AC_DEFUN(AC_CXX_SUPPORTS_TEMPLATES, [
 AC_MSG_CHECKING(whether the C++ compiler supports templates for STL)
 AC_LANG_SAVE
-AC_LANG_CPLUSPLUS
-AC_TRY_COMPILE([#include <iostream>
+AC_LANG([C++])
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+#include <iostream>
 #include <string>
 #include <vector>
-
+]], [[
 using std::string;
 using std::vector;
 namespace dbstl_configure_test {
@@ -133,38 +137,38 @@ ReturnType MyClass<double, float>::templ_mem_func(T7, T8)
 	return rt;
 }
 
-template <typename T1, typename T2> 
-class MyClass2 { 
+template <typename T1, typename T2>
+class MyClass2 {
 public:
 	MyClass2(const T1& t1, const T2&t2){}
-}; 
+};
 
-// partial specialization: both template parameters have same type 
-template <typename T> 
-class MyClass2<T,T> { 
+// partial specialization: both template parameters have same type
+template <typename T>
+class MyClass2<T,T> {
 public:
 	MyClass2(const T& t1, const T&t2){}
-}; 
+};
 
-// partial specialization: second type is int 
-template <typename T> 
-class MyClass2<T,int> { 
+// partial specialization: second type is int
+template <typename T>
+class MyClass2<T,int> {
 public:
 	MyClass2(const T& t1, const int&t2){}
-}; 
+};
 
-// partial specialization: both template parameters are pointer types 
-template <typename T1, typename T2> 
-class MyClass2<T1*,T2*> { 
+// partial specialization: both template parameters are pointer types
+template <typename T1, typename T2>
+class MyClass2<T1*,T2*> {
 public:
 	MyClass2(const T1* t1, const T2*t2){}
-}; 
+};
 
-template <typename T> 
-class MyClass2<T*,T*> { 
+template <typename T>
+class MyClass2<T*,T*> {
 public:
 	MyClass2(const T* t1, const T*t2){}
-}; 
+};
 
 template <typename T4, typename T5>
 int part_spec_func(T4 t4, T5 t5)
@@ -184,50 +188,50 @@ int part_spec_func(T4 t4, std::vector<T4> t55)
 	std::vector<T4> abc = t55;
 }
 
-// maximum of two int values 
-inline int const& max (int const& a, int const& b) 
-{ 
-    return a<b?b:a; 
-} 
-
-// maximum of two values of any type 
-template <typename T1, typename T2> 
-inline T2 const max (T1 const& a, T2 const& b) 
-{ 
-    return a<b?b:a; 
-} 
-// maximum of two values of any type 
-template <typename T> 
-inline T const& max (T const& a, T const& b) 
-{ 
-    return a<b?b:a; 
-} 
-
-// maximum of three values of any type 
-template <typename T> 
-inline T const& max (T const& a, T const& b, T const& c) 
-{ 
-    return max (max(a,b), c); 
+// maximum of two int values
+inline int const& max (int const& a, int const& b)
+{
+    return a<b?b:a;
 }
 
-template <typename T> 
-class Base { 
-public: 
+// maximum of two values of any type
+template <typename T1, typename T2>
+inline T2 const max (T1 const& a, T2 const& b)
+{
+    return a<b?b:a;
+}
+// maximum of two values of any type
+template <typename T>
+inline T const& max (T const& a, T const& b)
+{
+    return a<b?b:a;
+}
+
+// maximum of three values of any type
+template <typename T>
+inline T const& max (T const& a, T const& b, T const& c)
+{
+    return max (max(a,b), c);
+}
+
+template <typename T>
+class Base {
+public:
 	void exit2(){}
 	Base(){}
 };
 
-template <typename T> 
+template <typename T>
 class Derived : public Base<T> {
-public: 
-	// Call Base<T>() explicitly here, otherwise can't access it. 
+public:
+	// Call Base<T>() explicitly here, otherwise can't access it.
 	// Kind of like this->.
 	Derived() : Base<T>(){}
 
 	void foo() {
-        	this->exit2();
-	} 
-}; 
+		this->exit2();
+	}
+};
 
 } // dbstl_configure_test
 
@@ -237,10 +241,10 @@ using namespace dbstl_configure_test;], [
 	double pi = 3.14;
 	float gold = 0.618;
 
-	MyClass2<int,float> mif(i, gold);	// uses MyClass2<T1,T2> 
-	MyClass2<float,float> mff(gold, gold);	// uses MyClass2<T,T> 
-	MyClass2<float,int> mfi(gold, i);	// uses MyClass2<T,int> 
-	MyClass2<int*,float*> mp(&i, &gold);	// uses MyClass2<T1*,T2*> 
+	MyClass2<int,float> mif(i, gold);	// uses MyClass2<T1,T2>
+	MyClass2<float,float> mff(gold, gold);	// uses MyClass2<T,T>
+	MyClass2<float,int> mfi(gold, i);	// uses MyClass2<T,int>
+	MyClass2<int*,float*> mp(&i, &gold);	// uses MyClass2<T1*,T2*>
 	MyClass2<int*,int*> m(&i, &i);		// uses MyClass2<T*, T*>
 
 	MyClass<char> obj1(i);
@@ -254,10 +258,10 @@ using namespace dbstl_configure_test;], [
 	MyClass<const char*, std::string> obj2(str1.c_str(), str2, i);
 	obj2.templ_mem_func("klm", str2);
 	obj2.templ_mem_func("hij", pi);
-	
+
 	// Use j to help distinguish, otherwise unable to use the one defined
 	// outside of class body.
-	int j = obj2.templ_mem_func<int, char, char>(cc, cc); 
+	int j = obj2.templ_mem_func<int, char, char>(cc, cc);
 	// Call explicitly.
 	obj2.templ_mem_func<int, float, double>(gold, pi);
 	const char *pch = (const char*)obj2;
@@ -287,22 +291,23 @@ using namespace dbstl_configure_test;], [
 	part_spec_func(pi, dblv);
 
 	// Function template overloads and explicit call and deduction.
-	dbstl_configure_test::max(7, 42, 68);     // calls the template for three arguments 
-	dbstl_configure_test::max(7.0, 42.0);     // calls max<double> (by argument deduction) 
-	dbstl_configure_test::max('a', 'b');      // calls max<char> (by argument deduction) 
-	dbstl_configure_test::max(7, 42.0);         
+	dbstl_configure_test::max(7, 42, 68);     // calls the template for three arguments
+	dbstl_configure_test::max(7.0, 42.0);     // calls max<double> (by argument deduction)
+	dbstl_configure_test::max('a', 'b');      // calls max<char> (by argument deduction)
+	dbstl_configure_test::max(7, 42.0);
 	dbstl_configure_test::max<double>(4,4.2); // instantiate T as double
-	dbstl_configure_test::max(7, 42);         // calls the nontemplate for two ints 
-	dbstl_configure_test::max<>(7, 42);       // calls max<int> (by argument deduction) 
-	dbstl_configure_test::max<double, double>(7, 42); // calls max<double> (no argument deduction) 
-	dbstl_configure_test::max('a', 42.7);     // calls the nontemplate for two ints 
-	
+	dbstl_configure_test::max(7, 42);         // calls the nontemplate for two ints
+	dbstl_configure_test::max<>(7, 42);       // calls max<int> (by argument deduction)
+	dbstl_configure_test::max<double, double>(7, 42); // calls max<double> (no argument deduction)
+	dbstl_configure_test::max('a', 42.7);     // calls the nontemplate for two ints
+
 	Base<double> bobj;
 	bobj.exit2();
 	// Using this-> to access base class members.
 	Derived<double> dobj;
 	dobj.foo();
 	dobj.exit2();
-], AC_MSG_RESULT(yes), AC_MSG_ERROR(no))
+]])], AC_MSG_RESULT(yes), AC_MSG_ERROR(no))
+
 AC_LANG_RESTORE
 ])
