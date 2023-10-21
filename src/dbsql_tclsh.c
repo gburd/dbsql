@@ -21,7 +21,6 @@
  */
 
 #include "dbsql_config.h"
-
 #include "dbsql_int.h"
 #include "tcl.h"
 
@@ -40,9 +39,9 @@ static char main_loop[] =
     "append line [gets stdin]\n"
     "if {[info complete $line]} {\n"
       "if {[catch {uplevel #0 $line} result]} {\n"
-        "puts stderr \"Error: $result\"\n"
+	"puts stderr \"Error: $result\"\n"
       "} elseif {$result!=\"\"} {\n"
-        "puts $result\n"
+	"puts $result\n"
       "}\n"
       "set line {}\n"
     "} else {\n"

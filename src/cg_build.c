@@ -98,7 +98,7 @@ __null_callback(not_used, n, a, b)
 /*
  * __parse_exec --
  *	This routine is called after a single SQL statement has been
- *	parsed and we want to execute the VDBE code to implement 
+ *	parsed and we want to execute the VDBE code to implement
  *	that statement.  Prior action routines should have already
  *	constructed VDBE code to do the work of the SQL statement.
  *	This routine just has to execute the VDBE code.
@@ -161,7 +161,7 @@ __parse_exec(parser)
 
 /*
  * __find_table --
- *	Locate the in-memory structure that describes 
+ *	Locate the in-memory structure that describes
  *	a particular database table given the name
  *	of that table and (optionally) the name of the database
  *	containing the table.  Return NULL if not found.
@@ -197,7 +197,7 @@ __find_table(dbp, name, database)
 
 /*
  * __locate_table --
- *	Locate the in-memory structure that describes 
+ *	Locate the in-memory structure that describes
  *	a particular database table given the name
  *	of that table and (optionally) the name of the database
  *	containing the table.  Return NULL if not found.
@@ -234,7 +234,7 @@ __locate_table(parser, name, database)
 
 /*
  * __find_index --
- *	Locate the in-memory structure that describes 
+ *	Locate the in-memory structure that describes
  *	a particular index given the name of that index
  *	and the name of the database that contains the index.
  *	Return NULL if not found.
@@ -431,7 +431,7 @@ __commit_internal_changes(dbp)
  *	This routine just deletes the data structure.  It does not unlink
  *	the table data structure from the hash table.  Nor does it remove
  *	foreign keys from the aFKey hash table.  But it does destroy
- *	memory structures of the indices and foreign keys associated with 
+ *	memory structures of the indices and foreign keys associated with
  *	the table.
  *	Indices associated with the table are unlinked from the "db"
  *	data structure if db!=NULL.  If db==NULL, indices attached to
@@ -464,7 +464,7 @@ __vdbe_delete_table(dbp, table)
 
 	/*
 	 * Delete all foreign keys associated with this table.  The keys
-	 * should have already been unlinked from the dbp->aFKey hash table 
+	 * should have already been unlinked from the dbp->aFKey hash table
 	 */
 	for (fkey = table->pFKey; fkey; fkey = next_fkey) {
 		next_fkey = fkey->pNextFrom;
@@ -546,7 +546,7 @@ __table_name_from_token(name)
 /*
  * __open_master_table --
  *	Generate code to open the appropriate master table.  The table
- *	opened will be DBSQL_MASTER for persistent tables and 
+ *	opened will be DBSQL_MASTER for persistent tables and
  *	DBSQL_TEMP_MASTER for temporary tables.  The table is opened
  *	on cursor 0.
  *
@@ -634,9 +634,9 @@ void __start_table(parser, start, name, temp, view)
 		}
 	}
 #endif
- 
 
-	/* 
+
+	/*
 	 * Before trying to create a temporary table, make sure the DB for
 	 * holding temporary tables is open.
 	 */
@@ -685,7 +685,7 @@ void __start_table(parser, start, name, temp, view)
 	if ((idx = __find_index(dbp, n, 0)) != 0 &&
 	    (idx->iDb == 0 || !parser->initFlag)) {
 		__str_append(&parser->zErrMsg,
-			     "there is already an index named ", 
+			     "there is already an index named ",
 			     n, (char*)0);
 		__dbsql_free(dbp, n);
 		parser->nErr++;
@@ -811,7 +811,7 @@ __add_not_null(parser, on_error)
  *	in 'type'.
  *
  * PUBLIC: void __add_column_type __P((parser_t *, token_t *, token_t *));
- */ 
+ */
 void
 __add_column_type(parser, first, last)
 	parser_t *parser;
@@ -882,7 +882,7 @@ __add_default_value(parser, val, minus)
 /*
  * __add_primary_key --
  *
- *	Designate the PRIMARY KEY for the table.  'list' is a list of names 
+ *	Designate the PRIMARY KEY for the table.  'list' is a list of names
  *	of columns that form the primary key.  If 'list' is NULL, then the
  *	most recently added column of the table is the primary key.
  *	A table can have at most one primary key.  If the table already has
@@ -1043,7 +1043,8 @@ __add_collate_type(parser, type)
  *
  * PUBLIC: void __change_schema_signature __P((DBSQL *, vdbe_t *));
  */
-void __change_schema_signature(dbp, v)
+void
+__change_schema_signature(dbp, v)
 	DBSQL *dbp;
 	vdbe_t *v;
 {
@@ -1182,7 +1183,7 @@ __gen_create_table_stmt(table)
  *	recently changed, so the entry for this table already exists in
  *	the master table.  We do not want to create it again.
  *	If the 'select' argument is not NULL, it means that this routine
- *	was called to create a table generated from a 
+ *	was called to create a table generated from a
  *	"CREATE TABLE ... AS SELECT ..." statement.  The column names of
  *	the new table will match the result set of the SELECT.
  *
@@ -1244,7 +1245,7 @@ __ending_create_table_paren(parser, end, select)
 	if (!parser->initFlag) {
 		int n;
 		vdbe_t *v;
-		
+
 		v = __parser_get_vdbe(parser);
 		if (v == 0)
 			return;
@@ -1303,8 +1304,8 @@ __ending_create_table_paren(parser, end, select)
 	if (parser->explain == 0 && parser->nErr == 0) {
 		table_t *old;
 		foreign_key_t *fkey;
-		old = __hash_insert(&dbp->aDb[table->iDb].tblHash, 
-                            table->zName, strlen(table->zName) + 1, table);
+		old = __hash_insert(&dbp->aDb[table->iDb].tblHash,
+			    table->zName, strlen(table->zName) + 1, table);
 		if (old) {
 			/* Malloc must have failed inside __hash_insert() */
 			DBSQL_ASSERT(table == old);
@@ -1448,7 +1449,7 @@ __view_get_column_names(parser, table)
 	/*
 	 * If we get this far, it means we need to compute the table names.
 	 */
-        /* If nCol == 0, then 'table' must be a VIEW */
+	/* If nCol == 0, then 'table' must be a VIEW */
 	DBSQL_ASSERT(table->pSelect);
 	sel = table->pSelect;
 
@@ -1481,7 +1482,7 @@ __view_get_column_names(parser, table)
 	__select_unbind(sel);
 	__expr_list_delete(sel->pEList);
 	sel->pEList = elist;
-	return nerr;  
+	return nerr;
 }
 
 /*
@@ -1625,7 +1626,7 @@ __drop_table(parser, name, view)
 	}
 #endif
 	if (table->readOnly) {
-		__str_append(&parser->zErrMsg, "table ", table->zName, 
+		__str_append(&parser->zErrMsg, "table ", table->zName,
 			     " may not be dropped", (char*)0);
 		parser->nErr++;
 		return;
@@ -1817,7 +1818,7 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
 		if (to_col && to_col->nId!=1 ){
 			__str_nappend(&parser->zErrMsg,
 				      "foreign key on ", -1,
-				      table->aCol[col].zName, -1, 
+				      table->aCol[col].zName, -1,
 				      " should reference only one column "
 				      "of table ", -1, to->z, to->n, NULL);
 			parser->nErr++;
@@ -1825,7 +1826,7 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
 		}
 		ncol = 1;
 	} else if (to_col && to_col->nId != from_col->nId) {
-		__str_append(&parser->zErrMsg, 
+		__str_append(&parser->zErrMsg,
 			     "number of columns in foreign key does not "
 			     "match the number of columns in the referenced "
 			     "table", (char*)0);
@@ -1868,7 +1869,7 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
 			}
 			if (j >= table->nCol) {
 				__str_append(&parser->zErrMsg,
-					     "unknown column \"", 
+					     "unknown column \"",
 					     from_col->a[i].zName,
 					     "\" in foreign key definition",
 					     (char*)0);
@@ -1927,8 +1928,8 @@ __defer_foreign_key(parser, deferred)
 }
 
 /*
- * __creat_index --
- *	 Create a new index for an SQL table.  'index' is the name of the
+ * __create_index --
+ *	Create a new index for an SQL table.  'index' is the name of the
  *	index and pTable is the name of the table that is to be indexed.
  *	Both will be NULL for a primary key or an index that is created
  *	to satisfy a UNIQUE constraint.  If pTable and pIndex are NULL,
@@ -1952,7 +1953,8 @@ __defer_foreign_key(parser, deferred)
  *				statement.
  * end				The ")" that closes the CREATE INDEX statement.
  */
-void __create_index(parser, token, sltable, list, on_error, start, end)
+void
+__create_index(parser, token, sltable, list, on_error, start, end)
 	parser_t *parser;
 	token_t *token;
 	src_list_t *sltable;
@@ -1967,7 +1969,7 @@ void __create_index(parser, token, sltable, list, on_error, start, end)
 	int i, j;
 	token_t null_id;    /* Fake token for an empty ID list */
 	ref_normalizer_ctx_t normctx; /* For assigning database
-                                         names to sltable */
+					 names to sltable */
 	int temp;           /* True for a temporary index */
 	DBSQL *dbp = parser->db;
 
@@ -2000,7 +2002,7 @@ void __create_index(parser, token, sltable, list, on_error, start, end)
 		goto exit_create_index;
 	}
 	if (table->iDb >= 2 && parser->initFlag == 0) {
-		__str_append(&parser->zErrMsg, "table ", table->zName, 
+		__str_append(&parser->zErrMsg, "table ", table->zName,
 			     " may not have indices added", (char*)0);
 		parser->nErr++;
 		goto exit_create_index;
@@ -2015,7 +2017,7 @@ void __create_index(parser, token, sltable, list, on_error, start, end)
 
 	/*
 	 * Find the name of the index.  Make sure there is not already another
-	 * index or table with the same name.  
+	 * index or table with the same name.
 	 *
 	 * Exception:  If we are reading the names of permanent indices from
 	 * the master table (because some other process changed the schema) and
@@ -2032,7 +2034,7 @@ void __create_index(parser, token, sltable, list, on_error, start, end)
 		if (name == 0)
 			goto exit_create_index;
 		if ((idx_same_name = __find_index(dbp, name, 0)) != 0) {
-			__str_append(&parser->zErrMsg, "index ", name, 
+			__str_append(&parser->zErrMsg, "index ", name,
 				     " already exists", (char*)0);
 			parser->nErr++;
 			goto exit_create_index;
@@ -2096,8 +2098,8 @@ void __create_index(parser, token, sltable, list, on_error, start, end)
 			goto exit_create_index;
 	}
 
-	/* 
-	 * Allocate the index structure. 
+	/*
+	 * Allocate the index structure.
 	 */
 	if (__dbsql_calloc(dbp, 1, sizeof(index_t) + (strlen(name) + 1) +
 			(sizeof(int) * list->nId), &index) == ENOMEM)
@@ -2134,16 +2136,16 @@ void __create_index(parser, token, sltable, list, on_error, start, end)
 		index->aiColumn[i] = j;
 	}
 
-	/* 
+	/*
 	 * Link the new index_t structure to its table and to the other
-	 * in-memory database structures. 
+	 * in-memory database structures.
 	 */
 	if (!parser->explain) {
 		index_t *rindex;
-		rindex = __hash_insert(&dbp->aDb[index->iDb].idxHash, 
-                         index->zName, strlen(index->zName) + 1, index);
+		rindex = __hash_insert(&dbp->aDb[index->iDb].idxHash,
+			 index->zName, strlen(index->zName) + 1, index);
 		if (rindex) {
-                        /* Malloc must have failed */
+			/* Malloc must have failed */
 			DBSQL_ASSERT(rindex == index);
 			__dbsql_free(dbp, index);
 			goto exit_create_index;
@@ -2184,8 +2186,8 @@ void __create_index(parser, token, sltable, list, on_error, start, end)
 		 * involves writing the index into the master table and
 		 * filling in the index with the current table contents.
 		 *
-		 * The initFlag is 0 when the user first enters a CREATE INDEX 
-		 * command.  The initFlag is 1 when a database is opened and 
+		 * The initFlag is 0 when the user first enters a CREATE INDEX
+		 * command.  The initFlag is 1 when a database is opened and
 		 * CREATE INDEX statements are read out of the master table.
 		 * In the latter case the index already exists on disk, which
 		 * is why we don't want to recreate it.
@@ -2279,7 +2281,7 @@ exit_create_index:
  *	This routine will drop an existing named index.  This routine
  *	implements the DROP INDEX statement.
  *
- * PUBILC: __drop_index __P((parser_t *, src_list_t *));
+ * PUBLIC: void __drop_index __P((parser_t *, src_list_t *));
  */
 void
 __drop_index(parser, name)
@@ -2333,7 +2335,7 @@ __drop_index(parser, name)
 	v = __parser_get_vdbe(parser);
 	if( v ){
 		static vdbe_op_t drop_index[] = {
-			{ OP_Rewind,     0, ADDR(9), 0}, 
+			{ OP_Rewind,     0, ADDR(9), 0},
 			{ OP_String,     0, 0,       0}, /* 1 */
 			{ OP_MemStore,   1, 1,       0},
 			{ OP_MemLoad,    1, 0,       0}, /* 3 */
@@ -2492,7 +2494,7 @@ __src_list_append(list, table, database)
  * __src_list_assign_cursors --
  *	Assign cursors to all tables in a src_list_t.
  *
- * __src_list_assign_cursors __P((parser_t *, src_list_t *));
+ * PUBLIC: void __src_list_assign_cursors __P((parser_t *, src_list_t *));
  */
 void
 __src_list_assign_cursors(parser, list)
@@ -2683,7 +2685,7 @@ __dbsql_txn_abort(parser)
 	if ((dbp->flags & DBSQL_InTrans) == 0) {
 		__error_msg(parser,
 			    "cannot rollback - no transaction is active");
-		return; 
+		return;
 	}
 	v = __parser_get_vdbe(parser);
 	if (v) {
@@ -2769,7 +2771,7 @@ __vdbe_prepare_write(parser, checkpoint, idb)
  *	the database.  If a statement transaction was started, then emit
  *	an OP_Commit that will cause the changes to be committed to disk.
  *	Note that checkpoints are automatically committed at the end of
- *	a statement.  Note also that there can be multiple calls to 
+ *	a statement.  Note also that there can be multiple calls to
  *	__vdbe_prepare_write() but there should only be a single
  *	call to __vdbe_conclude_write() at the conclusion of the statement.
  *
@@ -2787,7 +2789,7 @@ __vdbe_conclude_write(parser)
 	if (v == 0)
 		return;
 	if (dbp->flags & DBSQL_InTrans) {
-		/* 
+		/*
 		 * A BEGIN has executed.  Do not commit until we see an
 		 * explicit COMMIT statement.
 		 */

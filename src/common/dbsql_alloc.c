@@ -16,8 +16,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include "dbsql.h"
 #include "dbsql_config.h"
-#include "dbsql_int.h"
+#include "db_int.h"
+
+#include <string.h>
+
 
 /*
  * __dbsql_umalloc --

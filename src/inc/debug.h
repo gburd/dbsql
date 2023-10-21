@@ -38,9 +38,15 @@ extern "C" {
 #endif
 
 /*
+ * Purposly ignore return value.
+ */
+#define IGNORE_RESULT(x)                                                \
+        (void)!(x)
+
+/*
  * "Shut that bloody compiler up!"
  *
- * Unused, or not-used-yet variable.  We need to write and then read the
+ * Unused, or not-usedyet variable.  We need to write and then read the
  * variable, some compilers are too bloody clever by half.
  */
 #define	COMPQUIET(n, v)							\

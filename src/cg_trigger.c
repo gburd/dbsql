@@ -867,7 +867,7 @@ __code_trigger_program(parser, steplist, orconfin)
  *	   pointing at a row containing values to be substituted for old.*
  *	   expressions in the trigger program(s).
  *
- * PUBlIC: int __code_row_trigger __P(());
+ * PUBLIC: int __code_row_trigger __P(());
  *
  * parser			Parser context
  * op				One of TK_UPDATE, TK_INSERT, TK_DELETE

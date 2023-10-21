@@ -28,6 +28,7 @@
 #include <ctype.h>
 
 #include "dbsql_config.h"
+#include "dbsql_int.h"
 #include "dbsql.h"
 
 #if !defined(_WIN32) && !defined(WIN32)
@@ -49,29 +50,29 @@
 #endif
 
 struct globals {
-        /* The Berkeley DBSQL database manager. */
+	/* The Berkeley DBSQL database manager. */
 	DBSQL *dbp;
 
-        /* The Berkeley DB database environment. */
+	/* The Berkeley DB database environment. */
 	DB_ENV *dbenv;
 
-        /* Non-zero if an interrupt (Control-C) has been received. */
+	/* Non-zero if an interrupt (Control-C) has been received. */
 	int interrupted_p;
 
-        /*
-         * This is the name of our program. It is set in main(), used
-         * in a number of other places, mostly for error messages.
-         */
+	/*
+	 * This is the name of our program. It is set in main(), used
+	 * in a number of other places, mostly for error messages.
+	 */
 	char *progname;
 
 	/* An output stream for error messages, normally stdout. */
 	FILE *errfp;
 
-        /*
-         * Prompt strings. Initialized in main. Settable using the
-         * '.prompt [main] [continuation]' command.
-         */
-        char prompt[20];         /* First line prompt. default: "SQL> "*/
+	/*
+	 * Prompt strings. Initialized in main. Settable using the
+	 * '.prompt [main] [continuation]' command.
+	 */
+	char prompt[20];         /* First line prompt. default: "SQL> "*/
 	char prompt2[20];        /* Continuation prompt. default: "...> " */
 };
 
@@ -221,11 +222,6 @@ char *modeDescr[MODE_NUM_OF] = {
 };
 
 /*
- * Number of elements in an array
- */
-#define ARRAY_SIZE(X)  (sizeof(X)/sizeof(X[0]))
-
-/*
  * Output the given string as a quoted string using SQL quoting conventions.
  */
 static void
@@ -324,7 +320,7 @@ callback(arg, num_args, args, cols)
 		if (p->cnt++ > 0)
 			fprintf(p->out, "\n");
 		for (i = 0; i < num_args; i++) {
-			fprintf(p->out, "%*s = %s\n", w, cols[i], 
+			fprintf(p->out, "%*s = %s\n", w, cols[i],
 				(args[i] ? args[i] : p->nullvalue));
 		}
 		break;
@@ -366,7 +362,7 @@ callback(arg, num_args, args, cols)
 						w = 10;
 					}
 					fprintf(p->out, "%-*.*s%s", w, w,
-                 "----------------------------------------------------------"
+		 "----------------------------------------------------------"
 		 "-----------------------------------",
 						(i == num_args - 1) ?
 						"\n" : "  ");
@@ -694,7 +690,7 @@ do_meta_command(line, p)
 				p->db->exec_printf(p->db,
 		  "SELECT name, type, sql FROM " MASTER_NAME " "
 		  "WHERE tbl_name LIKE '%q' AND type!='meta' AND sql NOT NULL "
-                  "ORDER BY substr(type,2,1), name",
+		  "ORDER BY substr(type,2,1), name",
 						  dump_callback, p,
 						  &err_msgs, args[i]);
 			}
@@ -1488,26 +1484,26 @@ main(argc, argv)
 int
 version_check()
 {
-        int v_major, v_minor, v_patch;
+	int v_major, v_minor, v_patch;
 
-        /* Make sure we're loaded with the right version of the DB library. */
-        (void)dbsql_version(&v_major, &v_minor, &v_patch);
-        if (v_major != DBSQL_VERSION_MAJOR || v_minor != DBSQL_VERSION_MINOR) {
-                fprintf(stderr,
+	/* Make sure we're loaded with the right version of the DB library. */
+	(void)dbsql_version(&v_major, &v_minor, &v_patch);
+	if (v_major != DBSQL_VERSION_MAJOR || v_minor != DBSQL_VERSION_MINOR) {
+		fprintf(stderr,
 			"%s: version %d.%d doesn't match library version %d.%d\n",
 			g.progname, DBSQL_VERSION_MAJOR, DBSQL_VERSION_MINOR,
 			v_major, v_minor);
-                return (EXIT_FAILURE);
-        }
+		return (EXIT_FAILURE);
+	}
 
-        /* Make sure we're loaded with the right version of the DB library. */
-        (void)db_version(&v_major, &v_minor, &v_patch);
-        if (v_major != DB_VERSION_MAJOR || v_minor != DB_VERSION_MINOR) {
-                fprintf(stderr,
+	/* Make sure we're loaded with the right version of the DB library. */
+	(void)db_version(&v_major, &v_minor, &v_patch);
+	if (v_major != DB_VERSION_MAJOR || v_minor != DB_VERSION_MINOR) {
+		fprintf(stderr,
 			"%s: version %d.%d doesn't match library version %d.%d\n",
 			g.progname, DB_VERSION_MAJOR, DB_VERSION_MINOR,
 			v_major, v_minor);
-                return (EXIT_FAILURE);
-        }
-        return (0);
+		return (EXIT_FAILURE);
+	}
+	return (0);
 }

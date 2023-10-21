@@ -26,6 +26,9 @@ void __dbsql_err __P((const DBSQL *, const char *, ...)) __attribute__ ((__forma
 void __dbsql_errcall __P((const DBSQL *, int, int, const char *, va_list));
 void __dbsql_errfile __P((const DBSQL *, int, int, const char *, va_list));
 void __error_msg __P((parser_t *, const char *, ...));
+int __dbsql_exists __P((DBSQL *, const char *, int *));
+int __dbsql_mkdir __P((DBSQL *, const char *, int));
+int  __dbsql_omode __P((DBSQL *, const char *));
 void __hash_init __P((hash_t *, int, int));
 void __hash_clear __P((hash_t *));
 void *__hash_find __P((const hash_t *, const void *, int));

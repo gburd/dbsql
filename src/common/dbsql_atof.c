@@ -19,6 +19,8 @@
 #include "dbsql_config.h"
 #include "dbsql_int.h"
 
+#include <ctype.h>
+
 /*
  * __dbsql_atof --
  *	The string z[] is an ascii representation of a real number.
