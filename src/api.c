@@ -1360,20 +1360,21 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
 			return DBSQL_CANTOPEN;
 		}
 	} else {
-		if (__os_exists(dbenv, dir, &dir_p) == 0) {
+		if (__dbsql_exists(NULL, dir, &dir_p) == 0) {
 			if (dir_p) {
 				char buf[1024];
 				snprintf(buf, 1024, "%s%s%s", dir,
 					 PATH_SEPARATOR, dir);
-				if (__os_exists(dbenv, buf, &dir_p) == 0)
+				if (__dbsql_exists(NULL, buf, &dir_p) == 0)
 					env_open_flags = DB_JOINENV;
 			} else {
 				__dbsql_err(NULL,
 				       "Environment must be a directory.");
 				return DBSQL_INVALID_NAME;
 			}
-		} else { /* TODO __db_omode("rwxrwxrwx"):mode) != 0) */
-			if (mkdir(dir, mode == 0 ? 0777 : mode) != 0)
+		} else {
+			mode = mode == 0 ? __dbsql_omode(NULL, "rwxrwxrwx") : mode;
+			if (__dbsql_mkdir(NULL, dir, mode) != 0)
 				return errno;
 		}
 	}

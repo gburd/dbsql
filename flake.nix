@@ -49,6 +49,12 @@
                   configureFlags = [
                     "--host ${system}"
                   ];
+                  buildInputs = [
+                    (enableDebuging db4)
+                    glibc.out
+                    glibc.static
+                    tcl-8_5
+                  ];
                   nativeBuildInputs = [ autoreconfHook ];
                   meta = {
                     changelog = "https://git.burd.me/greg/dbsql/raw/branch/main/ChangeLog";

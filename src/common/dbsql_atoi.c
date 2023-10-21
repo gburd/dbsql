@@ -21,6 +21,8 @@
 #include "dbsql_config.h"
 #include "dbsql_int.h"
 
+#include <ctype.h>
+
 /*
  * __dbsql_atoi --
  *	Return TRUE if 'str' is a 32-bit signed integer and write

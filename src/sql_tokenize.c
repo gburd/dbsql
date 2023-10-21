@@ -45,7 +45,7 @@ struct keyword {
 	u_int8_t token_type; /* token_t value for this keyword */
 	u_int8_t len;        /* Length of this keyword */
 	u_int8_t inext;      /* Index in sql_tokens_table[] of next with
-                                same hash */
+				same hash */
 };
 
 /*
@@ -164,10 +164,10 @@ static u_int8_t ai_table[KEY_HASH_SIZE];
 /*
  * __get_keyword_code --
  *	This function looks up an identifier to determine if it is a
- *	keyword.  If it is a keyword, the token code of that keyword is 
+ *	keyword.  If it is a keyword, the token code of that keyword is
  *	returned.  If the input is not a keyword, TK_ID is returned.
  *
- * PUBLIC: int get_keyword_code __P((const char *, int));
+ * PUBLIC: int __get_keyword_code __P((const char *, int));
  */
 int
 __get_keyword_code(z, n)
@@ -234,7 +234,7 @@ static const char id_char_p[] = {
 
 /*
  * __get_token --
- *	Return the length of the token that begins at z[0]. 
+ *	Return the length of the token that begins at z[0].
  *	Store the token type in *token_type before returning.
  *
  * STATIC: static int __get_token __P((const unsigned char *, int *));
@@ -459,7 +459,7 @@ __get_token(z, token_type)
  * PUBLIC: int __run_sql_parser __P((parser_t *, const char *, char **));
  */
 /*TODO: REMOVE THIS  If an error occurs
- * and pzErrMsg!=NULL then an error message might be written into 
+ * and pzErrMsg!=NULL then an error message might be written into
  * memory obtained from malloc() and *pzErrMsg made to point to that
  * error message.  Or maybe not.
  */
@@ -598,7 +598,7 @@ __run_sql_parser(parser, sql, err_msgs)
  *                 returns 1 if it ends in the START state and 0 if it ends
  *                 in any other state.
  *
- *   (1) EXPLAIN   The keyword EXPLAIN has been seen at the beginning of 
+ *   (1) EXPLAIN   The keyword EXPLAIN has been seen at the beginning of
  *                 a statement.
  *
  *   (2) CREATE    The keyword CREATE has been seen at the beginning of a
@@ -649,7 +649,7 @@ dbsql_complete_stmt(sql)
 	 * returns the next state.
 	 */
 	static const u_int8_t trans[7][8] = {
-                    /* Token:                                                */
+		    /* Token:                                                */
     /* State:       **  EXPLAIN  CREATE  TEMP  TRIGGER  END  SEMI  WS  OTHER */
     /* 0   START: */ {       1,      2,    3,       3,   3,    0,  0,     3, },
     /* 1 EXPLAIN: */ {       3,      2,    3,       3,   3,    0,  1,     3, },

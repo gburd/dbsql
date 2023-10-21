@@ -8,4 +8,4 @@ dist/config.hin
 dist/configure
 src/py/setup.py
 test/scr050/Makefile
-
+result-bin

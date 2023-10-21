@@ -280,8 +280,8 @@ __dbsql_errcall(dbp, error, error_set, fmt, ap)
 	 * are pretty rare anymore.
 	 */
 	if ((size_t)(p - errbuf) > sizeof(errbuf)) {
-		write(
-		    STDERR_FILENO, OVERFLOW_ERROR, sizeof(OVERFLOW_ERROR) - 1);
+		IGNORE_RESULT(write(
+		    STDERR_FILENO, OVERFLOW_ERROR, sizeof(OVERFLOW_ERROR) - 1));
 		abort();
 		/* NOTREACHED */
 	}

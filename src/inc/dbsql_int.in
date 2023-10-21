@@ -202,7 +202,7 @@ struct __dbsql_db {
  * Similarly, the DBSQL_COOKIE flag is set when the OP_VerifyCookie opcode
  * is emitted, and prevents duplicate OP_VerifyCookies from taking up space
  * and slowing down execution. TODO: do we need this?
- * 
+ *
  * The DBSQL_SCHEMA_LOADED flag is set after the database schema has been
  * read into internal hash tables.
  *
@@ -447,7 +447,7 @@ struct foreign_key {
  * key is set to NULL.  CASCADE means that a DELETE or UPDATE of the
  * referenced table row is propagated into the row that holds the
  * foreign key.
- * 
+ *
  * The following symbolic values are used to record which type
  * of action to take.
  */
@@ -479,7 +479,7 @@ struct foreign_key {
  * In the table_t structure describing Ex1, nCol==3 because there are
  * three columns in the table.  In the index_t structure describing
  * Ex2, nColumn==2 since 2 of the 3 columns of Ex1 are indexed.
- * The value of aiColumn is {2, 0}.  aiColumn[0]==2 because the 
+ * The value of aiColumn is {2, 0}.  aiColumn[0]==2 because the
  * first column to be indexed (c3) has an index of 2 in Ex1.aCol[].
  * The second column to be indexed (c1) has an index of 0 in
  * Ex1.aCol[], hence Ex2.aiColumn[1]==0.
@@ -587,7 +587,7 @@ struct expr {
 };
 
 /*
- * These macros can be used to test, set, or clear bits in the 
+ * These macros can be used to test, set, or clear bits in the
  * expr_t.flags field.
  */
 #define ExprHasProperty(E,P)     (((E)->flags&(P))==(P))
@@ -862,10 +862,10 @@ struct auth_context {
 
 /*
  * Each trigger present in the database schema is stored as an instance of
- * struct trigger. 
+ * struct trigger.
  *
  * Pointers to instances of struct trigger are stored in two ways.
- * 1. In the "trigHash" hash table (part of the DBSQL* that represents the 
+ * 1. In the "trigHash" hash table (part of the DBSQL* that represents the
  *    database). This allows trigger_t structures to be retrieved by name.
  * 2. All triggers associated with a single table form a linked list, using the
  *    pNext member of struct trigger. A pointer to the first element of the
@@ -897,15 +897,15 @@ struct trigger {
 
 /*
  * An instance of struct trigger_step_t is used to store a single SQL statement
- * that is a part of a trigger-program. 
+ * that is a part of a trigger-program.
  *
  * Instances of struct trigger_step_t are stored in a singly linked list
  * (linked using the "pNext" member) referenced by the "step_list" member of
  * the associated struct trigger instance. The first element of the linked
  * list is the first step of the trigger-program.
- * 
+ *
  * The "op" member indicates whether this is a "DELETE", "INSERT", "UPDATE" or
- * "SELECT" statement. The meanings of the other members is determined by the 
+ * "SELECT" statement. The meanings of the other members is determined by the
  * value of "op" as follows:
  *
  * (op == TK_INSERT)
@@ -915,7 +915,7 @@ struct trigger {
  * target    -> A token holding the name of the table to insert into.
  * pExprList -> If this is an INSERT INTO ... VALUES ... statement, then
  *              this stores values to be inserted. Otherwise NULL.
- * pIdList   -> If this is an INSERT INTO ... (<column-names>) VALUES ... 
+ * pIdList   -> If this is an INSERT INTO ... (<column-names>) VALUES ...
  *              statement, then this stores the column-names to be
  *              inserted into.
  *
@@ -923,7 +923,7 @@ struct trigger {
  * target    -> A token holding the name of the table to delete from.
  * pWhere    -> The WHERE clause of the DELETE statement if one is specified.
  *              Otherwise NULL.
- * 
+ *
  * (op == TK_UPDATE)
  * target    -> A token holding the name of the table to update rows of.
  * pWhere    -> The WHERE clause of the UPDATE statement if one is specified.
@@ -931,18 +931,18 @@ struct trigger {
  * pExprList -> A list of the columns to update and the expressions to update
  *              them to. See __update() documentation of "pChanges"
  *              argument.
- * 
+ *
  */
 struct trigger_step {
 	int op;                  /* One of TK_DELETE, TK_UPDATE, TK_INSERT,
 				    TK_SELECT */
 	int orconf;              /* OE_Rollback etc. */
 	trigger_t *pTrig;        /* The trigger that this step is a part of */
-	select_t *pSelect;       /* Valid for SELECT and sometimes 
+	select_t *pSelect;       /* Valid for SELECT and sometimes
 				    INSERT steps (when pExprList == 0) */
 	token_t target;          /* Valid for DELETE, UPDATE, INSERT steps */
 	expr_t *pWhere;          /* Valid for DELETE, UPDATE steps */
-	expr_list_t *pExprList;  /* Valid for UPDATE statements and sometimes 
+	expr_list_t *pExprList;  /* Valid for UPDATE statements and sometimes
 				    INSERT steps (when pSelect == 0) */
 	id_list_t *pIdList;      /* Valid for INSERT statements only */
 	trigger_step_t * pNext;  /* Next in the link-list */
@@ -954,15 +954,15 @@ struct trigger_step {
  * being coded, its associated trigger_stack_t instance is pointed to by the
  * "pTriggerStack" member of the Parse structure.
  *
- * The pTab member points to the table that triggers are being coded on. The 
+ * The pTab member points to the table that triggers are being coded on. The
  * newIdx member contains the index of the vdbe cursor that points at the temp
  * table that stores the new.* references. If new.* references are not valid
  * for the trigger being coded (for example an ON DELETE trigger), then newIdx
  * is set to -1. The oldIdx member is analogous to newIdx, for old.*
  * references.
  *
- * The ON CONFLICT policy to be used for the trigger program steps is stored 
- * as the orconf member. If this is OE_Default, then the ON CONFLICT clause 
+ * The ON CONFLICT policy to be used for the trigger program steps is stored
+ * as the orconf member. If this is OE_Default, then the ON CONFLICT clause
  * specified for individual triggers steps is used.
  *
  * struct trigger_stack_t has a "pNext" member, to allow linked lists to be
@@ -972,7 +972,7 @@ struct trigger_step {
  * restored to the pTriggerStack member of the Parse stucture and coding of
  * the parent trigger continues.
  *
- * Before a nested trigger is coded, the linked list pointed to by the 
+ * Before a nested trigger is coded, the linked list pointed to by the
  * pTriggerStack is scanned to ensure that the trigger is not about to be coded
  * recursively. If this condition is detected, the nested trigger is not coded.
  */
@@ -990,7 +990,7 @@ struct trigger_stack {
 /*
  * The following structure contains information used by the __ref_normalizeXXX
  * routines as they walk the parse tree to make database references
- * explicit.  
+ * explicit.
  */
 typedef struct ref_normalizer_ctx ref_normalizer_ctx_t;
 struct ref_normalizer_ctx {

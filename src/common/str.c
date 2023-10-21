@@ -95,6 +95,9 @@
 #include "dbsql_config.h"
 #include "dbsql_int.h"
 
+#include <ctype.h>
+
+
 unsigned char __str_upper_to_lower[] = {
       0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
      18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
@@ -164,9 +167,9 @@ __str_append(result, fmt, va_alist)
 /*
  * __str_nappend --
  *	Works like __str_append, but each string is now followed by
- *	a length integer which specifies how much of the source string 
- *	to copy (in bytes).  -1 means use the whole string.  The 1st 
- *	argument must either be NULL or point to memory obtained from 
+ *	a length integer which specifies how much of the source string
+ *	to copy (in bytes).  -1 means use the whole string.  The 1st
+ *	argument must either be NULL or point to memory obtained from
  *	__dbsql_calloc().
  *
  * PUBLIC: void __str_nappend __P((char **, ...));
@@ -273,8 +276,8 @@ __str_urealloc(pz)
 	char *new;
 
 	if (pz == 0 || *pz == NULL)
-		return;
-	
+		return rc;
+
 	if (__dbsql_umalloc(NULL, strlen(*pz) + 1, &new) == ENOMEM) {
 		rc = ENOMEM;
 		__dbsql_free(NULL, *pz);
@@ -394,7 +397,7 @@ static int __utf8_to_int(const unsigned char *z) {
  *	     '?'       Matches exactly one character.
  *
  *	    [...]      Matches one character from the enclosed list of
- *	               characters.
+ *		       characters.
  *
  *	    [^...]     Matches one character not in the enclosed list.
  *
@@ -408,12 +411,12 @@ static int __utf8_to_int(const unsigned char *z) {
  *
  *	Hints: to match '*' or '?', put them in "[]".  Like this:
  *
- *	        abc[*]xyz        Matches "abc*xyz" only
+ *		abc[*]xyz        Matches "abc*xyz" only
  *
  * PUBLIC: int __str_glob_cmp __P((const unsigned char *,
  * PUBLIC:                    const unsigned char *));
  */
-int 
+int
 __str_glob_cmp(pattern, string)
 	const unsigned char *pattern;
 	const unsigned char *string;
@@ -526,7 +529,7 @@ __str_glob_cmp(pattern, string)
  * PUBLIC: int __str_like_cmp __P((const unsigned char *,
  * PUBLIC:                    const unsigned char *));
  */
-int 
+int
 __str_like_cmp(pattern, string)
 	const unsigned char *pattern;
 	const unsigned char *string;
@@ -588,10 +591,10 @@ __str_like_cmp(pattern, string)
  *	do not necessarily contain numbers.  They could contain text.
  *
  *	If the input strings both look like actual numbers then they
- *	compare in numerical order.  Numerical strings are always less 
+ *	compare in numerical order.  Numerical strings are always less
  *	than non-numeric strings so if one input string looks like a
  *	number and the other does not, then the one that looks like
- *	a number is the smaller.  Non-numeric strings compare in 
+ *	a number is the smaller.  Non-numeric strings compare in
  *	lexigraphical order (the same order as strcmp()).
  *
  * PUBLIC: int __str_numeric_cmp __P((const char *, const char *));
@@ -631,7 +634,7 @@ __str_numeric_cmp(left, right)
 	} else {
 		result = strcmp(left, right);
 	}
-	return result; 
+	return result;
 }
 
 /*
@@ -704,7 +707,7 @@ __str_real_as_sortable(r, z)
 	 * The digits must be chosen such at their ASCII codes are increasing.
 	 * This means we can not use the traditional base-64 digit set.
 	 */
-	static const char digit[] = 
+	static const char digit[] =
 		"0123456789"
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 		"abcdefghijklmnopqrstuvwxyz"

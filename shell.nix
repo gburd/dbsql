@@ -1,25 +1,26 @@
 { pkgs ? import <nixpkgs> {} }:
-
 pkgs.mkShell {
-  # nativeBuildInputs is usually what you want -- tools you need to run
+
   nativeBuildInputs = with pkgs.buildPackages; [
     act
     autoconf
-    db4
     ed
     gcc
     gdb
     gettext
     libtool
     m4
+    pkg-config
     perl
     ripgrep
-    tcl-8_5
   ];
 
   buildInputs = with pkgs; [
+#    (enableDebuging db4)
+    db4
     glibc.out
     glibc.static
+    tcl-8_5
   ];
 
   DOCKER_BUILDKIT = 1;

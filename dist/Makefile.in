@@ -125,8 +125,8 @@ C_FILES=\
 	$(srcdir)/os/os_jtime.c $(srcdir)/clib/memcmp.c \
 	$(srcdir)/clib/strcasecmp.c $(srcdir)/os/dbsql_alloc.c \
 	$(srcdir)/common/str.c $(srcdir)/common/dbsql_atoi.c \
-	$(srcdir)/common/dbsql_atof.c $(srcdir)/safety.c \
-	$(srcdir)/clib/strdup.c
+	$(srcdir)/common/dbsql_atof.c $(srcdir)/common/dbsql_fop.c \
+	$(srcdir)/safety.c $(srcdir)/clib/strdup.c
 
 ##################################################
 # Object and utility lists.
@@ -137,9 +137,10 @@ C_OBJS= cg_attach@o@ cg_insert@o@ sql_tokenize@o@ cg_auth@o@ \
 	cg_pragma@o@ cg_where@o@ cg_trigger@o@ cg_build@o@ \
 	sql_fns@o@ random@o@ cg_update@o@ cg_delete@o@ hash@o@ \
 	cg_expr@o@ opcodes@o@ sql_parser@o@ cg_vacuum@o@ \
-	vdbe@o@ vdbe_method@o@ sm@o@ snprintf@o@ dbsql_err@o@ cg_select@o@ \
-	os_jtime@o@ memcmp@o@ dbsql_atof@o@ safety@o@ dbsql_atoi@o@ \
-	strcasecmp@o@ strdup@o@ dbsql_alloc@o@ str@o@
+	vdbe@o@ vdbe_method@o@ sm@o@ snprintf@o@ dbsql_err@o@ \
+	dbsql_fop@o@ cg_select@o@ os_jtime@o@ memcmp@o@ \
+	dbsql_atof@o@ safety@o@ dbsql_atoi@o@ strcasecmp@o@ \
+	strdup@o@ dbsql_alloc@o@ str@o@
 
 LEMON_OBJS=\
 	lemon@o@
@@ -187,12 +188,12 @@ $(libdbsql): $(DEF_LIB)
 			$(ln) -s $(libdbsql_version) $@)
 
 # Real static C library.
-$(libdbsql_version): dbsql_int.h sql_parser.h opcodes.h $(C_OBJS)
+$(libdbsql_version): dbsql_int.h db_int.h sql_parser.h opcodes.h $(C_OBJS)
 	$(ar) cr $@ $(C_OBJS)
 	test ! -f $(ranlib) || $(ranlib) $@
 
 # Shared C library.
-$(libso_target): dbsql_int.h sql_parser.h opcodes.h $(C_OBJS)
+$(libso_target): dbsql_int.h db_int.h sql_parser.h opcodes.h $(C_OBJS)
 	$(SOLINK) $(SOFLAGS) $(LDFLAGS) -o $@ $(C_OBJS) $(LIBSO_LIBS)
 
 ##################################################
@@ -395,6 +396,8 @@ dbsql_atof@o@: $(srcdir)/common/dbsql_atof.c
 dbsql_atoi@o@: $(srcdir)/common/dbsql_atoi.c
 	 $(CC) $(CFLAGS) $?
 dbsql_err@o@: $(srcdir)/common/dbsql_err.c
+	 $(CC) $(CFLAGS) $?
+dbsql_fop@o@: $(srcdir)/common/dbsql_fop.c
 	 $(CC) $(CFLAGS) $?
 str@o@: $(srcdir)/common/str.c
 	 $(CC) $(CFLAGS) $?
