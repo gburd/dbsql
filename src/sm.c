@@ -81,7 +81,7 @@ __sm_is_threaded(sm)
 	sm_t *sm;
 {
 	int flags;
-	return (sm->dbp->flags & DBSQL_Threaded ? 1 : 0);
+	return F_ISSET(sm->dbp, DBSQL_Threaded);
 }
 
 /*
@@ -208,7 +208,7 @@ __sm_meta_init(sm, txn, name, init)
 	if (__sm_is_threaded(sm))
 		flags |= DB_THREAD;
 
-	if ((rc = db->open(db, txn, (name ? name : NULL), (name ? mn : NULL), 
+	if ((rc = db->open(db, txn, (name ? name : NULL), (name ? mn : NULL),
 			   DB_BTREE, flags, 0)) != 0)
 		return NULL;
 	return db;
@@ -263,9 +263,9 @@ __sm_init(sm, init)
 			   (F_ISSET(sm, SM_INMEM_DB) ? NULL : SM_META_NAME),
 			   DB_BTREE,
 			   DB_CREATE | DB_EXCL | flags, 0)) == EEXIST) {
-		/* Try to open the databse, it already exists */
+		/* The database already exists, try to open it */
 		if ((rc = db->open(db, txn, sm->name, SM_META_NAME, DB_BTREE,
-				   flags, 0)) == 0) 
+				   flags, 0)) == 0)
 			*init = 0;
 		else
 			goto err;
@@ -279,6 +279,7 @@ __sm_init(sm, init)
 		goto err;
 	txn->commit(txn, 0);
 	txn = 0;
+	F_SET(sm, SM_HAS_INIT);
 	return DBSQL_SUCCESS;
   err:
 	if (sm->meta)
@@ -566,7 +567,7 @@ __sm_close_cursor(smc)
 	int rc = DBSQL_SUCCESS;
 	DBSQL_ASSERT(smc != 0);
 
-	
+
 	if (smc->dbc->c_close(smc->dbc)  == DB_LOCK_DEADLOCK) {
 		smc->txn->abort(smc->txn);
 		rc = DBSQL_INTERNAL;
@@ -1227,11 +1228,11 @@ __sm_resource(sm, id, type, init)
 
 	if (__dbsql_calloc(sm->dbp, 1, sizeof(sm_rec_t), &smr) == ENOMEM)
 		return DBSQL_CANTOPEN;
-		
+
 	/* Create and initialize database object, open the database. */
 	if ((rc = db_create(&smr->db, dbenv, 0)) != 0)
 		return DBSQL_CANTOPEN;
-	
+
 	smr->db->set_bt_compare(smr->db, __sm_bt_compare);
 
 	/* Start a transaction, get an id, open the database, commit. */
