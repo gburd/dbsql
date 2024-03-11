@@ -341,7 +341,7 @@ struct __dbsql {
 #define DBSQL_Threaded       0x00000800  /* Set when we're expected to be
                                             thread safe. */
 	u_int8_t want_to_close;  /* Close after all VDBEs are deallocated */
-	int next_sig;            /* Next value of aDb[0].schema_sig */
+	u_int32_t next_sig;      /* Next value of aDb[0].schema_sig */
 	int nTable;              /* Number of tables in the database */
 	void *pBusyArg;          /* 1st Argument to the busy callback */
 	int (*xBusyCallback)(DBSQL *, void *, const char*, int);

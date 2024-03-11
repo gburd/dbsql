@@ -272,7 +272,7 @@ __entity_as_string(stack)
  *	string space if the string will fit but this routine will always
  *	__dbsql_malloc new memory. Return non-zero if we run out of memory.
  *
- * STATIC: int __entity_to_string __P((mem_t *));
+ * STATIC: static int __entity_to_string __P((mem_t *));
  */
 static int
 __entity_to_string(stack)
@@ -342,7 +342,7 @@ __entity_release_mem(stack)
  * __pop_stack --
  *	Pop the stack N times.
  *
- * STATIC: void __pop_stack __P((mem_t **, int));
+ * STATIC: static void __pop_stack __P((mem_t **, int));
  */
 static void
 __pop_stack(stack, n)

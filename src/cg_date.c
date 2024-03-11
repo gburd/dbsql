@@ -25,7 +25,7 @@
  *
  * All times and dates are managed as Julian Day numbers.  The
  * dates and times are stored as the number of days since noon
- * in Greenwich on November 24, 4714 B.C. according to the Gregorian
+ * in Greenwich on November 24, 4714, B.C. according to the Gregorian
  * calendar system.
  *
  * 1970-01-01 00:00:00 is JD 2440587.5
@@ -39,7 +39,7 @@
  * The Gregorian calendar system is used for all dates and times,
  * even those that predate the Gregorian calendar.  Historians usually
  * use the Julian calendar for dates prior to 1582-10-15 and for some
- * dates afterwards, depending on locale.  Beware of this difference.
+ * dates afterward, depending on locale.  Beware of this difference.
  *
  * The conversion algorithms are implemented based on descriptions
  * in the following text:
@@ -166,7 +166,7 @@ __convert_str_to_double(date, result)
  *
  *	A missing specifier is not considered an error.
  *
- * STATIC: int __parse_tz __P((const char *, datetime_t *));
+ * STATIC: static int __parse_tz __P((const char *, datetime_t *));
  */
 static int
 __parse_tz(date, dt)

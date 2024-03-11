@@ -46,8 +46,7 @@ typedef struct {
  *
  * STATIC: static void __corrupt_schema __P((init_data_t *));
  */
-static void
-__corrupt_schema(data)
+static void __corrupt_schema(data)
      init_data_t *data;
 {
 	__str_append(data->err_msgs, "malformed database schema",
@@ -68,7 +67,7 @@ __corrupt_schema(data)
  *	  argv[4] = "1" for temporary files, "0" for main database,
  *	            "2" or more for auxiliary database files.
  *
- * STATIC: static int __init_callback __P((init_data_t *));
+ * STATIC: static int __init_callback __P((void *, int, char **, char **));
  */
 static int
 __init_callback(init, argc, argv, col_name)
@@ -150,7 +149,7 @@ __init_callback(init, argc, argv, col_name)
 	default:
 		/* This can not happen! */
 		nerr = 1;
-		DBSQL_ASSERT(nerr == 0); /* TODO create a __fatal() */
+		DBSQL_ASSERT(nerr == 0); /* TODO: create a __fatal() */
 	}
 	return nerr;
 }
@@ -172,8 +171,6 @@ __init_db_file(dbp, dbi, err_msgs)
 	int dbi;
 	char **err_msgs;
 {
-	int rc;
-	int size;
 	table_t *table;
 	char *args[6];
 	char db_num[30];
@@ -192,7 +189,7 @@ __init_db_file(dbp, dbi, err_msgs)
 		"  sql text\n"
 		")"
 		;
-	static char temp_master_schema[] = 
+	static char temp_master_schema[] =
 		"CREATE TEMP TABLE " TEMP_MASTER_NAME "(\n"
 		"  type text,\n"
 		"  name text,\n"
@@ -208,7 +205,7 @@ __init_db_file(dbp, dbi, err_msgs)
 	 * master is an increasing integer.  So we can play back master
 	 * and all the CREATE statements will appear in the right order.
 	 */
-	static char init_script[] = 
+	static char init_script[] =
 	       "SELECT type, name, rootpage, sql, 1 FROM " TEMP_MASTER_NAME " "
 	       "UNION ALL "
 	       "SELECT type, name, rootpage, sql, 0 FROM " MASTER_NAME "";
@@ -382,7 +379,7 @@ __sqldb_init(p, dbp, name, temp, mem, init_sm)
  *	is locked) then that step is deferred until the first call to
  *	DBSQL->exec().
  *
- * STATIC: int __api_open __P((DBSQL *, const char *, int, char **));
+ * STATIC: static int __api_open __P((DBSQL *, const char *, int, char **));
  */
 int
 __api_open(dbp, filename, mode, err_msgs)
@@ -553,9 +550,9 @@ __api_close(dbp)
  *
  * STATIC: static int __process_sql __P((DBSQL *, const char *,
  * STATIC:                          dbsql_callback, void *, const char **,
- * STATIC:                          dbsql_stmt_t, char **))
+ * STATIC:                          dbsql_stmt_t **, char **));
  *
- * dbp			The database on which the SQL executes
+ * dbp			The database
  * sql			The SQL to be executed
  * callback		Invoke this callback routine
  * arg			First argument to callback()
@@ -886,7 +883,7 @@ __api_set_busy_timeout(dbp, ms)
 #else
 	u_int32_t delay = ms;
 #endif
-	
+
 	if (ms > 0)
 		dbp->set_busycall(dbp, __default_busy_callback, (void*)delay);
 	else
@@ -951,7 +948,7 @@ __api_get_encoding()
  *	of arguments, including 0.
  *
  * STATIC: static int __api_create_function __P((DBSQL *, const char *, int,
- * STATIC:                       int, void *,
+ * STATIC:                       void *, int,
  * STATIC:                       void (*)(dbsql_func_t *, int, const char**),
  * STATIC:                       void (*)(dbsql_func_t *, int, const char**),
  * STATIC:                       void (*)(dbsql_func_t *)));
@@ -1009,7 +1006,7 @@ __api_create_function(dbp, name, num_arg, user_data, encoding, func,
  * __api_exec_printf --
  *
  * STATIC: static int __api_exec_printf __P((DBSQL *, const char *,
- * STATIC:                              dbsql_callback, void *, char **, ...));
+ * STATIC:                              dbsql_callback, void *, char **, ...))
  * STATIC:      __attribute__ ((__format__ (__printf__, 2, 5)));
  *
  * dbp				The DBSQL database
@@ -1077,7 +1074,7 @@ __api_exec_vprintf(dbp, fmt, callback, arg, err_msgs, ap)
  * __api_exec_table_printf --
  *
  * STATIC: static int __api_exec_table_printf __P((DBSQL *, const char *,
- * STATIC:            char ***, int *, int *, char **, ...));
+ * STATIC:            char ***, int *, int *, char **, ...))
  * STATIC:      __attribute__ ((__format__ (__printf__, 2, 7)));
  *
  * dbp				The DBSQL database
@@ -1302,7 +1299,7 @@ __api_set_errpfx(dbp, prefix)
  * __api_get_errpfx --
  *	Get the error prefix.
  *
- * STATIC: static void __api_get_errpfx __P((DBSQL *, char **));
+ * STATIC: static void __api_get_errpfx __P((DBSQL *, const char **));
  *
  * dbp			Attach the hook to this database
  * prefix		OUT: The prefix string
