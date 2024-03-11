@@ -1838,7 +1838,7 @@ static void __subst_expr_list(expr_list_t*,int,expr_list_t*);
  *	changes to pExpr so that it refers directly to the source table
  *	of the subquery rather the result set of the subquery.
  *
- * STATIC: void __subst_expr __P((expr_t *, int, expr_list_t *));
+ * STATIC: static void __subst_expr __P((expr_t *, int, expr_list_t *));
  */
 static void
 __subst_expr(expr, table, elist)

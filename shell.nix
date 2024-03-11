@@ -13,6 +13,7 @@ pkgs.mkShell {
     pkg-config
     perl
     ripgrep
+    python3
   ];
 
   buildInputs = with pkgs; [

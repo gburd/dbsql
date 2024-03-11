@@ -34,6 +34,7 @@
 #	e_pfile		include file that contains EXTERN prototypes
 #	i_dfile		list of internal (PUBLIC) #defines
 #	i_pfile		include file that contains internal (PUBLIC) prototypes
+#	i_sfile		include file that contains internal (STATIC) prototypes
 /PUBLIC:/ {
 	sub("^.*PUBLIC:[	 ][	 ]*", "")
 	if ($0 ~ "^#if|^#ifdef|^#ifndef|^#else|^#endif") {
@@ -46,6 +47,20 @@
 		sub("^[	 ]*", "", pline)
 		print pline >> i_pfile
 		pline = ""
+	}
+}
+
+/STATIC:/ {
+	sub("^.*STATIC:[	 ][	 ]*", "")
+	if ($0 ~ "^#if|^#ifdef|^#ifndef|^#else|^#endif") {
+		print $0 >> i_sfile
+		next
+	}
+	sline = sprintf("%s %s", sline, $0)
+	if (sline ~ "\\)\\);") {
+		sub("^[	 ]*", "", sline)
+		print sline >> i_sfile
+		sline = ""
 	}
 }
 

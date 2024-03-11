@@ -3,9 +3,11 @@ build_unix/**
 TAGS
 tags
 .direnv/
+.idea/
 dist/autom4te.cache/
 dist/config.hin
 dist/configure
+dist/config.log
 src/py/setup.py
 test/scr050/Makefile
 result-bin
