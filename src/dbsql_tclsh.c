@@ -54,9 +54,7 @@ static char main_loop[] =
  * main --
  */
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char* *argv)
 {
 	int i;
 	const char *info;

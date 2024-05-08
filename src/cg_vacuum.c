@@ -34,9 +34,7 @@
  * PUBLIC: void __vacuum __P((parser_t *, token_t *));
  */
 void
-__vacuum(parser, tab_name)
-	parser_t *parser;
-	token_t *tab_name;
+__vacuum(parser_t* parser, token_t* tab_name)
 {
 	vdbe_t *v = __parser_get_vdbe(parser);
 	__vdbe_add_op(v, OP_Vacuum, 0, 0);
@@ -51,9 +49,7 @@ __vacuum(parser, tab_name)
  * PUBLIC: int __execute_vacuum __P((char **, DBSQL *));
  */
 int
-__execute_vacuum(err_msgs, dbp)
-	char **err_msgs;
-	DBSQL *dbp;
+__execute_vacuum(char* *err_msgs, DBSQL* dbp)
 {
 	return DBSQL_SUCCESS; /* NOTE: When DB implements compaction (someday)
 				 then this will be the place to invoke the
@@ -70,9 +66,7 @@ __execute_vacuum(err_msgs, dbp)
  * PUBLIC: int __execute_vacuum __P((char **, DBSQL *));
  */
 int
-__execute_vacuum(err_msgs, dbp)
-	char **err_msgs;
-	DBSQL *dbp;
+__execute_vacuum(char* *err_msgs, DBSQL* dbp)
 {
 	return DBSQL_SUCCESS;
 }

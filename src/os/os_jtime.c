@@ -45,8 +45,7 @@ int _fake_current_time = 0;
  * PUBLIC: int __os_jtime __P((double *));
  */
 int
-__os_jtime(result)
-	double *result;
+__os_jtime(double* result)
 {
 #ifndef DB_WIN32
   time_t t;

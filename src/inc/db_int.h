@@ -44,7 +44,6 @@ extern int __os_urealloc__DB_UNIQUE_NAME__ __P((DB_ENV *, size_t, void *));
 extern void *__ua_memcpy__DB_UNIQUE_NAME__ __P((void *, const void *, size_t));
 extern void __os_free__DB_UNIQUE_NAME__ __P((DB_ENV *, void *));
 extern void __os_set_errno__DB_UNIQUE_NAME__ __P((int));
-extern void __os_sleep__DB_UNIQUE_NAME__ __P((DB_ENV *, u_long, u_long));
 extern void __os_ufree__DB_UNIQUE_NAME__ __P((DB_ENV *, void *));
 
 #if defined(__cplusplus)

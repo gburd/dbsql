@@ -29,7 +29,7 @@ static void do_some_sql(int parent){
   int rc = DBSQL_SUCCESS;
   sqlite *db;
   int cnt = 0;
-  static char zBig[] = 
+  static char zBig[] =
     "-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -50,7 +50,7 @@ static void do_some_sql(int parent){
   srand(getpid());
   while( rc==DBSQL_SUCCESS ){
     cnt++;
-    rc = dbsql_exec_printf(db, 
+    rc = dbsql_exec_printf(db,
        "INSERT INTO t1 VALUES(%d,'%d%s')", 0, 0, &zErr,
        rand(), rand(), zBig);
   }

@@ -97,7 +97,7 @@ typedef int (*dbsql_callback)(void *, int, char **, char **);
 /*
  * If the following macro is set to 1, then NULL values are considered
  * distinct for the SELECT DISTINCT statement and for UNION or EXCEPT
- * compound queries.  No other SQL database engine (among those tested) 
+ * compound queries.  No other SQL database engine (among those tested)
  * works this way except for OCELOT.  But the SQL92 spec implies that
  * this is how things should work.
  *
@@ -179,7 +179,7 @@ extern const char dbsql_encoding[];
 #define DBSQL_CANTOPEN     (-50988)/* Unable to open the database file */
 #define DBSQL_PROTOCOL     (-50987)/* Database lock protocol error */
 #define DBSQL_SCHEMA       (-50986)/* The database schema changed */
-#define DBSQL_CONSTRAINT   (-50985)/* Abort due to contraint violation */
+#define DBSQL_CONSTRAINT   (-50985)/* Abort due to constraint violation */
 #define DBSQL_MISMATCH     (-50984)/* Data type mismatch */
 #define DBSQL_MISUSE       (-50983)/* Library used incorrectly */
 #define DBSQL_AUTH         (-50982)/* Authorization denied */
@@ -223,7 +223,7 @@ struct __dbsql {
 	void (*set_progresscall) __P((DBSQL *, int, int(*)(void*), void*));
 #endif
 	void *(*set_commitcall) __P((DBSQL *, int(*)(void*), void*));
-	void (*set_busycall) __P((DBSQL *, int(*)(int, const char *, int),\
+	void (*set_busycall) __P((DBSQL *, int(*)(DBSQL *, void *, const char *, int),\
 				  void *));
 	void (*set_timeout) __P((DBSQL *, int ms));
 
@@ -273,7 +273,7 @@ struct __dbsql {
  * codes is used as the second parameter.  The 5th parameter is the name
  * of the database ("main", "temp", etc.) if applicable.  The 6th parameter
  * is the name of the inner-most trigger or view that is responsible for
- * the access attempt or NULL if this access attempt is directly from 
+ * the access attempt or NULL if this access attempt is directly from
  * input SQL code.
  *                                          Arg-3           Arg-4
  */

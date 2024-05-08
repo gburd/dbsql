@@ -36,10 +36,7 @@
  * PUBLIC: void __attach __P((parser_t *, token_t *, token_t *));
  */
 void
-__attach(parser, file, db)
-	parser_t *parser;
-	token_t *file;
-	token_t *db;
+__attach(parser_t* parser, token_t* file, token_t* db)
 {
 	int rc, i;
 	dbsql_db_t *new;
@@ -134,9 +131,7 @@ __attach(parser, file, db)
  * PUBLIC: void __detach __P((parser_t *, token_t *));
  */
 void
-__detach(parser, db)
-	parser_t *parser;
-	token_t *db;
+__detach(parser_t* parser, token_t* db)
 {
 	int i;
 	DBSQL *dbp;
@@ -283,9 +278,7 @@ int __ref_normalize_src_list(normctx, src_list)
  *                              database
  */
 int
-__ref_normalize_select(normctx, select)
-	ref_normalizer_ctx_t *normctx;
-	select_t *select;
+__ref_normalize_select(ref_normalizer_ctx_t* normctx, select_t* select)
 {
 	while (select) {
 		if (__ref_normalize_expr_list(normctx, select->pEList)) {
@@ -344,9 +337,7 @@ int __ref_normalize_expr(normctx, expr)
  * expr				The expression to be fixed to one database
  */
 int
-__ref_normalize_expr_list(normctx, list)
-	ref_normalizer_ctx_t *normctx;
-	expr_list_t *list;
+__ref_normalize_expr_list(ref_normalizer_ctx_t* normctx, expr_list_t* list)
 {
 	int i;
 	if (list == 0)

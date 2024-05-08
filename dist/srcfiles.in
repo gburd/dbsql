@@ -72,6 +72,7 @@ src/dbsql_tclsh.c				app=dbsql_tclsh
 src/lemon/lemon.c				app=lemon
 src/lemon/lempar.c				app=lemon
 src/os/os_jtime.c				dynamic static
+src/os/os_sleep.c				dynamic static
 src/safety.c					dynamic static
 src/sm.c					dynamic static
 src/sql_fns.c					dynamic static

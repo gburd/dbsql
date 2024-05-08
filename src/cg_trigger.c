@@ -26,8 +26,7 @@
  * PUBLIC: void __vdbe_delete_trigger_step __P((trigger_step_t *));
  */
 void
-__vdbe_delete_trigger_step(ts)
-	trigger_step_t *ts;
+__vdbe_delete_trigger_step(trigger_step_t* ts)
 {
 	while(ts) {
 		trigger_step_t * tmp = ts;
@@ -219,10 +218,7 @@ __begin_trigger(parser, trigger, tr_tm, op, columns, tab_name, foreach,
  *                              CREATE TRIGGER
  */
 void
-__finish_trigger(parser, steplist, all)
-	parser_t *parser;
-	trigger_step_t *steplist;
-	token_t *all;
+__finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 {
 	ref_normalizer_ctx_t normctx;
 	trigger_t *nt = 0; /* The trigger whose construction is finishing up */
@@ -314,8 +310,7 @@ __finish_trigger(parser, steplist, all)
  * STATIC: static void __persist_trigger_step __P((trigger_step_t *));
  */
 static void
-__persist_trigger_step(ts)
-	trigger_step_t *ts;
+__persist_trigger_step(trigger_step_t* ts)
 {
 	if (ts->target.z) {
 		__dbsql_strndup(NULL, ts->target.z, &ts->target.z, ts->target.n);
@@ -354,8 +349,7 @@ __persist_trigger_step(ts)
  * PUBLIC: trigger_step_t * __trigger_select_step __P((select_t *));
  */
 trigger_step_t *
-__trigger_select_step(select)
-	select_t *select;
+__trigger_select_step(select_t* select)
 {
 	trigger_step_t *ts;
 	
@@ -390,12 +384,7 @@ __trigger_select_step(select)
  *                              etc.)
  */
 trigger_step_t *
-__trigger_insert_step(tab_name, column, elist, select, orconf)
-	token_t *tab_name;
-	id_list_t *column;
-	expr_list_t *elist;
-	select_t *select;
-	int orconf;
+__trigger_insert_step(token_t* tab_name, id_list_t* column, expr_list_t* elist, select_t* select, int orconf)
 {
 	trigger_step_t *ts;
 
@@ -432,11 +421,7 @@ __trigger_insert_step(tab_name, column, elist, select, orconf)
  *                              etc)
  */
 trigger_step_t *
-__trigger_update_step(tab_name, elist, where_clause, orconf)
-	token_t *tab_name;
-	expr_list_t *elist;
-	expr_t *where_clause;
-	int orconf;
+__trigger_update_step(token_t* tab_name, expr_list_t* elist, expr_t* where_clause, int orconf)
 {
 	trigger_step_t *ts;
 
@@ -462,9 +447,7 @@ __trigger_update_step(tab_name, elist, where_clause, orconf)
  * PUBLIC: trigger_step_t *__trigger_delete_step __P((token_t *, expr_t *));
  */
 trigger_step_t *
-__trigger_delete_step(tab_name, where_clause)
-	token_t *tab_name;
-	expr_t *where_clause;
+__trigger_delete_step(token_t* tab_name, expr_t* where_clause)
 {
 	trigger_step_t *ts;
 
@@ -487,8 +470,7 @@ __trigger_delete_step(tab_name, where_clause)
  * PUBLIC: void __vdbe_delete_trigger __P((trigger_t *));
  */
 void
-__vdbe_delete_trigger(trigger)
-	trigger_t *trigger;
+__vdbe_delete_trigger(trigger_t* trigger)
 {
 	if (trigger == 0)
 		return;
@@ -519,9 +501,7 @@ __vdbe_delete_trigger(trigger)
  * PUBLIC: void __drop_trigger __P((parser_t *, src_list_t *));
  */
 void
-__drop_trigger(parser, trig_list)
-	parser_t *parser;
-	src_list_t *trig_list;
+__drop_trigger(parser_t* parser, src_list_t* trig_list)
 {
 	int i;
 	trigger_t *trigger;
@@ -565,10 +545,7 @@ __drop_trigger(parser, trig_list)
  * PUBLIC: void __drop_trigger_ptr __P((parser_t *, trigger_t *, int));
  */
 void
-__drop_trigger_ptr(parser, trigger, nested)
-	parser_t *parser;
-	trigger_t *trigger;
-	int nested;
+__drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 {
 	table_t *table;
 	vdbe_t *v;
@@ -667,9 +644,7 @@ __drop_trigger_ptr(parser, trigger, nested)
  * STATIC: static int __check_column_overlap __P((id_list_t *, expr_list_t *));
  */
 static int
-__check_column_overlap(id_list, elist)
-	id_list_t *id_list;
-	expr_list_t *elist;
+__check_column_overlap(id_list_t* id_list, expr_list_t* elist)
 {
 	int e;
 	if (!id_list || !elist)
@@ -790,10 +765,7 @@ static src_list_t *targetSrcList(parser, step)
  * orconfin			Conflict algorithm. (OE_Abort, etc)
  */
 static int
-__code_trigger_program(parser, steplist, orconfin)
-	parser_t *parser;
-	trigger_step_t *steplist;
-	int orconfin;
+__code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 {
 	int orconf;
 	trigger_step_t * ts = steplist;

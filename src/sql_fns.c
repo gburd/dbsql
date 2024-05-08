@@ -529,8 +529,7 @@ __sum_step(context, argc, argv)
 }
 
 static void
-__sum_finalize(context)
-	dbsql_func_t *context;
+__sum_finalize(dbsql_func_t* context)
 {
 	sum_ctx_t *p;
 	p = dbsql_aggregate_context(context, sizeof(*p));
@@ -538,8 +537,7 @@ __sum_finalize(context)
 }
 
 static void
-__avg_finalize(context)
-	dbsql_func_t *context;
+__avg_finalize(dbsql_func_t* context)
 {
 	sum_ctx_t *p;
 	p = dbsql_aggregate_context(context, sizeof(*p));
@@ -585,8 +583,7 @@ __std_dev_step(context, argc, argv)
  * __std_dev_finalize --
  */
 static void
-__std_dev_finalize(context)
-	dbsql_func_t *context;
+__std_dev_finalize(dbsql_func_t* context)
 {
 	double rN = dbsql_aggregate_count(context);
 	std_dev_ctx_t *p = dbsql_aggregate_context(context, sizeof(*p));
@@ -626,8 +623,7 @@ __count_step(context, argc, argv)
  * __count_finalize --
  */
 static void
-__count_finalize(context)
-	dbsql_func_t *context;
+__count_finalize(dbsql_func_t* context)
 {
 	count_ctx_t *p;
 	p = dbsql_aggregate_context(context, sizeof(*p));
@@ -711,8 +707,7 @@ __max_step(context, argc, argv)
  * __min_max_finalize --
  */
 static void
-__min_max_finalize(context)
-	dbsql_func_t *context;
+__min_max_finalize(dbsql_func_t* context)
 {
 	min_max_ctx_t *p;
 	p = dbsql_aggregate_context(context, sizeof(*p));
@@ -733,8 +728,7 @@ __min_max_finalize(context)
  * PUBLIC: void __register_builtin_funcs __P((DBSQL *));
  */
 void
-__register_builtin_funcs(dbp)
-	DBSQL *dbp;
+__register_builtin_funcs(DBSQL* dbp)
 {
 	static struct {
 		char *name;

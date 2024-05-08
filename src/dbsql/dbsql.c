@@ -90,9 +90,7 @@ extern int isatty();
  * is done.
  */
 static char *
-local_getline(prompt, in)
-	char *prompt;
-	FILE *in;
+local_getline(char* prompt, FILE* in)
 {
 	char *line;
 	int len;
@@ -286,8 +284,7 @@ output_html_string(out, z)
 ** This routine runs when the user presses Ctrl-C
 */
 static void
-interrupt_handler(NOT_USED)
-	int NOT_USED;
+interrupt_handler(int NOT_USED)
 {
 	g.interrupted_p = 1;
 	if (g.dbp)
@@ -299,11 +296,7 @@ interrupt_handler(NOT_USED)
  * for each row of a query result.
  */
 static int
-callback(arg, num_args, args, cols)
-	void *arg;
-	int num_args;
-	char **args;
-	char **cols;
+callback(void* arg, int num_args, char* *args, char* *cols)
 {
 	int i;
 	struct callback_data *p = (struct callback_data*)arg;
@@ -508,11 +501,7 @@ set_table_name(p, name)
  * This routine should print text sufficient to recreate the table.
  */
 static int
-dump_callback(arg, num_args, args, cols)
-	void *arg;
-	int num_args;
-	char **args;
-	char **cols;
+dump_callback(void* arg, int num_args, char* *args, char* *cols)
 {
 	struct callback_data *p = (struct callback_data *)arg;
 	if (num_args != 3)
@@ -1287,8 +1276,7 @@ static const char options[] =
  *
  */
 static void
-usage(show_detail)
-	int show_detail;
+usage(int show_detail)
 {
 	fprintf(stderr, "Usage: dbsql [OPTIONS] FILENAME [SQL]\n");
 	if (show_detail) {
@@ -1316,9 +1304,7 @@ main_init(data)
 }
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char* *argv)
 {
 	char *err_msgs = 0;
 	struct callback_data data;

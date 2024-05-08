@@ -95,9 +95,7 @@ int __api_set_authorizer(dbp, auth, arg)
  * STATIC: static void __auth_bad_return_code __P((parser_t *, int));
  */
 static void
-__auth_bad_return_code(parser, rc)
-	parser_t *parser;
-	int rc;
+__auth_bad_return_code(parser_t* parser, int rc)
 {
 	char buf[20];
 	sprintf(buf, "(%d)", rc);
@@ -126,10 +124,7 @@ __auth_bad_return_code(parser, rc)
  * tab_list			All table that expr might refer to
  */
 void
-__auth_read(parser, expr, tab_list)
-	parser_t *parser;
-	expr_t *expr;
-	src_list_t *tab_list;
+__auth_read(parser_t* parser, expr_t* expr, src_list_t* tab_list)
 {
 	int rc;
 	DBSQL *dbp = parser->db;
@@ -260,8 +255,7 @@ void __auth_context_push(parser, authctx, context)
  * PUBLIC: void __auth_context_pop __P((auth_context_t *));
  */
 void
-__auth_context_pop(authctx)
-	auth_context_t *authctx;
+__auth_context_pop(auth_context_t* authctx)
 {
 	if (authctx->pParse) {
 		authctx->pParse->zAuthContext = authctx->zAuthContext;

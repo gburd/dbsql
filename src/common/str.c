@@ -185,7 +185,7 @@ __str_nappend(result, va_alist)
 	size_t len;
 	const char *tmp;
 	char *r;
-	int n;
+	unsigned long n;
 
 	if (result == 0)
 		return;
@@ -220,16 +220,15 @@ __str_nappend(result, va_alist)
  *	the quote characters.  The conversion is done in-place.  If the
  *	input does not begin with a quote character, then this routine
  *	is a no-op.  Quotes can be of the form "'a-b-c'" or the MS-Access style
- *	brackets around identifers such as:  "[a-b-c]".  In both cases the
+ *	brackets around identifiers such as:  "[a-b-c]".  In both cases the
  *	result is "a-b-c".
  *
  * PUBLIC: void __str_unquote __P((char *));
  */
 void
-__str_unquote(z)
-	char *z;
+__str_unquote(char* z)
 {
-	int quote;
+	char quote;
 	int i, j;
 
 	if (z == NULL)
@@ -260,15 +259,14 @@ __str_unquote(z)
  * __str_urealloc --
  *	Make a duplicate of a string into memory obtained from
  *	__dbsql_umalloc() Free the original string using __dbsql_free().
- *	This routine is called on all strings that are passed outside of
+ *	This routine is called on all strings that are passed outside
  *	the library.  That way clients can free the string using
  *	__dbsql_ufree()	rather than having to call __dbsql_free().
  *
  * PUBLIC: int __str_urealloc __P((char **));
  */
 int
-__str_urealloc(pz)
-	char **pz;
+__str_urealloc(char* *pz)
 {
 	int rc = DBSQL_SUCCESS;
 	char *new;
@@ -296,8 +294,7 @@ __str_urealloc(pz)
  * PUBLIC: int __str_is_numeric __P((const char *));
  */
 int
-__str_is_numeric(z)
-	const char *z;
+__str_is_numeric(const char *z)
 {
 	if (*z == '-' || *z == '+')
 		z++;
@@ -415,14 +412,11 @@ static int __utf8_to_int(const unsigned char *z) {
  * PUBLIC:                    const unsigned char *));
  */
 int
-__str_glob_cmp(pattern, string)
-	const unsigned char *pattern;
-	const unsigned char *string;
+__str_glob_cmp(const unsigned char *pattern, const unsigned char *string)
 {
-	char c;
+	unsigned char c, c2;
 	int invert;
 	int seen;
-	char c2;
 
 	while((c = *pattern) != 0) {
 		switch(c) {
@@ -528,9 +522,7 @@ __str_glob_cmp(pattern, string)
  * PUBLIC:                    const unsigned char *));
  */
 int
-__str_like_cmp(pattern, string)
-	const unsigned char *pattern;
-	const unsigned char *string;
+__str_like_cmp(const unsigned char *pattern, const unsigned char *string)
 {
 	register int c;
 	int c2;
@@ -598,9 +590,7 @@ __str_like_cmp(pattern, string)
  * PUBLIC: int __str_numeric_cmp __P((const char *, const char *));
  */
 int
-__str_numeric_cmp(left, right)
-	const char *left;
-	const char *right;
+__str_numeric_cmp(const char *left, const char *right)
 {
 	int result;
 	int left_is_num, right_is_num;
@@ -650,10 +640,10 @@ __str_numeric_cmp(left, right)
  * PUBLIC: int __str_int_in32b __P((const char *));
  */
 int
-__str_int_in32b(num)
-	const char *num;
+__str_int_in32b(const char *num)
 {
-	int c, i = 0;
+	int i = 0;
+    char c;
 	if (*num == '-' || *num == '+')
 		num++;
 	while ((c = num[i]) >= '0' && c <= '9') {
@@ -692,9 +682,7 @@ __str_int_in32b(num)
  * PUBLIC: void __str_real_as_sortable __P((double, char *));
  */
 void
-__str_real_as_sortable(r, z)
-	double r;
-	char *z;
+__str_real_as_sortable(double r, char* z)
 {
 	int neg;
 	int exp;
@@ -823,13 +811,10 @@ __str_real_as_sortable(r, z)
  * PUBLIC: int __str_cmp __P((const char *, const char *));
  */
 int
-__str_cmp(a, b)
-	const char *a;
-	const char *b;
+__str_cmp(const char *a, const char *b)
 {
-	int res = 0;
+	unsigned char dir = 0, res = 0;
 	int a_numeric_p, b_numeric_p;
-	int dir = 0;
 
 	while(res == 0 && *a && *b) {
 		if (a[0] == 'N' || b[0] == 'N') {

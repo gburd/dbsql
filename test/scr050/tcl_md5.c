@@ -169,8 +169,7 @@ MD5Transform(buf, in)
  * initialization constants.
  */
 static void
-MD5Init(pCtx)
-	MD5Context *pCtx;
+MD5Init(MD5Context* pCtx)
 {
 	struct Context *ctx = (struct Context *)pCtx;
 	ctx->buf[0] = 0x67452301;
@@ -376,8 +375,7 @@ md5file_cmd(cd, interp, argc, argv)
  * Register the two TCL commands above with the TCL interpreter.
  */
 int
-__testset_MD5_init(interp)
-	Tcl_Interp *interp;
+__testset_MD5_init(Tcl_Interp* interp)
 {
 	Tcl_CreateCommand(interp, "md5", (Tcl_CmdProc*)md5_cmd, 0, 0);
 	Tcl_CreateCommand(interp, "md5file", (Tcl_CmdProc*)md5file_cmd, 0, 0);
@@ -410,8 +408,7 @@ __tcl_sql_func_md5step(context, argc, argv)
 }
 
 void
-__tcl_sql_func_md5finalize(context)
-	dbsql_func_t *context;
+__tcl_sql_func_md5finalize(dbsql_func_t* context)
 {
 	MD5Context *p;
 	unsigned char digest[16];

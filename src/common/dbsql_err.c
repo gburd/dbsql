@@ -61,8 +61,7 @@ __dbsql_assert(failedexpr, file, line)
  * PUBLIC: int __dbsql_panic_msg __P((DBSQL *));
  */
 int
-__dbsql_panic_msg(dbp)
-	DBSQL *dbp;
+__dbsql_panic_msg(DBSQL* dbp)
 {
 	__dbsql_err(dbp, "PANIC: fatal database error detected; run recovery");
 
@@ -79,9 +78,7 @@ __dbsql_panic_msg(dbp)
  * PUBLIC: int __dbsql_panic __P((DBSQL *, int));
  */
 int
-__dbsql_panic(dbp, errval)
-	DBSQL *dbp;
-	int errval;
+__dbsql_panic(DBSQL* dbp, int errval)
 {
 	if (dbp != NULL) {
 		PANIC_SET(dbp, 1);
@@ -118,8 +115,7 @@ __dbsql_panic(dbp, errval)
  * EXTERN: char *dbsql_strerror __P((int));
  */
 char *
-dbsql_strerror(error)
-	int error;
+dbsql_strerror(int error)
 {
 	char *p;
 

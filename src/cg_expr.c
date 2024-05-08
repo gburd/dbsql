@@ -38,11 +38,7 @@
  * PUBLIC: expr_t *__expr __P((int, expr_t *, expr_t *, token_t *));
  */
 expr_t *
-__expr(op, left, right, token)
-	int op;
-	expr_t *left;
-	expr_t *right;
-	token_t *token;
+__expr(int op, expr_t* left, expr_t* right, token_t* token)
 {
 	expr_t *new;
 	if (__dbsql_calloc(NULL, 1, sizeof(expr_t), &new) == ENOMEM) {
@@ -77,10 +73,7 @@ __expr(op, left, right, token)
  * PUBLIC: void __expr_span __P((expr_t *, token_t *, token_t *));
  */
 void
-__expr_span(expr, left, right)
-	expr_t *expr;
-	token_t *left;
-	token_t *right;
+__expr_span(expr_t* expr, token_t* left, token_t* right)
 {
 	DBSQL_ASSERT(right != 0);
 	DBSQL_ASSERT(left != 0);
@@ -106,9 +99,7 @@ __expr_span(expr, left, right)
  * PUBLIC: expr_t *__expr_function __P((expr_list_t *, token_t *));
  */
 expr_t *
-__expr_function(list, token)
-	expr_list_t *list;
-	token_t *token;
+__expr_function(expr_list_t* list, token_t* token)
 {
 	expr_t *new;
 	if (__dbsql_calloc(NULL, 1, sizeof(expr_t), &new) == ENOMEM) {
@@ -136,8 +127,7 @@ __expr_function(list, token)
  * PUBLIC: void __expr_delete __P((expr_t *));
  */
 void
-__expr_delete(p)
-	expr_t *p;
+__expr_delete(expr_t* p)
 {
 	if (p == 0)
 		return;
@@ -167,8 +157,7 @@ __expr_delete(p)
  * PUBLIC: expr_t *__expr_dup __P((expr_t *));
  */
 expr_t *
-__expr_dup(p)
-	expr_t *p;
+__expr_dup(expr_t* p)
 {
 	expr_t *new;
 	if (p == 0)
@@ -197,9 +186,7 @@ __expr_dup(p)
  * PUBLIC: void __token_copy __P((token_t *, token_t *));
  */
 void
-__token_copy(to, from)
-	token_t *to;
-	token_t *from;
+__token_copy(token_t* to, token_t* from)
 {
 	if (to->dyn)
 		__dbsql_free(NULL, (char*)to->z);
@@ -219,8 +206,7 @@ __token_copy(to, from)
  * PUBLIC: expr_list_t *__expr_list_dup __P((expr_list_t *));
  */
 expr_list_t *
-__expr_list_dup(p)
-	expr_list_t *p;
+__expr_list_dup(expr_list_t* p)
 {
 	expr_list_t *new;
 	int i;
@@ -264,8 +250,7 @@ __expr_list_dup(p)
  * PUBLIC: src_list_t *__src_list_dup __P((src_list_t *));
  */
 src_list_t *
-__src_list_dup(p)
-	src_list_t *p;
+__src_list_dup(src_list_t* p)
 {
 	src_list_t *new;
 	int i;
@@ -300,8 +285,7 @@ __src_list_dup(p)
  * PUBLIC: id_list_t *__id_list_dup __P((id_list_t *));
  */
 id_list_t *
-__id_list_dup(p)
-	id_list_t *p;
+__id_list_dup(id_list_t* p)
 {
 	id_list_t *new;
 	int i;
@@ -328,8 +312,7 @@ __id_list_dup(p)
  * PUBLIC: select_t *__select_dup __P((select_t *));
  */
 select_t *
-__select_dup(p)
-	select_t *p;
+__select_dup(select_t* p)
 {
 	select_t *new;
 	if (p == 0)
@@ -363,10 +346,7 @@ __select_dup(p)
  * PUBLIC:                                 token_t *));
  */
 expr_list_t *
-__expr_list_append(list, expr, name)
-	expr_list_t *list;
-	expr_t *expr;
-	token_t *name;
+__expr_list_append(expr_list_t* list, expr_t* expr, token_t* name)
 {
 	if (list == 0) {
 		if (__dbsql_calloc(NULL, 1, sizeof(expr_list_t),
@@ -407,8 +387,7 @@ __expr_list_append(list, expr, name)
  * PUBLIC: void __expr_list_delete __P((expr_list_t *));
  */
 void
-__expr_list_delete(list)
-	expr_list_t *list;
+__expr_list_delete(expr_list_t* list)
 {
 	int i;
 	if (list == 0)
@@ -432,8 +411,7 @@ __expr_list_delete(list)
  * PUBLIC: int __expr_is_constant __P((expr_t *));
  */
 int
-__expr_is_constant(p)
-	expr_t *p;
+__expr_is_constant(expr_t* p)
 {
 	int rc = 0;
 
@@ -492,9 +470,7 @@ __expr_is_constant(p)
  * PUBLIC: int __expr_is_integer __P((expr_t *, int *));
  */
 int
-__expr_is_integer(p, value)
-	expr_t *p;
-	int *value;
+__expr_is_integer(expr_t* p, int* value)
 {
 	const char *z;
 	int v, n;
@@ -1070,11 +1046,7 @@ __get_function_name(expr, name, len)
  * PUBLIC: int __expr_check __P((parser_t *, expr_t *, int, int *));
  */
 int
-__expr_check(parser, expr, agg_allowed, agg)
-	parser_t *parser;
-	expr_t *expr;
-	int agg_allowed;
-	int *agg;
+__expr_check(parser_t* parser, expr_t* expr, int agg_allowed, int* agg)
 {
 	int nerr, i, n, no_such_func, is_type_of, wrong_num_args, is_agg, nid;
 	const char *id;
@@ -1208,8 +1180,7 @@ __expr_check(parser, expr, agg_allowed, agg)
  * PUBLIC: int __expr_type __P((expr_t *));
  */
 int
-__expr_type(p)
-	expr_t *p;
+__expr_type(expr_t* p)
 {
 	int i;
 	expr_list_t *list;
@@ -1302,9 +1273,7 @@ __expr_type(p)
  * PUBLIC: void __expr_code __P((parser_t *, expr_t *));
  */
 void
-__expr_code(parser, expr)
-	parser_t *parser;
-	expr_t *expr;
+__expr_code(parser_t* parser, expr_t* expr)
 {
 	vdbe_t *v = parser->pVdbe;
 	int i, op, dest, nexpr, nid, addr, expr_end_lable, jump_inst;
@@ -1560,11 +1529,7 @@ __expr_code(parser, expr)
  * PUBILC: void __expr_if_true __P((parser_t *, expr_t *, int, int));
  */
 void
-__expr_if_true(parser, expr, dest, jump_if_null)
-	parser_t *parser;
-	expr_t *expr;
-	int dest;
-	int jump_if_null;
+__expr_if_true(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 {
 	vdbe_t *v = parser->pVdbe;
 	int d2, addr, op = 0;
@@ -1655,11 +1620,7 @@ __expr_if_true(parser, expr, dest, jump_if_null)
  * PUBLIC: void __expr_if_false __P((parser_t *, expr_t *, int, int));
  */
 void
-__expr_if_false(parser, expr, dest, jump_if_null)
-	parser_t *parser;
-	expr_t *expr;
-	int dest;
-	int jump_if_null;
+__expr_if_false(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 {
 	vdbe_t *v = parser->pVdbe;
 	int addr, d2, op = 0;
@@ -1757,9 +1718,7 @@ __expr_if_false(parser, expr, dest, jump_if_null)
  * PUBLIC: int __expr_compare __P((expr_t *, expr_t *));
  */
 int
-__expr_compare(a, b)
-	expr_t *a;
-	expr_t *b;
+__expr_compare(expr_t* a, expr_t* b)
 {
 	int i;
 	if (a == 0) {
@@ -1811,8 +1770,7 @@ __expr_compare(a, b)
  * STATIC: static int __append_agg_info __P((parser_t *));
  */
 static int
-__append_agg_info(parser)
-	parser_t *parser;
+__append_agg_info(parser_t* parser)
 {
 	agg_expr_t *agg;
 	if ((parser->nAgg & 0x7) == 0) {
@@ -1837,9 +1795,7 @@ __append_agg_info(parser)
  * PUBLIC: int __expr_analyze_aggregates __P((parser_t *, expr_t *));
  */
 int
-__expr_analyze_aggregates(parser, expr)
-	parser_t *parser;
-	expr_t *expr;
+__expr_analyze_aggregates(parser_t* parser, expr_t* expr)
 {
 	int i, n, nexpr, nerr = 0;
 	agg_expr_t *agg;

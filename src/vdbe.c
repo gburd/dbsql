@@ -183,10 +183,7 @@ __api_step(p, n, values, col_names)
  * STATIC: static int __agg_insert __P((agg_t *, char *, int));
  */
 static int
-__agg_insert(p, key, len)
-	agg_t *p;
-	char *key;
-	int len;
+__agg_insert(agg_t* p, char* key, int len)
 {
 	agg_elem_t *elem, *old;
 	int i;
@@ -219,8 +216,7 @@ __agg_insert(p, key, len)
  * STATIC: static agg_elem_t *__agg_in_focus __P((agg_t *p));
  */
 static agg_elem_t *
-__agg_in_focus(p)
-	agg_t *p;
+__agg_in_focus(agg_t* p)
 {
 	if (p->pCurrent) {
 		return p->pCurrent;
@@ -243,8 +239,7 @@ __agg_in_focus(p)
  * STATIC: static int __entity_as_string __P((mem_t *));
  */
 static int
-__entity_as_string(stack)
-	mem_t *stack;
+__entity_as_string(mem_t* stack)
 {
 	if ((stack->flags & MEM_Str) == 0) {
 		int fg = stack->flags;
@@ -275,8 +270,7 @@ __entity_as_string(stack)
  * STATIC: static int __entity_to_string __P((mem_t *));
  */
 static int
-__entity_to_string(stack)
-	mem_t *stack;
+__entity_to_string(mem_t* stack)
 {
 	if ((stack->flags & MEM_Dyn) == 0) {
 		int fg = stack->flags;
@@ -307,8 +301,7 @@ __entity_to_string(stack)
  * STATIC: static int __entity_ephem_to_dyn __P((mem_t * stack));
  */
 static int
-__entity_ephem_to_dyn(stack)
-	mem_t *stack;
+__entity_ephem_to_dyn(mem_t* stack)
 {
 	if ((stack->flags & MEM_Ephem) != 0) {
 		char *z;
@@ -330,8 +323,7 @@ __entity_ephem_to_dyn(stack)
  * STATIC: static void __entity_release_mem __P((mem_t *));
  */
 static void
-__entity_release_mem(stack)
-	mem_t *stack;
+__entity_release_mem(mem_t* stack)
 {
 	if ((stack->flags & MEM_Dyn) != 0) {
 		__dbsql_free(NULL, stack->z);
@@ -345,9 +337,7 @@ __entity_release_mem(stack)
  * STATIC: static void __pop_stack __P((mem_t **, int));
  */
 static void
-__pop_stack(stack, n)
-	mem_t **stack;
-	int n;
+__pop_stack(mem_t* *stack, int n)
 {
 	mem_t *tos = *stack;
 	while(n > 0) {
@@ -367,8 +357,7 @@ __pop_stack(stack, n)
  * STATIC: static void __entity_to_int __P((mem_t *));
  */
 static void
-__entity_to_int(stack)
-	mem_t *stack;
+__entity_to_int(mem_t* stack)
 {
 	if ((stack->flags & MEM_Int) == 0) {
 		if (stack->flags & MEM_Real) {
@@ -393,8 +382,7 @@ __entity_to_int(stack)
  * STATIC: static void __entity_to_real __P((mem_t *));
  */
 static void
-__entity_to_real(stack)
-	mem_t *stack;
+__entity_to_real(mem_t* stack)
 {
 	if ((stack->flags & MEM_Real) == 0) {
 		if (stack->flags & MEM_Str) {
@@ -418,9 +406,7 @@ __entity_to_real(stack)
  * STATIC: static sorter_t * __sorted_merge __P((sorter_t *, sorter_t *));
  */
 static sorter_t *
-__sorted_merge(left, right)
-	sorter_t *left;
-	sorter_t *right;
+__sorted_merge(sorter_t* left, sorter_t* right)
 {
 	sorter_t head;
 	sorter_t *tail;
@@ -457,10 +443,7 @@ __sorted_merge(left, right)
  * STATIC: static char *__fgets __P((char *, int, FILE *));
  */
 static char *
-__fgets(buf, len, in)
-	char *buf;
-	int len;
-	FILE *in;
+__fgets(char* buf, int len, FILE* in)
 {
 	int i, c;
 	for(i = 0; i < (len - 1) && (c = getc(in)) != EOF; i++) {
@@ -490,9 +473,7 @@ __fgets(buf, len, in)
  * STATIC: static int __expand_cursor_array_size __P((vdbe_t *, int));
  */
 static int
-__expand_cursor_array_size(vm, num_cursors)
-	vdbe_t *vm;
-	int num_cursors;
+__expand_cursor_array_size(vdbe_t* vm, int num_cursors)
 {
 	if (num_cursors >= vm->nCursor) {
 		if (__dbsql_realloc(NULL, ((num_cursors + 1) *
@@ -554,8 +535,7 @@ __expand_cursor_array_size(vm, num_cursors)
  * PUBLIC: int __vdbe_exec __P((vdbe_t *));
  */
 int
-__vdbe_exec(p)
-	vdbe_t *p;
+__vdbe_exec(vdbe_t* p)
 {
 	int pc;                    /* The program counter */
 	vdbe_op_t *pOp;            /* Current operation */

@@ -104,11 +104,7 @@ __select_new(result_cols, from_clause, where_clause, groupby_clause,
  * PUBLIC: int __join_type __P((parser_t *, token_t *, token_t *, token_t *));
  */
 int
-__join_type(parser, a, b, c)
-	parser_t *parser;
-	token_t *a;
-	token_t *b;
-	token_t *c;
+__join_type(parser_t* parser, token_t* a, token_t* b, token_t* c)
 {
 	int jointype = 0;
 	token_t *ap_all[3];
@@ -254,8 +250,7 @@ __add_where_term(col, table1, table2, expr)
  * STATIC: static void __set_join_expr __P((expr_t *));
  */
 static void
-__set_join_expr(p)
-	expr_t *p;
+__set_join_expr(expr_t* p)
 {
 	while (p) {
 		ExprSetProperty(p, EP_FromJoin);
@@ -275,9 +270,7 @@ __set_join_expr(p)
  * STATIC: static int __process_join __P((parser_t *, select_t *));
  */
 static int
-__process_join(parser, select)
-	parser_t *parser;
-	select_t *select;
+__process_join(parser_t* parser, select_t* select)
 {
 	int i, j;
 	src_list_t *src;
@@ -378,8 +371,7 @@ __process_join(parser, select)
  * PUBLIC: void __select_delete __P((select_t *));
  */
 void
-__select_delete(select)
-	select_t *select;
+__select_delete(select_t* select)
 {
 	if (select == 0)
 		return;
@@ -401,8 +393,7 @@ __select_delete(select)
  * STATIC: static void __aggregage_info_reset __P((parser_t *));
  */
 static void
-__aggregate_info_reset(parser)
-	parser_t *parser;
+__aggregate_info_reset(parser_t* parser)
 {
 	__dbsql_free(parser->db, parser->aAgg);
 	parser->aAgg = 0;
@@ -419,10 +410,7 @@ __aggregate_info_reset(parser)
  * STATIC:                                expr_list_t *));
  */
 static void
-__push_onto_sorter(parser, v, orderby_clause)
-	parser_t *parser;
-	vdbe_t *v;
-	expr_list_t *orderby_clause;
+__push_onto_sorter(parser_t* parser, vdbe_t* v, expr_list_t* orderby_clause)
 {
 	int i, order, type, c;
 	char *sort_order;
@@ -468,9 +456,7 @@ __push_onto_sorter(parser, v, orderby_clause)
  * PUBLIC: void __add_key_type __P((vdbe_t *, expr_list_t *));
  */
 void
-__add_key_type(v, elist)
-	vdbe_t *v;
-	expr_list_t *elist;
+__add_key_type(vdbe_t* v, expr_list_t* elist)
 {
 	int i;
 	int col = elist->nExpr;
@@ -717,12 +703,7 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
  * param			Optional parameter associated with dest
  */
 static void
-__generate_sort_tail(select, v, num_cols, dest, param)
-	select_t *select;
-	vdbe_t *v;
-	int num_cols;
-	int dest;
-	int param;
+__generate_sort_tail(select_t* select, vdbe_t* v, int num_cols, int dest, int param)
 {
 	int i, addr;
 	int end = __vdbe_make_label(v);
@@ -801,10 +782,7 @@ __generate_sort_tail(select, v, num_cols, dest, param)
  * elist			Expressions defining the result set
  */
 static void
-__generate_column_types(parser, tables, elist)
-	parser_t *parser;
-	src_list_t *tables;
-	expr_list_t *elist;
+__generate_column_types(parser_t* parser, src_list_t* tables, expr_list_t* elist)
 {
 	int i, j, col;
 	expr_t *p;
@@ -863,10 +841,7 @@ __generate_column_types(parser, tables, elist)
  * elist			Expressions defining the result set
  */
 static void
-__generate_column_names(parser, tables, elist)
-	parser_t *parser;
-	src_list_t *tables;
-	expr_list_t *elist;
+__generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist)
 {
 	int i, j, show_full_names, icol, addr;
 	char *type, *name, *col, *tab;
@@ -946,8 +921,7 @@ __generate_column_names(parser, tables, elist)
  * STATIC: static const char *__select_op_name __P((int));
  */
 static const char *
-__select_op_name(id)
-	int id;
+__select_op_name(int id)
 {
 	char *z;
 	switch(id) {
@@ -985,9 +959,7 @@ __select_op_name(id)
  * STATIC: static int __file_in_column_list __P((parser_t *, select_t *));
  */
 static int
-__fill_in_column_list(parser, select)
-	parser_t *parser;
-	select_t *select;
+__fill_in_column_list(parser_t* parser, select_t* select)
 {
 	int i, j, k, rc;
 	src_list_t *tables;
@@ -1243,8 +1215,7 @@ __fill_in_column_list(parser, select)
  * PUBLIC: void __select_unbind __P((select_t *));
  */
 void
-__select_unbind(select)
-	select_t *select;
+__select_unbind(select_t* select)
 {
 	int i;
 	table_t *table;
@@ -1386,8 +1357,7 @@ __match_orderby_to_column(parser, select, orderby_clause, table_idx,
  * PUBLIC: vdbe_t *__parser_get_vdbe __P((parser_t *));
  */
 vdbe_t *
-__parser_get_vdbe(parser)
-	parser_t *parser;
+__parser_get_vdbe(parser_t* parser)
 {
 	vdbe_t *v = parser->pVdbe;
 	if (v == 0) {
@@ -1429,9 +1399,7 @@ __parser_get_vdbe(parser)
  * STATIC:                                       expr_list_t *));
  */ 
 static void
-__multi_select_sort_order(select, orderby_clause)
-	select_t *select;
-	expr_list_t *orderby_clause;
+__multi_select_sort_order(select_t* select, expr_list_t* orderby_clause)
 {
 	int i;
 	expr_list_t *elist;
@@ -1480,9 +1448,7 @@ __multi_select_sort_order(select, orderby_clause)
  * STATIC: static void __compute_limit_registers __P((parser_t *, select_t *));
  */
 static void
-__compute_limit_registers(parser, select)
-	parser_t *parser;
-	select_t *select;
+__compute_limit_registers(parser_t* parser, select_t* select)
 {
 	int mem;
 	vdbe_t *v;
@@ -1551,11 +1517,7 @@ __compute_limit_registers(parser, select)
  *
  */
 static int
-__multi_select(parser, select, dest, param)
-	parser_t *parser;
-	select_t *select;
-	int dest;
-	int param;
+__multi_select(parser_t* parser, select_t* select, int dest, int param)
 {
 	int tab1, tab2;
 	int cont, brk, start;
@@ -1665,7 +1627,6 @@ __multi_select(parser, select, dest, param)
 		rc = __select(parser, prior, prior_op, union_tab, 0, 0, 0);
 		if (rc)
 			return rc;
-
 		/*
 		 * Code the current SELECT statement.
 		 */
@@ -1688,7 +1649,6 @@ __multi_select(parser, select, dest, param)
 		select->nOffset = offset;
 		if (rc)
 			return rc;
-
 		/*
 		 * Convert the data in the temporary table into whatever form
 		 * it is that we currently need.
@@ -1749,7 +1709,6 @@ __multi_select(parser, select, dest, param)
 		rc = __select(parser, prior, SRT_Union, tab1, 0, 0, 0);
 		if (rc)
 			return rc;
-
 		/*
 		 * Code the current SELECT into temporary table "tab2".
 		 */
@@ -1766,7 +1725,6 @@ __multi_select(parser, select, dest, param)
 		select->nOffset = offset;
 		if (rc)
 			return rc;
-
 		/*
 		 * Generate code to take the intersection of the two temporary
 		 * tables.
@@ -1839,10 +1797,7 @@ static void __subst_expr_list(expr_list_t*,int,expr_list_t*);
  * STATIC: static void __subst_expr __P((expr_t *, int, expr_list_t *));
  */
 static void
-__subst_expr(expr, table, elist)
-	expr_t *expr;
-	int table;
-	expr_list_t *elist;
+__subst_expr(expr_t* expr, int table, expr_list_t* elist)
 {
 	expr_t *new;
 
@@ -1884,10 +1839,7 @@ __subst_expr(expr, table, elist)
  * STATIC:                               expr_list_t *));
  */
 static void
-__subst_expr_list(list, table, elist)
-	expr_list_t *list;
-	int table;
-	expr_list_t *elist;
+__subst_expr_list(expr_list_t* list, int table, expr_list_t* elist)
 {
 	int i;
 	if (list == 0)
@@ -1978,12 +1930,7 @@ __subst_expr_list(list, table, elist)
  * subquery_agg_p		True if the subquery uses aggregate functions
  */
 static int
-__flatten_subquery(parser, select, from, agg_p, subquery_agg_p)
-	parser_t *parser;
-	select_t *select;
-	int from;
-	int agg_p;
-	int subquery_agg_p;
+__flatten_subquery(parser_t* parser, select_t* select, int from, int agg_p, int subquery_agg_p)
 {
 	select_t *sub_select;          /* The inner query or "subquery" */
 	src_list_t *outer_from_clause; /* The FROM clause of the outer query */
@@ -2226,11 +2173,7 @@ __flatten_subquery(parser, select, from, agg_p, subquery_agg_p)
  * STATIC: static int __min_max_query __P((parser_t *, select_t *, int, int));
  */
 static int
-__min_max_query(parser, select, dest, param)
-	parser_t *parser;
-	select_t *select;
-	int dest;
-	int param;
+__min_max_query(parser_t* parser, select_t* select, int dest, int param)
 {
 	expr_t *expr;
 	int col;
@@ -2905,10 +2848,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
  * PUBLIC: table_t *__select_result_set __P((parser_t *, char *, select_t *));
  */
 table_t *
-__select_result_set(parser, tab_name, select)
-	parser_t *parser;
-	char *tab_name;
-	select_t *select;
+__select_result_set(parser_t* parser, char* tab_name, select_t* select)
 {
 	int i, j, n, cnt;
 	table_t *table;

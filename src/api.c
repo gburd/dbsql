@@ -46,8 +46,7 @@ typedef struct {
  *
  * STATIC: static void __corrupt_schema __P((init_data_t *));
  */
-static void __corrupt_schema(data)
-     init_data_t *data;
+static void __corrupt_schema(init_data_t *data)
 {
 	__str_append(data->err_msgs, "malformed database schema",
 		     (char*)0);
@@ -70,11 +69,7 @@ static void __corrupt_schema(data)
  * STATIC: static int __init_callback __P((void *, int, char **, char **));
  */
 static int
-__init_callback(init, argc, argv, col_name)
-	void *init;
-	int argc;
-	char **argv;
-	char **col_name;
+__init_callback(void* init, int argc, char **argv, char **col_name)
 {
 	init_data_t *data = (init_data_t*)init;
 	parser_t parser;
@@ -166,10 +161,7 @@ __init_callback(init, argc, argv, col_name)
  * STATIC: static int __init_db_file __P((DBSQL *, int, char **));
  */
 static int
-__init_db_file(dbp, dbi, err_msgs)
-	DBSQL *dbp;
-	int dbi;
-	char **err_msgs;
+__init_db_file(DBSQL* dbp, int dbi, char **err_msgs)
 {
 	table_t *table;
 	char *args[6];
@@ -304,9 +296,7 @@ __init_db_file(dbp, dbi, err_msgs)
  * PUBLIC: int __init_databases __P((DBSQL *, char**));
  */
 int
-__init_databases(dbp, err_msgs)
-	DBSQL *dbp;
-	char **err_msgs;
+__init_databases(DBSQL* dbp, char **err_msgs)
 {
 	int i = 0;
 	int rc = DBSQL_SUCCESS;
@@ -462,8 +452,7 @@ __api_open(dbp, filename, mode, err_msgs)
  * STATIC: static int __api_last_inserted_rowid __P((DBSQL *));
  */
 int
-__api_last_inserted_rowid(dbp)
-	DBSQL *dbp;
+__api_last_inserted_rowid(DBSQL* dbp)
 {
 	return dbp->lastRowid;
 }
@@ -475,8 +464,7 @@ __api_last_inserted_rowid(dbp)
  * STATIC: static int __api_last_change_count __P((DBSQL *));
  */
 int
-__api_last_change_count(dbp)
-	DBSQL *dbp;
+__api_last_change_count(DBSQL* dbp)
 {
 	return dbp->_num_last_changes;
 }
@@ -489,8 +477,7 @@ __api_last_change_count(dbp)
  * STATIC: static int __api_total_change_count __P((DBSQL *));
  */
 int
-__api_total_change_count(dbp)
-	DBSQL *dbp;
+__api_total_change_count(DBSQL* dbp)
 {
 	return dbp->_num_total_changes;
 }
@@ -502,8 +489,7 @@ __api_total_change_count(dbp)
  * STATIC: static int __api_close __P((DBSQL *));
  */
 int
-__api_close(dbp)
-	DBSQL *dbp;
+__api_close(DBSQL* dbp)
 {
 	hash_ele_t *i;
 	int j;
@@ -561,14 +547,7 @@ __api_close(dbp)
  * err_msgs		OUT: Write error messages here
  */
 static int
-__process_sql(dbp, sql, callback, arg, tail, vm, err_msgs)
-	DBSQL *dbp;
-	const char *sql;
-	dbsql_callback callback;
-	void *arg;
-	const char **tail;
-	dbsql_stmt_t **vm;
-	char **err_msgs;
+__process_sql(DBSQL *dbp, const char *sql, dbsql_callback callback,	void *arg, const char **tail, dbsql_stmt_t **vm, char **err_msgs)
 {
 	parser_t parser;
 
@@ -670,12 +649,7 @@ __process_sql(dbp, sql, callback, arg, tail, vm, err_msgs)
  * arg			First argument to callback()
  * err_msgs		Write error messages here
  */
-int __api_exec(dbp, sql, callback, arg, err_msgs)
-	DBSQL *dbp;
-	const char *sql;
-	dbsql_callback callback;
-	void *arg;
-	char **err_msgs;
+int __api_exec(DBSQL *dbp, const char *sql, dbsql_callback callback, void *arg, char **err_msgs)
 {
 	return __process_sql(dbp, sql, callback, arg, 0, 0, err_msgs);
 }
@@ -695,12 +669,7 @@ int __api_exec(dbp, sql, callback, arg, err_msgs)
  * err_msgs		OUT: Write error messages here
  */
 int
-__api_prepare(dbp, sql, tail, stmt, err_msgs)
-	DBSQL *dbp;
-	const char *sql;
-	const char **tail;
-	dbsql_stmt_t **stmt;
-	char **err_msgs;
+__api_prepare(DBSQL *dbp, const char *sql, const char **tail, dbsql_stmt_t **stmt, 	char **err_msgs)
 {
 	return __process_sql(dbp, sql, 0, 0, tail, stmt, err_msgs);
 }
@@ -726,9 +695,7 @@ __api_prepare(dbp, sql, tail, stmt, err_msgs)
  * with it.
  */
 int
-__api_finalize(stmt, err_msgs)
-	dbsql_stmt_t *stmt;
-	char **err_msgs;
+__api_finalize(dbsql_stmt_t* stmt, char **err_msgs)
 {
 	int rc = __vdbe_finalize((vdbe_t*)stmt, err_msgs);
 	__str_urealloc(err_msgs);
@@ -751,9 +718,7 @@ __api_finalize(stmt, err_msgs)
  * is returned.
  */
 int
-__api_reset(stmt, err_msgs)
-	dbsql_stmt_t *stmt;
-	char **err_msgs;
+__api_reset(dbsql_stmt_t* stmt, char **err_msgs)
 {
 	int rc = __vdbe_reset((vdbe_t*)stmt, err_msgs);
 	__vdbe_make_ready((vdbe_t*)stmt, -1, 0, 0, 0);
@@ -776,11 +741,7 @@ __api_reset(stmt, err_msgs)
  * count		Number of times table has been busy
  */
 static int
-__default_busy_callback(dbp, arg, not_used, count)
-	DBSQL *dbp;
-	void *arg;
-	const char *not_used;
-	int count;
+__default_busy_callback(DBSQL *dbp, void *arg, const char *not_used, int count)
 {
 #if defined(__LP64) || defined(__LP64__)
 	u_int64_t timeout = (u_int64_t)arg;
@@ -807,13 +768,13 @@ __default_busy_callback(dbp, arg, not_used, count)
 		if (delay <= 0)
 			return 0;
 	}
-/*	__os_sleep(dbp, 0, delay); FIXME */
+	__os_sleep(0, delay);
 	return 1;
 #else
 	if ((count + 1) * 1000 > timeout) {
 		return 0;
 	}
-/*	__os_sleep(dbp, 1, 0); FIXME */
+	__os_sleep(1, 0);
 	return 1;
 #endif
 }
@@ -827,10 +788,7 @@ __default_busy_callback(dbp, arg, not_used, count)
  * STATIC:      int (*)(DBSQL *, void*, const char*, int), void *));
  */
 void
-__api_set_busy_callback(dbp, busy, arg)
-	DBSQL *dbp;
-	int (*busy)(DBSQL *, void *, const char*, int);
-	void *arg;
+__api_set_busy_callback(DBSQL *dbp, int (*busy)(DBSQL *, void *, const char*, int), void *arg)
 {
 	dbp->xBusyCallback = busy;
 	dbp->pBusyArg = arg;
@@ -847,11 +805,7 @@ __api_set_busy_callback(dbp, busy, arg)
  * STATIC:                                 int (*)(void*), void *));
  */
 void
-__api_set_progress_callback(dbp, num_ops, progress, arg)
-	DBSQL *dbp;
-	int num_ops;
-	int (*progress)(void*);
-	void *arg;
+__api_set_progress_callback(DBSQL* dbp, int num_ops, int (*progress)(void*), void* arg)
 {
 	if (num_ops > 0) {
 		dbp->xProgress = progress;
@@ -874,9 +828,7 @@ __api_set_progress_callback(dbp, num_ops, progress, arg)
  * STATIC: static void __api_set_busy_timeout __P((DBSQL *, int));
  */
 void
-__api_set_busy_timeout(dbp, ms)
-	DBSQL *dbp;
-	int ms;
+__api_set_busy_timeout(DBSQL* dbp, int ms)
 {
 #if defined(__LP64) || defined(__LP64__)
 	u_int64_t delay = ms;
@@ -897,8 +849,7 @@ __api_set_busy_timeout(dbp, ms)
  * PUBLIC: void __api_interrupt __P((DBSQL *));
  */
 void
-__api_interrupt(dbp)
-	DBSQL *dbp;
+__api_interrupt(DBSQL* dbp)
 {
 	dbp->flags |= DBSQL_Interrupt;
 }
@@ -910,10 +861,7 @@ __api_interrupt(dbp)
  * EXTERN: const char *dbsql_version __P((int *, int *, int *));
  */
 const char *
-dbsql_version(major, minor, patch)
-	int *major;
-	int *minor;
-	int *patch;
+dbsql_version(int* major, int* minor, int* patch)
 {
 	*major = DBSQL_VERSION_MAJOR;
 	*minor = DBSQL_VERSION_MINOR;
@@ -948,7 +896,7 @@ __api_get_encoding()
  *	of arguments, including 0.
  *
  * STATIC: static int __api_create_function __P((DBSQL *, const char *, int,
- * STATIC:                       void *, int,
+ * STATIC:                       int, void *,
  * STATIC:                       void (*)(dbsql_func_t *, int, const char**),
  * STATIC:                       void (*)(dbsql_func_t *, int, const char**),
  * STATIC:                       void (*)(dbsql_func_t *)));
@@ -957,22 +905,13 @@ __api_get_encoding()
  * name			Name of the function to add
  * num_arg		Number of arguments
  * encoding		The encoding expected by the functions
- * user_data		User data
+ * user_data	User data
  * func			The function's implementation
  * step			Step is used by aggregate functions
- * finalize	                When finished with
+ * finalize	    When finished with an aggregate function
  */
 int
-__api_create_function(dbp, name, num_arg, user_data, encoding, func,
-		      step, finalize)
-	DBSQL *dbp;
-	const char *name;
-	int num_arg;
-	void *user_data;
-	int encoding;/*TODO: not yet used*/
-	void (*func)(dbsql_func_t*, int, const char**);
-	void (*step)(dbsql_func_t*, int, const char**);
-	void (*finalize)(dbsql_func_t*);
+__api_create_function(DBSQL *dbp, const char *name, int encoding, int num_arg, void *user_data, /*TODO: not yet used*/ void (*func)(dbsql_func_t*, int, const char**), void (*step)(dbsql_func_t*, int, const char**), void (*finalize)(dbsql_func_t*))
 {
 	func_def_t *p;
 	int name_len;
@@ -1021,13 +960,8 @@ static int
 __api_exec_printf(DBSQL *dbp, const char *fmt, dbsql_callback callback,
 		  void *arg, char **err_msgs, ...)
 #else
-__api_exec_printf(dbp, fmt, callback, arg, err_msgs, ...)
-	DBSQL *dbp;
-	const char *fmt;
-	dbsql_callback callback;
-	void *arg;
-	char **err_msgs;
-	va_dcl
+__api_exec_printf(DBSQL *dbp, const char *fmt, dbsql_callback callback,
+          void *arg, char **err_msgs, va_dcl)
 #endif
 {
 	va_list ap;
@@ -1053,13 +987,7 @@ __api_exec_printf(dbp, fmt, callback, arg, err_msgs, ...)
  * va_list			Args list
  */
 static int
-__api_exec_vprintf(dbp, fmt, callback, arg, err_msgs, ap)
-	DBSQL *dbp;
-	const char *fmt;
-	dbsql_callback callback;
-	void *arg;
-	char **err_msgs;
-	va_list ap;
+__api_exec_vprintf(DBSQL *dbp, const char *fmt, dbsql_callback callback, void *arg, char **err_msgs, va_list ap)
 {
 	char *sql;
 	int rc;
@@ -1090,14 +1018,7 @@ static int
 __api_exec_table_printf(DBSQL *dbp, const char *fmt, char ***results,
 			int *num_rows, int *num_cols, char **err_msgs, ...)
 #else
-__api_exec_printf(dbp, fmt, results, num_rows, num_cols, err_msgs, ...)
-	DBSQL *dbp;
-	const char *fmt;
-	char ***results;
-	int *num_rows;
-	int *num_cols;
-	char **err_msgs;
-	va_dcl
+__api_exec_printf(DBSQL *dbp, const char *fmt, char ***results, int *num_rows, int *num_cols, char **err_msgs, va_dcl)
 #endif
 {
 	va_list ap;
@@ -1125,14 +1046,7 @@ __api_exec_printf(dbp, fmt, results, num_rows, num_cols, err_msgs, ...)
  * ap				Arguments to the format string
  */
 static int
-__api_exec_table_vprintf(dbp, fmt, results, num_rows, num_cols, err_msgs, ap)
-	DBSQL *dbp;
-	const char *fmt;
-	char ***results;
-	int *num_rows;
-	int *num_cols;
-	char **err_msgs;
-	va_list ap;
+__api_exec_table_vprintf(DBSQL *dbp, const char *fmt, char ***results, int *num_rows, int *num_cols, char **err_msgs, va_list ap)
 {
 	char *sql;
 	int rc;
@@ -1152,10 +1066,7 @@ __api_exec_table_vprintf(dbp, fmt, results, num_rows, num_cols, err_msgs, ap)
  * STATIC: static int __api_func_return_type __P((DBSQL *, const char *, int));
  */
 int
-__api_func_return_type(dbp, name, data_type)
-	DBSQL *dbp;
-	const char *name;
-	int data_type;
+__api_func_return_type(DBSQL *dbp, const char *name, int data_type)
 {
 	func_def_t *p = (func_def_t*)__hash_find((hash_t*)dbp->fns, name,
 						 strlen(name));
@@ -1178,10 +1089,7 @@ __api_func_return_type(dbp, name, data_type)
  * STATIC:                   void (*trace)(void*, const char *), void *));
  */
 void *
-__api_set_trace_callback(dbp, trace, arg)
-	DBSQL *dbp;
-	void (*trace)(void*,const char*);
-	void *arg;
+__api_set_trace_callback(DBSQL *dbp, void (*trace)(void*,const char*), void *arg)
 {
 	void *old = dbp->pTraceArg;
 	dbp->xTrace = trace;
@@ -1203,10 +1111,7 @@ __api_set_trace_callback(dbp, trace, arg)
  * arg			Argument to the function
  */
 void *
-__api_set_commit_callback(dbp, callback, arg)
-	DBSQL *dbp;
-	int (*callback)(void*);
-	void *arg;
+__api_set_commit_callback(DBSQL* dbp, int (*callback)(void*), void* arg)
 {
 	void *old = dbp->pCommitArg;
 	dbp->xCommitCallback = callback;
@@ -1220,8 +1125,7 @@ __api_set_commit_callback(dbp, callback, arg)
  * STATIC: static DB_ENV *__api_get_dbenv __P((DBSQL *));
  */
 static DB_ENV *
-__api_get_dbenv(dbp)
-	DBSQL *dbp;
+__api_get_dbenv(DBSQL* dbp)
 {
 	return dbp->dbenv;
 }
@@ -1237,9 +1141,7 @@ __api_get_dbenv(dbp)
  * callback		Function to invoke on each commit
  */
 void
-__api_set_errcall(dbp, callback)
-	DBSQL *dbp;
-	void (*callback)(const char *, char *);
+__api_set_errcall(DBSQL *dbp, void (*callback)(const char *, char *))
 {
 	dbp->dbsql_errcall = callback;
 }
@@ -1254,9 +1156,7 @@ __api_set_errcall(dbp, callback)
  * file			Open file stream for suitable for writing
  */
 void
-__api_set_errfile(dbp, file)
-	DBSQL *dbp;
-	FILE *file;
+__api_set_errfile(DBSQL* dbp, FILE* file)
 {
 	dbp->dbsql_errfile = file;
 }
@@ -1271,16 +1171,14 @@ __api_set_errfile(dbp, file)
  * file			OUT: The file used for error messages
  */
 void
-__api_get_errfile(dbp, file)
-	DBSQL *dbp;
-	FILE **file;
+__api_get_errfile(DBSQL* dbp, FILE **file)
 {
 	*file = dbp->dbsql_errfile;
 }
 
 /*
  * __api_set_errpfx --
- *	Set a prefix for use when writting error messages.
+ *	Set a prefix for use when writing error messages.
  *
  * STATIC: static void __api_set_errpfx __P((DBSQL *, const char *));
  *
@@ -1288,9 +1186,7 @@ __api_get_errfile(dbp, file)
  * prefix		A prefix string
  */
 void
-__api_set_errpfx(dbp, prefix)
-	DBSQL *dbp;
-	const char *prefix;
+__api_set_errpfx(DBSQL *dbp, const char *prefix)
 {
 	__dbsql_strdup(dbp, prefix, &dbp->dbsql_errpfx);
 }
@@ -1305,9 +1201,7 @@ __api_set_errpfx(dbp, prefix)
  * prefix		OUT: The prefix string
  */
 void
-__api_get_errpfx(dbp, prefix)
-	DBSQL *dbp;
-	const char **prefix;
+__api_get_errpfx(DBSQL *dbp, const char **prefix)
 {
 	*prefix = dbp->dbsql_errpfx;
 }
@@ -1320,12 +1214,7 @@ __api_get_errpfx(dbp, prefix)
  * EXTERN:                      const char *, int, u_int32_t flags));
  */
 int
-dbsql_create_env(dbpp, dir, crypt, mode, flags)
-	DBSQL **dbpp;
-	const char *dir;
-	const char *crypt;
-	int mode;
-	u_int32_t flags;
+dbsql_create_env(DBSQL **dbpp, const char *dir, const char *crypt, int mode, u_int32_t flags)
 {
 	int rc;
 	DB_ENV *dbenv;
@@ -1420,10 +1309,7 @@ dbsql_create_env(dbpp, dir, crypt, mode, flags)
  * EXTERN: int dbsql_create __P((DBSQL **, DB_ENV *, u_int32_t));
  */
 int
-dbsql_create(dbpp, dbenv, flags)
-	DBSQL **dbpp;
-	DB_ENV *dbenv;
-	u_int32_t flags;
+dbsql_create(DBSQL **dbpp, DB_ENV* dbenv, u_int32_t flags)
 {
 	DBSQL *dbp;
 	DBSQL_ASSERT(dbpp != 0);
@@ -1433,7 +1319,6 @@ dbsql_create(dbpp, dbenv, flags)
 
 	/*
 	 * Does the library expect data to be encoded as UTF-8
-	 * or iso8859?  The following global constant always
 	 * lets us know.
 	 * TODO: Make this configurable as a flag and part of the meta
 	 * database.

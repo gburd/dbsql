@@ -75,8 +75,7 @@ __sm_bt_compare(db, dbt1, dbt2)
  *	otherwise 0;
  */
 static int
-__sm_is_threaded(sm)
-	sm_t *sm;
+__sm_is_threaded(sm_t* sm)
 {
 	int flags;
 	return F_ISSET(sm->dbp, DBSQL_Threaded);
@@ -96,9 +95,7 @@ __sm_is_threaded(sm)
  * STATIC: static u_int32_t __sm_next_from_seq __P((sm_t *, DB_TXN *));
  */
 static u_int32_t
-__sm_next_from_seq(sm, txn)
-	sm_t *sm;
-	DB_TXN *txn;
+__sm_next_from_seq(sm_t* sm, DB_TXN* txn)
 {
 	int rc;
 	db_seq_t val;
@@ -221,9 +218,7 @@ __sm_meta_init(sm, txn, name, init)
  * STATIC: static int __sm_init __P((sm_t *, int *));
  */
 static int
-__sm_init(sm, init)
-	sm_t *sm;
-	int *init;
+__sm_init(sm_t* sm, int* init)
 {
 	int rc = DBSQL_SUCCESS;
 	int flags = 0;
@@ -381,8 +376,7 @@ __sm_create(dbp, name, is_temp, in_memory, smp)
  * PUBLIC: int __sm_close_db __P((sm_t *));
  */
 int
-__sm_close_db(sm)
-	sm_t *sm;
+__sm_close_db(sm_t* sm)
 {
 	int rc;
 	hash_ele_t *p;
@@ -417,8 +411,7 @@ __sm_close_db(sm)
  * PUBLIC: int __sm_checkpoint __P((sm_t *));
  */
 int
-__sm_checkpoint(sm)
-	sm_t *sm;
+__sm_checkpoint(sm_t* sm)
 {
 	DBSQL_ASSERT(sm != 0);
 	if (sm->dbp->dbenv)
@@ -433,8 +426,7 @@ __sm_checkpoint(sm)
  * PUBLIC: char *__sm_get_database_name __P((sm_t *));
  */
 char *
-__sm_get_database_name(sm)
-	sm_t *sm;
+__sm_get_database_name(sm_t* sm)
 {
 	DBSQL_ASSERT(sm != 0);
 	return (sm->name);
@@ -446,8 +438,7 @@ __sm_get_database_name(sm)
  * PUBLIC: int __sm_begin_txn __P((sm_t *));
  */
 int
-__sm_begin_txn(sm)
-	sm_t *sm;
+__sm_begin_txn(sm_t* sm)
 {
 	DBSQL_ASSERT(sm);
 	return (sm->dbp->dbenv->txn_begin(sm->dbp->dbenv, 0, &sm->txn, 0));
@@ -463,8 +454,7 @@ __sm_begin_txn(sm)
  * PUBLIC: int __sm_commit_txn __P((sm_t *));
  */
 int
-__sm_commit_txn(sm)
-	sm_t *sm;
+__sm_commit_txn(sm_t* sm)
 {
 	DBSQL_ASSERT(sm);
 	if (sm->txn)
@@ -483,8 +473,7 @@ __sm_commit_txn(sm)
  * PUBLIC: int __sm_abort_txn __P((sm_t *));
  */
 int
-__sm_abort_txn(sm)
-	sm_t *sm;
+__sm_abort_txn(sm_t* sm)
 {
 	DBSQL_ASSERT(sm);
 	if (sm->txn)
@@ -504,11 +493,7 @@ __sm_abort_txn(sm)
  * PUBLIC: int __sm_cursor __P((sm_t *, int, int, sm_cursor_t **));
  */
 int
-__sm_cursor(sm, id, write, smcp)
-	sm_t *sm;
-	int id;
-	int write;
-	sm_cursor_t **smcp;
+__sm_cursor(sm_t* sm, int id, int write, sm_cursor_t* *smcp)
 {
 	int rc;
 	sm_rec_t *smr;
@@ -559,8 +544,7 @@ __sm_cursor(sm, id, write, smcp)
  * PUBLIC: int __sm_close_cursor __P((sm_cursor_t *));
  */
 int
-__sm_close_cursor(smc)
-	sm_cursor_t *smc;
+__sm_close_cursor(sm_cursor_t* smc)
 {
 	int rc = DBSQL_SUCCESS;
 	DBSQL_ASSERT(smc != 0);
@@ -673,9 +657,7 @@ __sm_moveto(smc, item, len, result)
  * PUBLIC: int __sm_next __P((sm_cursor_t *, int *));
  */
 int
-__sm_next(smc, result)
-	sm_cursor_t *smc;
-	int *result;
+__sm_next(sm_cursor_t* smc, int* result)
 {
 	int rc = DBSQL_SUCCESS;
 	DBT key, data;
@@ -716,9 +698,7 @@ __sm_next(smc, result)
  * PUBLIC: int __sm_prev __P((sm_cursor_t *, int *));
  */
 int
-__sm_prev(smc, result)
-	sm_cursor_t *smc;
-	int *result;
+__sm_prev(sm_cursor_t* smc, int* result)
 {
 	int rc = DBSQL_SUCCESS;
 	DBT key, data;
@@ -760,9 +740,7 @@ __sm_prev(smc, result)
  * PUBLIC: int __sm_key_size __P((sm_cursor_t *, int *));
  */
 int
-__sm_key_size(smc, size)
-	sm_cursor_t *smc;
-	int *size;
+__sm_key_size(sm_cursor_t* smc, int* size)
 {
 	int rc = DBSQL_SUCCESS;
 	DBT key, data;
@@ -804,9 +782,7 @@ __sm_key_size(smc, size)
  * PUBLIC: int __sm_data_size __P((sm_cursor_t *, int *));
  */
 int
-__sm_data_size(smc, size)
-	sm_cursor_t *smc;
-	int *size;
+__sm_data_size(sm_cursor_t* smc, int* size)
 {
 	int rc = DBSQL_SUCCESS;
 	DBT key, data;
@@ -949,11 +925,7 @@ __sm_key(smc, offset, len, value)
  * PUBLIC: size_t __sm_data __P((sm_cursor_t *, size_t, size_t, char *));
  */
 size_t
-__sm_data(smc, offset, len, value)
-	sm_cursor_t *smc;
-	size_t offset;
-	size_t len;
-	char *value;
+__sm_data(sm_cursor_t* smc, size_t offset, size_t len, char* value)
 {
 	size_t amt = 0;
 	DBT key, data;
@@ -996,9 +968,7 @@ __sm_data(smc, offset, len, value)
  * PUBLIC: int __sm_first __P((sm_cursor_t *, int *));
  */
 int
-__sm_first(smc, result)
-	sm_cursor_t *smc;
-	int *result;
+__sm_first(sm_cursor_t* smc, int* result)
 {
 	int rc = DBSQL_SUCCESS;
 	DBT key, data;
@@ -1037,9 +1007,7 @@ __sm_first(smc, result)
  * PUBLIC: int __sm_last __P((sm_cursor_t *, int *));
  */
 int
-__sm_last(smc, result)
-	sm_cursor_t *smc;
-	int *result;
+__sm_last(sm_cursor_t* smc, int* result)
 {
 	int rc = DBSQL_SUCCESS;
 	DBT key, data;
@@ -1123,8 +1091,7 @@ __sm_insert(smc, k, k_len, v, v_len)
  * PUBLIC: int __sm_delete __P((sm_cursor_t *));
  */
 int
-__sm_delete(smc)
-	sm_cursor_t *smc;
+__sm_delete(sm_cursor_t* smc)
 {
 	int rc = DBSQL_SUCCESS;
 
@@ -1146,9 +1113,7 @@ __sm_delete(smc)
  * PUBLIC: int __sm_drop_table __P((sm_t *, int));
  */
 int
-__sm_drop_table(sm, id)
-	sm_t *sm;
-	int id;
+__sm_drop_table(sm_t* sm, int id)
 {
 	int rc;
 	sm_rec_t *smr;
@@ -1180,9 +1145,7 @@ __sm_drop_table(sm, id)
  * PUBLIC: int __sm_clear_table __P((sm_t *, int));
  */
 int
-__sm_clear_table(sm, id)
-	sm_t *sm;
-	int id;
+__sm_clear_table(sm_t* sm, int id)
 {
 	int rc;
 	u_int32_t count = 0;
@@ -1208,11 +1171,7 @@ __sm_clear_table(sm, id)
  * STATIC: static int __sm_resource __P((sm_t *, u_int32_t *, int, int));
  */
 static int
-__sm_resource(sm, id, type, init)
-	sm_t *sm;
-	u_int32_t *id;
-	int type;
-	int init;
+__sm_resource(sm_t* sm, u_int32_t* id, int type, int init)
 {
 	int rc, flags;
 	char name[1024];
@@ -1270,9 +1229,7 @@ __sm_resource(sm, id, type, init)
  * PUBLIC: int __sm_open_table __P((sm_t *, int *));
  */
 int
-__sm_open_table(sm, id)
-	sm_t *sm;
-	int *id;
+__sm_open_table(sm_t* sm, int* id)
 {
 	return __sm_resource(sm, id, SMR_TYPE_TABLE, 0);
 }
@@ -1284,9 +1241,7 @@ __sm_open_table(sm, id)
  * PUBLIC: int __sm_create_table __P((sm_t *, int *));
  */
 int
-__sm_create_table(sm, id)
-	sm_t *sm;
-	int *id;
+__sm_create_table(sm_t* sm, int* id)
 {
 	return __sm_resource(sm, id, SMR_TYPE_TABLE, 1);
 }
@@ -1297,9 +1252,7 @@ __sm_create_table(sm, id)
  * PUBLIC: int __sm_create_index __P((sm_t *, int *));
  */
 int
-__sm_create_index(sm, id)
-	sm_t *sm;
-	int *id;
+__sm_create_index(sm_t* sm, int* id)
 {
 	return __sm_resource(sm, id, SMR_TYPE_INDEX, 1);
 }
@@ -1310,10 +1263,7 @@ __sm_create_index(sm, id)
  * PUBLIC: int __sm_set_format_version __P((sm_t *, int, u_int32_t));
  */
 int
-__sm_set_format_version(sm, id, ver)
-	sm_t *sm;
-	int id;
-	u_int32_t ver;
+__sm_set_format_version(sm_t* sm, int id, u_int32_t ver)
 {
 	int rc;
 	DBT key, data;
@@ -1353,9 +1303,7 @@ __sm_set_format_version(sm, id, ver)
  * PUBLIC: int __sm_get_format_version __P((sm_t *, u_int32_t *));
  */
 int
-__sm_get_format_version(sm, ver)
-	sm_t *sm;
-	u_int32_t *ver;
+__sm_get_format_version(sm_t* sm, u_int32_t* ver)
 {
 	int rc;
 	DBT key, data;
@@ -1406,9 +1354,7 @@ __sm_get_format_version(sm, ver)
  * PUBLIC: int __sm_set_schema_sig __P((sm_t *, u_int32_t));
  */
 int
-__sm_set_schema_sig(sm, sig)
-	sm_t *sm;
-	u_int32_t sig;
+__sm_set_schema_sig(sm_t* sm, u_int32_t sig)
 {
 	int rc;
 	char *k = SM_SCHEMA_SIG;
@@ -1447,9 +1393,7 @@ __sm_set_schema_sig(sm, sig)
  * PUBLIC: int __sm_get_schema_sig __P((sm_t *, u_int32_t *));
  */
 int
-__sm_get_schema_sig(sm, sig)
-	sm_t *sm;
-	u_int32_t *sig;
+__sm_get_schema_sig(sm_t* sm, u_int32_t* sig)
 {
 	int rc;
 	DBT key, data;
