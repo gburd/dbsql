@@ -71,10 +71,7 @@ typedef struct expr_mask_set {
  * STATIC: static int __expr_split __P((int, expr_info_t *, expr_t *));
  */
 static int
-__expr_split(num_slot, slot, expr)
-	int num_slot;
-	expr_info_t *slot;
-	expr_t *expr;
+__expr_split(int num_slot, expr_info_t* slot, expr_t* expr)
 {
 	int cnt = 0;
 	if (expr == 0 || num_slot < 1)
@@ -101,9 +98,7 @@ __expr_split(num_slot, slot, expr)
  * STATIC: static int __get_cursor_bitmask __P((expr_mask_set_t *, int));
  */
 static int
-__get_cursor_bitmask(mask_set, cursor)
-	expr_mask_set_t *mask_set;
-	int cursor;
+__get_cursor_bitmask(expr_mask_set_t* mask_set, int cursor)
 {
 	int i;
 	for (i = 0; i < mask_set->n; i++) {
@@ -140,9 +135,7 @@ __get_cursor_bitmask(mask_set, cursor)
  * STATIC: static int __expr_table_usage __P((expr_mask_set_t *, expr_t *));
  */
 static int
-__expr_table_usage(mask_set, p)
-	expr_mask_set_t *mask_set;
-	expr_t *p;
+__expr_table_usage(expr_mask_set_t* mask_set, expr_t* p)
 {
 	int i;
 	unsigned int mask = 0;
@@ -175,8 +168,7 @@ __expr_table_usage(mask_set, p)
  * STATIC: static int __allowed_op __P((int));
  */
 static int
-__allowed_op(op)
-	int op;
+__allowed_op(int op)
 {
 	switch(op) {
 	case TK_LT: /* FALLTHROUGH */
@@ -201,9 +193,7 @@ __allowed_op(op)
  * STATIC: static void expr_analyze __P((expr_mask_set_t *, expr_info_t *));
  */
 static void
-__expr_analyze(mask_set, info)
-	expr_mask_set_t *mask_set;
-	expr_info_t *info;
+__expr_analyze(expr_mask_set_t* mask_set, expr_info_t* info)
 {
 	expr_t *expr = info->p;
 	info->prereqLeft = __expr_table_usage(mask_set, expr->pLeft);
@@ -1391,8 +1381,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
  * PUBLIC: void __where_end __P((where_info_t *));
  */
 void
-__where_end(winfo)
-	where_info_t *winfo;
+__where_end(where_info_t* winfo)
 {
 	int i, addr;
 	where_level_t *level;

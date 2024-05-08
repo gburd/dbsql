@@ -22,8 +22,7 @@ extern void __tcl_sql_func_md5finalize(dbsql_func_t *);
  *	external linkage.
  */
 void
-__register_tcl_sql_funcs(dbp)
-	DBSQL *dbp;
+__register_tcl_sql_funcs(DBSQL* dbp)
 {
 	static struct {
 		char *name;

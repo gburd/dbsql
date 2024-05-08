@@ -126,9 +126,7 @@ static et_info_t fmtinfo[] = {
  *	always returned.
  */
 static int
-et_getdigit(val, cnt)
-	long_double_t *val;
-	int *cnt;
+et_getdigit(long_double_t* val, int* cnt)
 {
 	int digit;
 	long_double_t d;
@@ -757,10 +755,7 @@ __et_printf(dbp, func, arg, fmt, ap)
  * STATIC: static void mout __P((void *, char *, int));
  */
 static void
-__mout(arg, zNewText, nNewChar)
-	void *arg;
-	char *zNewText;
-	int nNewChar;
+__mout(void* arg, char* zNewText, int nNewChar)
 {
 	xvprintf_t *pM = (xvprintf_t*)arg;
 	if (pM->len + nNewChar + 1 > pM->amt) {

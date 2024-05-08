@@ -36,9 +36,7 @@
  * PUBLIC: table_t *__src_list_lookup __P((parser_t *, src_list_t *));
  */
 table_t *
-__src_list_lookup(parser, src)
-	parser_t *parser;
-	src_list_t *src;
+__src_list_lookup(parser_t* parser, src_list_t* src)
 {
 	table_t *table = 0;
 	int i;
@@ -60,10 +58,7 @@ __src_list_lookup(parser, src)
  * PUBLIC: int __is_table_read_only __P((parser_t *, table_t *, int));
  */
 int
-__is_table_read_only(parser, table, views_ok)
-	parser_t *parser;
-	table_t *table;
-	int views_ok;
+__is_table_read_only(parser_t* parser, table_t* table, int views_ok)
 {
 	if (table->readOnly) {
 		__error_msg(parser, "table %s may not be modified",

@@ -103,10 +103,7 @@ struct callback_data {
  *	Decode a pointer encoded in a string to an pointer to a structure.
  */
 static int
-get_dbsql_from_ptr(interp, args, dbsqlp)
-	Tcl_Interp *interp;
-	const char *args;
-	DBSQL **dbsqlp;
+get_dbsql_from_ptr(Tcl_Interp *interp, const char *args, DBSQL **dbsqlp)
 {
 	if (sscanf(args, PTR_FMT, (void**)dbsqlp) != 1 &&
 	    (args[0] != '0' || args[1] != 'x' ||
@@ -123,10 +120,7 @@ get_dbsql_from_ptr(interp, args, dbsqlp)
  *	Decode a pointer to an sqlvm_t object.
  */
 static int
-get_sqlvm_from_ptr(interp, args, sqlvmp)
-	Tcl_Interp *interp;
-	const char *args;
-	dbsql_stmt_t **sqlvmp;
+get_sqlvm_from_ptr(Tcl_Interp *interp, const char *args, dbsql_stmt_t **sqlvmp)
 {
 	if (sscanf(args, PTR_FMT, (void**)sqlvmp) != 1) {
 		Tcl_AppendResult(interp,
@@ -150,10 +144,7 @@ get_sqlvm_from_ptr(interp, args, sqlvmp)
  *	that helps.  If nothing works, a fatal error is generated.
  */
 static int
-__encode_as_ptr(interp, ptr, p)
-	Tcl_Interp *interp;
-	char *ptr;
-	void *p;
+__encode_as_ptr(Tcl_Interp* interp, char* ptr, void* p)
 {
 	void *p2;
 
@@ -180,11 +171,7 @@ __encode_as_ptr(interp, ptr, p)
  *	Returns:  The name of an open database.
  */
 static int
-t__dbsql_env_create(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__dbsql_env_create(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	char *err_msgs;
@@ -215,11 +202,7 @@ t__dbsql_env_create(_dbctx, interp, argc, argv)
  *	The callback routine for DBSQL->exec_printf().
  */
 static int
-exec_printf_cb(arg, argc, argv, name)
-	void *arg;
-	int argc;
-	char **argv;
-	char **name;
+exec_printf_cb(void* arg, int argc, char* *argv, char* *name)
 {
 	Tcl_DString *str;
 	int i;
@@ -246,11 +229,7 @@ exec_printf_cb(arg, argc, argv, name)
  *	one %s or %q.  STRING is the value inserted into %s or %q.
  */
 static int
-t__exec_printf(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__exec_printf(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	Tcl_DString str;
@@ -291,11 +270,7 @@ FIXME
  *	Return the result.
  */
 static int
-test_xprintf(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+test_xprintf(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	int i;
 	char *result = 0;
@@ -324,11 +299,7 @@ test_xprintf(_dbctx, interp, argc, argv)
  *	one %s or %q.  STRING is the value inserted into %s or %q.
  */
 static int
-t__get_table_printf(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__get_table_printf(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	Tcl_DString str;
@@ -379,11 +350,7 @@ t__get_table_printf(_dbctx, interp, argc, argv)
  *	Returns the integer ROWID of the most recent insert.
  */
 static int
-t__last_rowid(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__last_rowid(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	dbsql_ctx_t *dbctx = (dbsql_ctx_t *)_dbctx;
@@ -410,11 +377,7 @@ t__last_rowid(_dbctx, interp, argc, argv)
  *	Closes the database.
  */
 static int
-t__test_close(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__test_close(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 
@@ -490,11 +453,7 @@ dstr_append(p, z, divider)
  *	Invoked for each callback from dbsql_exec
  */
 static int
-exec_func_callback(data, argc, argv, notused)
-	void *data;
-	int argc;
-	char **argv;
-	char **notused;
+exec_func_callback(void* data, int argc, char* *argv, char* *notused)
 {
 	struct dstr *p;
 	int i;
@@ -552,11 +511,7 @@ exec_func(context, argc, argv)
  *	to test the DBSQL_MISUSE detection logic.
  */
 static int
-t__create_function(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__create_function(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	extern void Md5_Register(DBSQL*);
@@ -586,7 +541,7 @@ typedef struct cnt {
 
 /*
  * count_step --
- *	
+ *
  */
 static void
 count_step(context, argc, argv)
@@ -603,11 +558,10 @@ count_step(context, argc, argv)
 
 /*
  * count_finalize --
- *	
+ *
  */
 static void
-count_finalize(context)
-	dbsql_func_t *context;
+count_finalize(dbsql_func_t* context)
 {
 	cnt_t *p;
 	p = dbsql_aggregate_context(context, sizeof(*p));
@@ -627,11 +581,7 @@ count_finalize(context)
  *	to test the DBSQL_MISUSE detection logic.
  */
 static int
-t__create_aggregate(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__create_aggregate(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 
@@ -659,11 +609,7 @@ TODO
  *	Call mprintf with three integer arguments.
  */
 static int
-dbsql_mprintf_int(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+dbsql_mprintf_int(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	int a[3], i;
 	char *buf;
@@ -692,11 +638,7 @@ dbsql_mprintf_int(_dbctx, interp, argc, argv)
  *	Call mprintf with two integer arguments and one string argument.
  */
 static int
-dbsql_mprintf_str(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+dbsql_mprintf_str(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	int a[3], i;
 	char *buf;
@@ -725,11 +667,7 @@ dbsql_mprintf_str(_dbctx, interp, argc, argv)
  *	Call mprintf with two integer arguments and one double argument
  */
 static int
-dbsql_mprintf_double(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+dbsql_mprintf_double(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	int a[3], i;
 	double r;
@@ -764,11 +702,7 @@ dbsql_mprintf_double(_dbctx, interp, argc, argv)
  */
 #ifdef MEMORY_DEBUG
 static int
-dbsql_malloc_fail(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+dbsql_malloc_fail(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	int n;
 
@@ -796,11 +730,7 @@ dbsql_malloc_fail(_dbctx, interp, argc, argv)
  */
 #ifdef MEMORY_DEBUG
 static int
-dbsql_malloc_stat(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+dbsql_malloc_stat(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	char buf[200];
 
@@ -822,11 +752,7 @@ dbsql_malloc_stat(_dbctx, interp, argc, argv)
  *	the event of a program crash.
  */
 static int
-t__dbsql_abort(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__dbsql_abort(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	COMPQUIET(_dbctx, NULL);
 
@@ -878,11 +804,7 @@ test_func(context, argc, argv)
  *	Register the test SQL function on the database DB under the name NAME.
  */
 static int
-t__register_func(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__register_func(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	int rc;
@@ -913,11 +835,7 @@ t__register_func(_dbctx, interp, argc, argv)
  *	Return non-zero should cause the query to abort.
  */
 static int
-__remember_data_types(interp, cols, argv, colv)
-	Tcl_Interp *interp;
-	int cols;
-	char **argv;
-	char **colv;
+__remember_data_types(Tcl_Interp* interp, int cols, char* *argv, char* *colv)
 {
 	int i;
 	Tcl_Obj *list, *elem;
@@ -946,11 +864,7 @@ __remember_data_types(interp, cols, argv, colv)
  *	against the database connection.
  */
 static int
-t__dbsql_datatypes(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__dbsql_datatypes(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	int rc;
@@ -981,11 +895,7 @@ t__dbsql_datatypes(_dbctx, interp, argc, argv)
  *	into TAILVAR.
  */
 static int
-t__dbsql_compile(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__dbsql_compile(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	dbsql_stmt_t *vm;
@@ -1029,11 +939,7 @@ t__dbsql_compile(_dbctx, interp, argc, argv)
  *	Column results are written into three variables.
  */
 static int
-t__dbsql_step(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__dbsql_step(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	dbsql_stmt_t *vm;
@@ -1102,11 +1008,7 @@ t__dbsql_step(_dbctx, interp, argc, argv)
  *	Shutdown a virtual machine.
  */
 static int
-t__dbsql_finalize(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__dbsql_finalize(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	dbsql_stmt_t *vm;
@@ -1142,11 +1044,7 @@ t__dbsql_finalize(_dbctx, interp, argc, argv)
  *	Reset a virtual machine and prepare it to be run again.
  */
 static int
-t__dbsql_reset(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__dbsql_reset(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	dbsql_stmt_t *vm;
@@ -1193,11 +1091,7 @@ static char *dbsql_static_bind_value = 0;
  *	of the VALUE is made.
  */
 static int
-t__dbsql_bind(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__dbsql_bind(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	DBSQL *dbp;
 	dbsql_stmt_t *vm;
@@ -1252,11 +1146,7 @@ t__dbsql_bind(_dbctx, interp, argc, argv)
  *	fire.  Then additional breakpoints can be set to trace down the bug.
  */
 static int
-t__dbsql_breakpoint(_dbctx, interp, argc, argv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int argc;
-	char **argv;
+t__dbsql_breakpoint(void* _dbctx, Tcl_Interp* interp, int argc, char* *argv)
 {
 	COMPQUIET(_dbctx, NULL);
 
@@ -1267,8 +1157,7 @@ t__dbsql_breakpoint(_dbctx, interp, argc, argv)
  *	Register commands with the TCL interpreter.
  */
 int
-__testset_1_init(interp)
-	Tcl_Interp *interp;
+__testset_1_init(Tcl_Interp* interp)
 {
 	extern int dbsql_search_count;
 	extern int dbsql_interrupt_count;
@@ -1343,11 +1232,7 @@ FIXME
  * col_names			Name for each column
  */
 static int
-__tcl_process_row(_data, ncol, col, col_names)
-	void *_data;
-	int ncol;
-	char **col;
-	char **col_names;
+__tcl_process_row(void* _data, int ncol, char* *col, char* *col_names)
 {
 	callback_data_t *data = (callback_data_t*)_data;
 	int i, rc;
@@ -1388,7 +1273,7 @@ __tcl_process_row(_data, ncol, col, col_names)
 					Tcl_DStringFree(&tcol);
 					Tcl_ExternalToUtfDString(NULL,
 						 col_names[i+ncol], -1, &tcol);
-					Tcl_SetVar2(data->interp, data->array, 
+					Tcl_SetVar2(data->interp, data->array,
 						    Tcl_DStringValue(&type),
 						    Tcl_DStringValue(&tcol),
 						    TCL_LIST_ELEMENT |
@@ -1408,7 +1293,7 @@ __tcl_process_row(_data, ncol, col, col_names)
 				Tcl_DStringInit(&tcol);
 				Tcl_ExternalToUtfDString(NULL, z, -1, &tcol);
 				Tcl_SetVar2(data->interp, data->array,
-					    data->col_names[i], 
+					    data->col_names[i],
 					    Tcl_DStringValue(&tcol), 0);
 				Tcl_DStringFree(&tcol);
 			}
@@ -1557,11 +1442,7 @@ __tcl_process_row2(_data, ncol, col, col_names)
  * col_names			Name for each column
  */
 static int
-__tcl_process_row3(_data, ncol, col, col_names)
-	void *_data;
-	int ncol;
-	char **col;
-	char **col_names;
+__tcl_process_row3(void* _data, int ncol, char* *col, char* *col_names)
 {
 	Tcl_Interp *interp = (Tcl_Interp*)_data;
 	Tcl_Obj *elem;
@@ -1589,8 +1470,7 @@ __tcl_process_row3(_data, ncol, col, col_names)
  *	Called when the command is deleted.
  */
 static void
-__tcl_delete_cmd(_dbctx)
-	void *_dbctx;
+__tcl_delete_cmd(void* _dbctx)
 {
 	dbsql_ctx_t *dbctx = (dbsql_ctx_t*)_dbctx;
 	dbctx->dbp->close(dbctx->dbp);
@@ -1647,8 +1527,7 @@ __tcl_busy_handler(cd, table, tries)
  *	This routine is invoked as the 'progress callback' for the database.
  */
 static int
-__tcl_progress_handler(cd)
-	void *cd;
+__tcl_progress_handler(void* cd)
 {
 	int rc;
 	dbsql_ctx_t *dbctx = (dbsql_ctx_t*)cd;
@@ -1690,8 +1569,7 @@ __tcl_trace_handler(_dbctx, sql)
  *	of being committed.
  */
 static int
-__tcl_commit_handler(_dbctx)
-	void *_dbctx;
+__tcl_commit_handler(void* _dbctx)
 {
 	int rc;
 	dbsql_ctx_t *dbctx = (dbsql_ctx_t*)_dbctx;
@@ -1727,7 +1605,7 @@ __tcl_eval_sql_fn(context, argc, argv)
 	rc = Tcl_Eval(p->interp, Tcl_DStringValue(&cmd));
 	if (rc) {
 		dbsql_set_result_error(context,
-					Tcl_GetStringResult(p->interp), -1); 
+					Tcl_GetStringResult(p->interp), -1);
 	} else {
 		dbsql_set_result_string(context,
 					 Tcl_GetStringResult(p->interp), -1);
@@ -1957,7 +1835,7 @@ __tcl_dbsql_cmd_impl(_dbctx, interp, objc, objv)
 	case DBSQL__PROGRESS:
 		/*
 		 *    $db progress ?N CALLBACK?
-		 * 
+		 *
 		 * Invoke the given callback every N virtual machine
 		 * opcodes while executing queries.
 		 */
@@ -2336,8 +2214,7 @@ __tcl_sql_func_randstr(context, argc, argv)
  *	external linkage.
  */
 void
-__register_tcl_sql_funcs(dbp)
-	DBSQL *dbp;
+__register_tcl_sql_funcs(DBSQL* dbp)
 {
 	static struct {
 		char *name;
@@ -2425,11 +2302,7 @@ __register_tcl_sql_funcs(dbp)
  *          correctly.
  */
 static int
-__tcl_dbsql_impl(_dbctx, interp, objc, objv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int objc;
-	Tcl_Obj *const*objv;
+__tcl_dbsql_impl(void* _dbctx, Tcl_Interp* interp, int objc, Tcl_Obj* const*objv)
 {
 	int rc;
 	int mode;
@@ -2555,8 +2428,7 @@ __tcl_dbsql_impl(_dbctx, interp, objc, objv)
  *	By using this single name, there are no Tcl namespace issues.
  */
 int
-dbsql_init_tcl_interface(interp)
-	Tcl_Interp *interp;
+dbsql_init_tcl_interface(Tcl_Interp* interp)
 {
 	const char *cmd = "dbsql";
 
@@ -2594,9 +2466,7 @@ static char main_loop[] =
  * main --
  */
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char* *argv)
 {
 	int i;
 	const char *info;

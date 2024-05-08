@@ -116,10 +116,7 @@
  * PUBLIC: void __hash_init __P((hash_t *, int, int));
  */
 void
-__hash_init(this, class, copy_key_p)
-	hash_t *this;
-	int class;
-	int copy_key_p;
+__hash_init(hash_t* this, int class, int copy_key_p)
 {
 	DBSQL_ASSERT(this != 0);
 	DBSQL_ASSERT(class >= DBSQL_HASH_INT && class <= DBSQL_HASH_BINARY);
@@ -141,8 +138,7 @@ __hash_init(this, class, copy_key_p)
  * PUBLIC: void __hash_clear __P((hash_t *));
  */
 void
-__hash_clear(this)
-	hash_t *this;
+__hash_clear(hash_t* this)
 {
 	hash_ele_t *elem;
 	DBSQL_ASSERT(this != 0);
@@ -321,9 +317,7 @@ static int
  * STATIC: static void __rehash __P((hash_t *, int));
  */
 static void
-__rehash(this, new_size)
-	hash_t *this;
-	int new_size;
+__rehash(hash_t* this, int new_size)
 {
 	struct _ht *new_ht;           /* The new hash table */
 	hash_ele_t *elem, *next_elem; /* For looping over existing elements */

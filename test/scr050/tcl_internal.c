@@ -30,10 +30,7 @@
  *	with the name and pointer, id and type.
  */
 DBSQLTCL_INFO *
-__dbsql_tcl_new_info(interp, dbp, name)
-	Tcl_Interp *interp;
-	DBSQL *dbp;
-	char *name;
+__dbsql_tcl_new_info(Tcl_Interp* interp, DBSQL* dbp, char* name)
 {
 	DBSQLTCL_INFO *p;
 	int i, ret;
@@ -110,8 +107,7 @@ __dbsql_tcl_name_to_info(name)
  * PUBLIC: void  __dbsql_tcl_delete_info __P((DBSQLTCL_INFO *));
  */
 void
-__dbsql_tcl_delete_info(p)
-	DBSQLTCL_INFO *p;
+__dbsql_tcl_delete_info(DBSQLTCL_INFO* p)
 {
 	if (p == NULL)
 		return;
@@ -133,9 +129,7 @@ __dbsql_tcl_delete_info(p)
  * PUBLIC: void  __dbsql_tcl_set_info_dbp __P((DBSQLTCL_INFO *, void *));
  */
 void
-__dbsql_tcl_set_info_dbp(p, data)
-	DBSQLTCL_INFO *p;
-	void *data;
+__dbsql_tcl_set_info_dbp(DBSQLTCL_INFO* p, void* data)
 {
 	if (p == NULL)
 		return;
@@ -172,8 +166,7 @@ __dbsql_tcl_return_setup(interp, ret, ok, errmsg)
 	msg = dbsql_strerror(ret);
 	Tcl_AppendResult(interp, msg, NULL);
 
-	if (ok)
-		return (TCL_OK);
+if(return (TCL_OK))
 	else {
 		Tcl_SetErrorCode(interp, "DBSQL", msg, NULL);
 		return (TCL_ERROR);
@@ -184,10 +177,7 @@ __dbsql_tcl_return_setup(interp, ret, ok, errmsg)
  * PUBLIC: int __dbsql_tcl_error_setup __P((Tcl_Interp *, int, char *));
  */
 int
-__dbsql_tcl_error_setup(interp, ret, errmsg)
-	Tcl_Interp *interp;
-	int ret;
-	char *errmsg;
+__dbsql_tcl_error_setup(Tcl_Interp* interp, int ret, char* errmsg)
 {
 	Tcl_SetErrno(ret);
 	Tcl_AppendResult(interp, errmsg, ":", Tcl_PosixError(interp), NULL);

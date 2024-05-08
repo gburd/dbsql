@@ -33,10 +33,7 @@
  * PUBLIC: int __dbsql_umalloc __P((DBSQL *, size_t, void *));
  */
 int
-__dbsql_umalloc(dbp, size, storep)
-	DBSQL *dbp;
-	size_t size;
-	void *storep;
+__dbsql_umalloc(DBSQL* dbp, size_t size, void* storep)
 {
 	return (__os_umalloc((dbp ? dbp->dbenv : NULL), size, storep));
 }
@@ -48,10 +45,7 @@ __dbsql_umalloc(dbp, size, storep)
  * PUBLIC: int __dbsql_urealloc __P((DBSQL *, size_t, void *));
  */
 int
-__dbsql_urealloc(dbp, size, storep)
-	DBSQL *dbp;
-	size_t size;
-	void *storep;
+__dbsql_urealloc(DBSQL* dbp, size_t size, void* storep)
 {
 	return (__os_urealloc((dbp ? dbp->dbenv : NULL), size, storep));
 }
@@ -63,9 +57,7 @@ __dbsql_urealloc(dbp, size, storep)
  * PUBLIC: void __dbsql_ufree __P((DBSQL *, void *));
  */
 void
-__dbsql_ufree(dbp, ptr)
-	DBSQL *dbp;
-	void *ptr;
+__dbsql_ufree(DBSQL* dbp, void* ptr)
 {
 	__os_ufree((dbp ? dbp->dbenv : NULL), ptr);
 }
@@ -141,10 +133,7 @@ __dbsql_calloc(dbp, num, size, storep)
  * PUBLIC: int __dbsql_malloc __P((DBSQL *, size_t, void *));
  */
 int
-__dbsql_malloc(dbp, size, storep)
-	DBSQL *dbp;
-	size_t size;
-	void *storep;
+__dbsql_malloc(DBSQL* dbp, size_t size, void* storep)
 {
 	return (__os_malloc((dbp ? dbp->dbenv : NULL), size, storep));
 }
@@ -156,10 +145,7 @@ __dbsql_malloc(dbp, size, storep)
  * PUBLIC: int __dbsql_realloc __P((DBSQL *, size_t, void *));
  */
 int
-__dbsql_realloc(dbp, size, storep)
-	DBSQL *dbp;
-	size_t size;
-	void *storep;
+__dbsql_realloc(DBSQL* dbp, size_t size, void* storep)
 {
 	return (__os_realloc((dbp ? dbp->dbenv : NULL), size, storep));
 }
@@ -171,9 +157,7 @@ __dbsql_realloc(dbp, size, storep)
  * PUBLIC: void __dbsql_free __P((DBSQL *, void *));
  */
 void
-__dbsql_free(dbp, ptr)
-	DBSQL *dbp;
-	void *ptr;
+__dbsql_free(DBSQL* dbp, void* ptr)
 {
 	__os_free((dbp ? dbp->dbenv : NULL), ptr);
 }

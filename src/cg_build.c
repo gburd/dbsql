@@ -54,9 +54,7 @@
  * PUBLIC: void __parse_begin __P((parser_t *, int));
  */
 void
-__parse_begin(parser, explain_flag)
-	parser_t *parser;
-	int explain_flag;
+__parse_begin(parser_t* parser, int explain_flag)
 {
 	DBSQL *dbp = parser->db;
 	int i;
@@ -88,11 +86,7 @@ __parse_begin(parser, explain_flag)
  * STATIC: static int __null_callback __P((void *, int , char **, char **));
  */
 static int
-__null_callback(not_used, n, a, b)
-	void *not_used;
-	int n;
-	char **a;
-	char **b;
+__null_callback(void* not_used, int n, char* *a, char* *b)
 {
 	return 0;
 }
@@ -110,8 +104,7 @@ __null_callback(not_used, n, a, b)
  * PUBLIC: void __parse_exec __P((parser_t *));
  */
 void
-__parse_exec(parser)
-	parser_t *parser;
+__parse_exec(parser_t* parser)
 {
 	int rc = DBSQL_SUCCESS;
 	DBSQL *dbp = parser->db;
@@ -280,9 +273,7 @@ __find_index(dbp, name, database)
  * STATIC: static void __delete_index __P((DBSQL *, index_t *));
  */
 static void
-__delete_index(dbp, index)
-	DBSQL *dbp;
-	index_t *index;
+__delete_index(DBSQL* dbp, index_t* index)
 {
 	index_t *old;
 
@@ -305,9 +296,7 @@ __delete_index(dbp, index)
  * PUBLIC: void __unlink_and_delete_index __P((DBSQL *, index_t *));
  */
 void
-__unlink_and_delete_index(dbp, index)
-	DBSQL *dbp;
-	index_t *index;
+__unlink_and_delete_index(DBSQL* dbp, index_t* index)
 {
 	if (index->pTable->pIndex == index) {
 		index->pTable->pIndex = index->pNext;
@@ -336,9 +325,7 @@ __unlink_and_delete_index(dbp, index)
  * PUBLIC: void __reset_internal_schema __P((DBSQL *, int));
  */
 void
-__reset_internal_schema(dbp, idb)
-	DBSQL *dbp;
-	int idb;
+__reset_internal_schema(DBSQL* dbp, int idb)
 {
 	hash_ele_t *ele;
 	hash_t temp1;
@@ -404,8 +391,7 @@ __reset_internal_schema(dbp, idb)
  * PUBLIC: void __rollback_internal_changes __P((DBSQL *));
  */
 void
-__rollback_internal_changes(dbp)
-	DBSQL *dbp;
+__rollback_internal_changes(DBSQL* dbp)
 {
 	if (dbp->flags & DBSQL_InternChanges) {
 		__reset_internal_schema(dbp, 0);
@@ -419,8 +405,7 @@ __rollback_internal_changes(dbp)
  * PUBLIC: void __commit_internal_changes __P((DBSQL *));
  */
 void
-__commit_internal_changes(dbp)
-	DBSQL *dbp;
+__commit_internal_changes(DBSQL* dbp)
 {
 	dbp->aDb[0].schema_sig = dbp->next_sig;
 	dbp->flags &= ~DBSQL_InternChanges;
@@ -443,9 +428,7 @@ __commit_internal_changes(dbp)
  * PUBLIC: void __vdbe_delete_table __P((DBSQL *, table_t *));
  */
 void
-__vdbe_delete_table(dbp, table)
-	DBSQL *dbp;
-	table_t *table;
+__vdbe_delete_table(DBSQL* dbp, table_t* table)
 {
 	int i;
 	index_t *index, *next;
@@ -498,9 +481,7 @@ __vdbe_delete_table(dbp, table)
  * STATIC: static void __unlink_and_delete_table __P((DBSQL, table_t *));
  */
 static void
-__unlink_and_delete_table(dbp, table)
-	DBSQL *dbp;
-	table_t *table;
+__unlink_and_delete_table(DBSQL* dbp, table_t* table)
 {
 	table_t *old;
 	foreign_key_t *f1, *f2;
@@ -536,8 +517,7 @@ __unlink_and_delete_table(dbp, table)
  * PUBLIC: char *__table_name_from_token __P((token_t *));
  */
 char *
-__table_name_from_token(name)
-	token_t *name;
+__table_name_from_token(token_t* name)
 {
 	char *n;
 	__dbsql_strndup(NULL, name->z, &n, name->n);
@@ -742,9 +722,7 @@ void __start_table(parser, start, name, temp, view)
  * PUBLIC: void __add_column __P((parser_t *, token_t *));
  */
 void
-__add_column(parser, name)
-	parser_t *parser;
-	token_t *name;
+__add_column(parser_t* parser, token_t* name)
 {
 	table_t *table;
 	int i;
@@ -789,9 +767,7 @@ __add_column(parser, name)
  * PUBLIC: void __add_not_null __P((parser_t *, int));
  */
 void
-__add_not_null(parser, on_error)
-	parser_t *parser;
-	int on_error;
+__add_not_null(parser_t* parser, int on_error)
 {
 	table_t *table;
 	int i;
@@ -815,10 +791,7 @@ __add_not_null(parser, on_error)
  * PUBLIC: void __add_column_type __P((parser_t *, token_t *, token_t *));
  */
 void
-__add_column_type(parser, first, last)
-	parser_t *parser;
-	token_t *first;
-	token_t *last;
+__add_column_type(parser_t* parser, token_t* first, token_t* last)
 {
 	table_t *table;
 	int i, j;
@@ -859,10 +832,7 @@ __add_column_type(parser, first, last)
  * PUBLIC: void __add_default_value __P((parser_t *, token_t *, int));
  */
 void
-__add_default_value(parser, val, minus)
-	parser_t *parser;
-	token_t *val;
-	int minus;
+__add_default_value(parser_t* parser, token_t* val, int minus)
 {
 	table_t *table;
 	int i;
@@ -904,10 +874,7 @@ __add_default_value(parser, val, minus)
  * PUBLIC: void __add_primary_key __P((parser_t *, id_list_t *, int));
  */
 void
-__add_primary_key(parser, list, on_error)
-	parser_t *parser;
-	id_list_t *list;
-	int on_error;
+__add_primary_key(parser_t* parser, id_list_t* list, int on_error)
 {
 	table_t *table = parser->pNewTable;
 	char *type = 0;
@@ -1013,9 +980,7 @@ __collate_type(type, ntype)
  * PUBLIC: void __add_collate_type __P((parser_t *, int));
  */
 void
-__add_collate_type(parser, type)
-	parser_t *parser;
-	int type;
+__add_collate_type(parser_t* parser, int type)
 {
 	table_t *table;
 	int i;
@@ -1046,9 +1011,7 @@ __add_collate_type(parser, type)
  * PUBLIC: void __change_schema_signature __P((DBSQL *, vdbe_t *));
  */
 void
-__change_schema_signature(dbp, v)
-	DBSQL *dbp;
-	vdbe_t *v;
+__change_schema_signature(DBSQL* dbp, vdbe_t* v)
 {
 	static struct drand48_data rand;
 	static int first_time = 1;
@@ -1097,10 +1060,7 @@ __ident_length(z)
  * STATIC: static void __ident_put __P((char *, int *, char *));
  */
 static void
-__ident_put(z, idx, ident)
-	char *z;
-	int *idx;
-	char *ident;
+__ident_put(char* z, int* idx, char* ident)
 {
 	int i, j, need_quote;
 	i = *idx;
@@ -1133,8 +1093,7 @@ __ident_put(z, idx, ident)
  * STATIC: static char *__gen_create_table_stmt __P((table_t *));
  */
 static char *
-__gen_create_table_stmt(table)
-	table_t *table;
+__gen_create_table_stmt(table_t* table)
 {
 	int i, k, n;
 	char *stmt;
@@ -1193,10 +1152,7 @@ __gen_create_table_stmt(table)
  * PUBLIC:                                  select_t *));
  */
 void
-__ending_create_table_paren(parser, end, select)
-	parser_t *parser;
-	token_t *end;
-	select_t *select;
+__ending_create_table_paren(parser_t* parser, token_t* end, select_t* select)
 {
 	table_t *table;
 	DBSQL *dbp = parser->db;
@@ -1412,9 +1368,7 @@ void __create_view(parser, begin, name, select, temp)
  * PUBLIC: int __view_get_column_names __P((parser_t *, table_t *));
  */
 int
-__view_get_column_names(parser, table)
-	parser_t *parser;
-	table_t *table;
+__view_get_column_names(parser_t* parser, table_t* table)
 {
 	expr_list_t *elist;
 	select_t *sel;
@@ -1499,8 +1453,7 @@ __view_get_column_names(parser, table)
  * STATIC: static void __view_reset_column_names __P((table_t *));
  */
 static void
-__view_reset_column_names(table)
-	table_t *table;
+__view_reset_column_names(table_t* table)
 {
 	int i;
 	if (table == 0 || table->pSelect==0 ) return;
@@ -1523,9 +1476,7 @@ __view_reset_column_names(table)
  * STATIC: static void __view_reset_all __P((DBSQL *, int));
  */
 static void
-__view_reset_all(dbp, idx)
-	DBSQL *dbp;
-	int idx;
+__view_reset_all(DBSQL* dbp, int idx)
 {
 	hash_ele_t *i;
 	if (!DB_PROPERTY_HAS_VALUE(dbp, idx, DBSQL_UNRESET_VIEWS))
@@ -1548,9 +1499,7 @@ __view_reset_all(dbp, idx)
  * PUBLIC: table_t *__table_from_token __P((parser_t *, token_t *));
  */
 table_t *
-__table_from_token(parser, token)
-	parser_t *parser;
-	token_t *token;
+__table_from_token(parser_t* parser, token_t* token)
 {
 	char *name;
 	table_t *table;
@@ -1577,10 +1526,7 @@ __table_from_token(parser, token)
  * PUBLIC: void __drop_table __P((parser_t *, token_t *name, int));
  */
 void
-__drop_table(parser, name, view)
-	parser_t *parser;
-	token_t *name;
-	int view;
+__drop_table(parser_t* parser, token_t* name, int view)
 {
 	table_t *table;
 	vdbe_t *v;
@@ -1742,9 +1688,7 @@ __drop_table(parser, name, view)
  * PUBLIC: void __add_idx_key_type __P((vdbe_t *, index_t *));
  */
 void
-__add_idx_key_type(v, idx)
-	vdbe_t *v;
-	index_t *idx;
+__add_idx_key_type(vdbe_t* v, index_t* idx)
 {
 	char *type;
 	table_t *table;
@@ -1918,9 +1862,7 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
  * PUBLIC: void __defer_foreign_key __P((parser_t *, int));
  */
 void
-__defer_foreign_key(parser, deferred)
-	parser_t *parser;
-	int deferred;
+__defer_foreign_key(parser_t* parser, int deferred)
 {
 	table_t *table;
 	foreign_key_t *fkey;
@@ -1956,14 +1898,7 @@ __defer_foreign_key(parser, deferred)
  * end				The ")" that closes the CREATE INDEX statement.
  */
 void
-__create_index(parser, token, sltable, list, on_error, start, end)
-	parser_t *parser;
-	token_t *token;
-	src_list_t *sltable;
-	id_list_t *list;
-	int on_error;
-	token_t *start;
-	token_t *end;
+__create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t* list, int on_error, token_t* start, token_t* end)
 {
 	table_t *table;     /* Table to be indexed */
 	index_t *index;     /* The index to be created */
@@ -2286,9 +2221,7 @@ exit_create_index:
  * PUBLIC: void __drop_index __P((parser_t *, src_list_t *));
  */
 void
-__drop_index(parser, name)
-	parser_t *parser;
-	src_list_t *name;
+__drop_index(parser_t* parser, src_list_t* name)
 {
 	index_t *index;
 	vdbe_t *v;
@@ -2383,9 +2316,7 @@ __drop_index(parser, name)
  * PUBLIC: id_list_t *__id_list_append __P((id_list_t *, token_t *));
  */
 id_list_t *
-__id_list_append(list, token)
-	id_list_t *list;
-	token_t *token;
+__id_list_append(id_list_t* list, token_t* token)
 {
 	if (list == 0) {
 		if (__dbsql_calloc(NULL, 1, sizeof(id_list_t), &list) ==ENOMEM)
@@ -2440,10 +2371,7 @@ __id_list_append(list, token)
  * PUBLIC:                               token_t *));
  */
 src_list_t *
-__src_list_append(list, table, database)
-	src_list_t *list;
-	token_t *table;
-	token_t *database;
+__src_list_append(src_list_t* list, token_t* table, token_t* database)
 {
 	if (list == 0) {
 		if (__dbsql_calloc(NULL, 1, sizeof(src_list_t), &list)==ENOMEM)
@@ -2499,9 +2427,7 @@ __src_list_append(list, table, database)
  * PUBLIC: void __src_list_assign_cursors __P((parser_t *, src_list_t *));
  */
 void
-__src_list_assign_cursors(parser, list)
-	parser_t *parser;
-	src_list_t *list;
+__src_list_assign_cursors(parser_t* parser, src_list_t* list)
 {
 	int i;
 	for (i = 0; i < list->nSrc; i++) {
@@ -2518,9 +2444,7 @@ __src_list_assign_cursors(parser, list)
  * PUBLIC: void __src_list_add_alias __P((src_list_t *, token_t *));
  */
 void
-__src_list_add_alias(list, token)
-	src_list_t *list;
-	token_t *token;
+__src_list_add_alias(src_list_t* list, token_t* token)
 {
 	if (list && list->nSrc > 0) {
 		int i = list->nSrc - 1;
@@ -2537,8 +2461,7 @@ __src_list_add_alias(list, token)
  * PUBLIC: void __id_list_delete __P((id_list_t *));
  */
 void
-__id_list_delete(list)
-	id_list_t *list;
+__id_list_delete(id_list_t* list)
 {
 	int i;
 	if (list == 0)
@@ -2579,8 +2502,7 @@ __id_list_index(list, name)
  * PUBLIC: void __src_list_delete __P((src_list_t *));
  */
 void
-__src_list_delete(list)
-	src_list_t *list;
+__src_list_delete(src_list_t* list)
 {
 	int i;
 	if (list == 0)
@@ -2606,9 +2528,7 @@ __src_list_delete(list)
  * PUBLIC: void __dbsql_txn_begin __P((parser_t *, int));
  */
 void
-__dbsql_txn_begin(parser, on_error)
-	parser_t *parser;
-	int on_error;
+__dbsql_txn_begin(parser_t* parser, int on_error)
 {
 	DBSQL *dbp;
 
@@ -2638,8 +2558,7 @@ __dbsql_txn_begin(parser, on_error)
  * PUBLIC: void __dbsql_txn_commit __P((parser_t *));
  */
 void
-__dbsql_txn_commit(parser)
-	parser_t *parser;
+__dbsql_txn_commit(parser_t* parser)
 {
 	DBSQL *dbp;
 
@@ -2669,8 +2588,7 @@ __dbsql_txn_commit(parser)
  * PUBLIC: void __dbsql_txn_abort __P((parser_t *));
  */
 void
-__dbsql_txn_abort(parser)
-	parser_t *parser;
+__dbsql_txn_abort(parser_t* parser)
 {
 	DBSQL *dbp;
 	vdbe_t *v;
@@ -2742,10 +2660,7 @@ void __code_verify_schema(parser, idb)
  * PUBLIC: void __vdbe_prepare_write __P((parser_t*, int, int));
  */
 void
-__vdbe_prepare_write(parser, checkpoint, idb)
-	parser_t *parser;
-	int checkpoint;
-	int idb;
+__vdbe_prepare_write(parser_t* parser, int checkpoint, int idb)
 {
 	vdbe_t *v;
 	DBSQL *dbp = parser->db;
@@ -2780,8 +2695,7 @@ __vdbe_prepare_write(parser, checkpoint, idb)
  * PUBLIC: void __vdbe_conclude_write __P((parser_t *));
  */
 void
-__vdbe_conclude_write(parser)
-	parser_t *parser;
+__vdbe_conclude_write(parser_t* parser)
 {
 	vdbe_t *v;
 	DBSQL *dbp = parser->db;

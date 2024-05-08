@@ -59,11 +59,7 @@ typedef struct table_result {
  * STATIC: static int __get_table_cb __P((void *, int, char **, char **));
  */
 static int
-__get_table_cb(arg, ncol, argv, colv)
-	void *arg;
-	int ncol;
-	char **argv;
-	char **colv;
+__get_table_cb(void* arg, int ncol, char* *argv, char* *colv)
 {
 	int rc;
 	table_result_t *p = (table_result_t*)arg;
@@ -248,8 +244,7 @@ __api_get_table(dbp, sql, results, nrows, ncols, err_msgs)
  * result		Result returned from from __api_get_table()
  */
 void
-__api_free_table(results)
-	char **results;
+__api_free_table(char* *results)
 {
 	char *last_result;
 

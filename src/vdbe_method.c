@@ -50,8 +50,7 @@ int dbsql_vdbe_add_op_trace = 0;
  * PUBLIC: vdbe_t *__vdbe_create __P((DBSQL *));
  */
 vdbe_t *
-__vdbe_create(dbp)
-	DBSQL *dbp;
+__vdbe_create(DBSQL* dbp)
 {
 	vdbe_t *vm;
 	if (__dbsql_calloc(dbp, 1, sizeof(vdbe_t), &vm) == ENOMEM)
@@ -74,9 +73,7 @@ __vdbe_create(dbp)
  * PUBLIC: void __vdbe_trace __P((vdbe_t *, FILE *));
  */
 void
-__vdbe_trace(vm, trace)
-	vdbe_t *vm;
-	FILE *trace;
+__vdbe_trace(vdbe_t* vm, FILE* trace)
 {
 	vm->trace = trace;
 }
@@ -101,11 +98,7 @@ __vdbe_trace(vm, trace)
  * PUBLIC: int __vdbe_add_op __P((vdbe_t *, int, int, int));
  */
 int
-__vdbe_add_op(vm, op, p1, p2)
-	vdbe_t *vm;
-	int op;
-	int p1;
-	int p2;
+__vdbe_add_op(vdbe_t* vm, int op, int p1, int p2)
 {
 	int i;
 
@@ -155,8 +148,7 @@ __vdbe_add_op(vm, op, p1, p2)
  * PUBLIC: int __vdbe_make_label __P((vdbe_t *));
  */
 int
-__vdbe_make_label(vm)
-	vdbe_t *vm;
+__vdbe_make_label(vdbe_t* vm)
 {
 	int i;
 	i = vm->nLabel++;
@@ -187,9 +179,7 @@ __vdbe_make_label(vm)
  * PUBLIC: void __vdbe_resolve_label __P((vdbe_t *, int));
  */
 void
-__vdbe_resolve_label(vm, x)
-	vdbe_t *vm;
-	int x;
+__vdbe_resolve_label(vdbe_t* vm, int x)
 {
 	int j;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
@@ -212,8 +202,7 @@ __vdbe_resolve_label(vm, x)
  * PUBLIC: int __vdbe_current_addr __P((vdbe_t *));
  */
 int
-__vdbe_current_addr(vm)
-	vdbe_t *vm;
+__vdbe_current_addr(vdbe_t* vm)
 {
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	return vm->nOp;
@@ -277,10 +266,7 @@ __vdbe_add_op_list(vm, num_op, op)
  * PUBLIC: void __vdbe_change_p1 __P((vdbe_t *, int, int));
  */
 void
-__vdbe_change_p1(vm, addr, val)
-	vdbe_t *vm;
-	int addr;
-	int val;
+__vdbe_change_p1(vdbe_t* vm, int addr, int val)
 {
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	if (vm && addr >= 0 && vm->nOp > addr && vm->aOp) {
@@ -296,10 +282,7 @@ __vdbe_change_p1(vm, addr, val)
  * PUBLIC: void __vdbe_change_p2 __P((vdbe_t *, int, int));
  */
 void
-__vdbe_change_p2(vm, addr, val)
-	vdbe_t *vm;
-	int addr;
-	int val;
+__vdbe_change_p2(vdbe_t* vm, int addr, int val)
 {
 	DBSQL_ASSERT(val >= 0);
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
@@ -374,9 +357,7 @@ __vdbe_change_p3(vm, addr, p3, n)
  * PUBLIC: void __vdbe_dequote_p3 __P((vdbe_t *, int));
  */
 void
-__vdbe_dequote_p3(vm, addr)
-	vdbe_t *vm;
-	int addr;
+__vdbe_dequote_p3(vdbe_t* vm, int addr)
 {
 	vdbe_op_t *op;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
@@ -408,9 +389,7 @@ __vdbe_dequote_p3(vm, addr)
  * PUBLIC: void __vdbe_compress_space __P((vdbe_t *, int));
  */
 void
-__vdbe_compress_space(vm, addr)
-	vdbe_t *vm;
-	int addr;
+__vdbe_compress_space(vdbe_t* vm, int addr)
 {
 	unsigned char *z;
 	int i, j;
@@ -455,10 +434,7 @@ __vdbe_compress_space(vm, addr)
  * PUBLIC: int __vdbe_find_op __P((vdbe_t *, int, int));
  */
 int
-__vdbe_find_op(vm, op, p2)
-	vdbe_t *vm;
-	int op;
-	int p2;
+__vdbe_find_op(vdbe_t* vm, int op, int p2)
 {
 	int i;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
@@ -476,9 +452,7 @@ __vdbe_find_op(vm, op, p2)
  * PUBLIC: vdbe_op_t *__vdbe_get_op __P((vdbe_t *, int));
  */
 vdbe_op_t *
-__vdbe_get_op(vm, addr)
-	vdbe_t *vm;
-	int addr;
+__vdbe_get_op(vdbe_t* vm, int addr)
 {
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	DBSQL_ASSERT(addr >= 0 && addr < vm->nOp);
@@ -552,8 +526,7 @@ dbsql_set_result_string(p, result, n)
  * EXTERN: void dbsql_set_result_null __P((dbsql_func_t *));
  */
 void
-dbsql_set_result_null(p)
-	dbsql_func_t *p;
+dbsql_set_result_null(dbsql_func_t* p)
 {
 	DBSQL_ASSERT(!p->isStep);
 	if (p->s.flags & MEM_Dyn) {
@@ -570,9 +543,7 @@ dbsql_set_result_null(p)
  * EXTERN: void dbsql_set_result_int __P((dbsql_func_t *, int));
  */
 void
-dbsql_set_result_int(p, result)
-	dbsql_func_t *p;
-	int result;
+dbsql_set_result_int(dbsql_func_t* p, int result)
 {
 	DBSQL_ASSERT(!p->isStep);
 	if (p->s.flags & MEM_Dyn) {
@@ -601,9 +572,7 @@ dbsql_set_result_int64(p, result) /*TODO*/
  * EXTERN: void dbsql_set_result_double __P((dbsql_func_t *, double));
  */
 void
-dbsql_set_result_double(p, result)
-	dbsql_func_t *p;
-	double result;
+dbsql_set_result_double(dbsql_func_t* p, double result)
 {
 	DBSQL_ASSERT(!p->isStep);
 	if (p->s.flags & MEM_Dyn) {
@@ -670,8 +639,7 @@ dbsql_set_result_varchar(p, result, size, finalize) /*TODO*/
  * EXTERN: void *dbsql_user_data __P((dbsql_func_t *));
  */
 void *
-dbsql_user_data(p)
-	dbsql_func_t *p;
+dbsql_user_data(dbsql_func_t* p)
 {
 	DBSQL_ASSERT(p && p->pFunc);
 	return p->pFunc->pUserData;
@@ -690,9 +658,7 @@ dbsql_user_data(p)
  * EXTERN: void *dbsql_aggregate_context __P((dbsql_func_t *, int));
  */
 void *
-dbsql_aggregate_context(p, num_bytes)
-	dbsql_func_t *p;
-	int num_bytes;
+dbsql_aggregate_context(dbsql_func_t* p, int num_bytes)
 {
 	DBSQL_ASSERT(p && p->pFunc && p->pFunc->xStep);
 	if (p->pAgg == 0) {
@@ -718,8 +684,7 @@ dbsql_aggregate_context(p, num_bytes)
  * EXTERN: int dbsql_aggregate_count __P((dbsql_func_t *));
  */
 int
-dbsql_aggregate_count(p)
-	dbsql_func_t *p;
+dbsql_aggregate_count(dbsql_func_t* p)
 {
 	DBSQL_ASSERT(p && p->pFunc && p->pFunc->xStep);
 	return p->cnt;
@@ -733,10 +698,7 @@ dbsql_aggregate_count(p)
  * PUBLIC: void __vdbe_print_op __P((FILE *, int, vdbe_op_t *));
  */
 void
-__vdbe_print_op(out, pc, op)
-	FILE *out;
-	int pc;
-	vdbe_op_t *op;
+__vdbe_print_op(FILE* out, int pc, vdbe_op_t* op)
 {
 	char *p3;
 	char ptr[40];
@@ -766,8 +728,7 @@ __vdbe_print_op(out, pc, op)
  * PUBLIC: int __vdbe_list __P((vdbe_t *));
  */
 int
-__vdbe_list(vm)
-	vdbe_t *vm;
+__vdbe_list(vdbe_t* vm)
 {
 	int i;
 	DBSQL *db = vm->db;
@@ -853,12 +814,7 @@ __vdbe_list(vm)
  * explain_p			True if the EXPLAIN keywords is present
  */
 void
-__vdbe_make_ready(vm, num_var, callback, callback_arg, explain_p)
-	vdbe_t *vm;
-	int num_var;
-	dbsql_callback callback;
-	void *callback_arg;
-	int explain_p;
+__vdbe_make_ready(vdbe_t* vm, int num_var, dbsql_callback callback, void* callback_arg, int explain_p)
 {
 	int n;
 
@@ -936,8 +892,7 @@ __vdbe_make_ready(vm, num_var, callback, callback_arg, explain_p)
  * PUBLIC: void __vdbe_sorter_reset __P((vdbe_t *));
  */
 void
-__vdbe_sorter_reset(vm)
-	vdbe_t *vm;
+__vdbe_sorter_reset(vdbe_t* vm)
 {
 	while(vm->pSort) {
 		sorter_t *s = vm->pSort;
@@ -961,8 +916,7 @@ __vdbe_sorter_reset(vm)
  * PUBLIC: void __vdbe_agg_reset __P((agg_t *));
  */
 void
-__vdbe_agg_reset(agg)
-	agg_t *agg;
+__vdbe_agg_reset(agg_t* agg)
 {
 	int i;
 	hash_ele_t *p;
@@ -1004,8 +958,7 @@ __vdbe_agg_reset(agg)
  * PUBLIC: void __vdbe_keylist_free __P((keylist_t *));
  */
 void
-__vdbe_keylist_free(p)
-	keylist_t *p;
+__vdbe_keylist_free(keylist_t* p)
 {
 	while(p) {
 		keylist_t *next = p->pNext;
@@ -1022,8 +975,7 @@ __vdbe_keylist_free(p)
  * PUBLIC: void __vdbe_cleanup_cursor __P((cursor_t *));
  */
 void
-__vdbe_cleanup_cursor(cx)
-	cursor_t *cx;
+__vdbe_cleanup_cursor(cursor_t* cx)
 {
 	if (cx->pCursor) {
 		__sm_close_cursor(cx->pCursor);
@@ -1042,8 +994,7 @@ __vdbe_cleanup_cursor(cx)
  * STATIC: static void __close_all_cursors __P((vdbe_t *));
  */
 static void
-__close_all_cursors(vm)
-	vdbe_t *vm;
+__close_all_cursors(vdbe_t* vm)
 {
 	int i;
 	for (i = 0; i < vm->nCursor; i++) {
@@ -1065,8 +1016,7 @@ __close_all_cursors(vm)
  * STATIC: static void __cleanup __P((vdbe_t *));
  */
 static void
-__cleanup(vm)
-	vdbe_t *vm;
+__cleanup(vdbe_t* vm)
 {
 	int i;
 	if (vm->aStack) {
@@ -1142,9 +1092,7 @@ __cleanup(vm)
  * PUBLIC: int __vdbe_reset __P((vdbe_t *, char **));
  */
 int
-__vdbe_reset(vm, err_msgs)
-	vdbe_t *vm;
-	char **err_msgs;
+__vdbe_reset(vdbe_t* vm, char* *err_msgs)
 {
 	int i;
 	DBSQL *db = vm->db;
@@ -1216,9 +1164,7 @@ __vdbe_reset(vm, err_msgs)
  * PUBLIC: int __vdbe_finalize __P((vdbe_t *, char **));
  */
 int
-__vdbe_finalize(vm, err_msgs)
-	vdbe_t *vm;
-	char **err_msgs;
+__vdbe_finalize(vdbe_t* vm, char* *err_msgs)
 {
 	int rc;
 	DBSQL *db;
@@ -1292,8 +1238,7 @@ __api_bind(p, i, val, len, copy)
  * PUBLIC: void __vdbe_delete __P((vdbe_t *));
  */
 void
-__vdbe_delete(vm)
-	vdbe_t *vm;
+__vdbe_delete(vdbe_t* vm)
 {
 	int i;
 	if (vm == 0)
@@ -1348,8 +1293,7 @@ __vdbe_delete(vm)
  * PUBLIC: int __vdbe_byte_swap __P((int));
  */
 int
-__vdbe_byte_swap(x)
-	int x;
+__vdbe_byte_swap(int x)
 {
 	union {
 		char buf[sizeof(int)];
@@ -1371,8 +1315,7 @@ __vdbe_byte_swap(x)
  * PUBLIC: int __vdbe_cursor_moveto __P((cursor_t *));
  */
 int
-__vdbe_cursor_moveto(p)
-	cursor_t *p;
+__vdbe_cursor_moveto(cursor_t* p)
 {
 	if (p->deferredMoveto) {
 		int res;

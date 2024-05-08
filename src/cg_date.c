@@ -270,8 +270,7 @@ __parse_hh_mm_ss(date, dt)
  * STATIC: static void compute_jd __P((datetime_t *));
  */
 static void
-__compute_jd(dt)
-	datetime_t *dt;
+__compute_jd(datetime_t* dt)
 {
 	int Y, M, D, A, B, X1, X2;
 
@@ -371,7 +370,7 @@ __parse_yyyy_mm_dd(date, dt)
  *	The following are acceptable forms for the input string:
  *
  *	     YYYY-MM-DD HH:MM:SS.FFF  +/-HH:MM
- *	     DDDD.DD 
+ *	     DDDD.DD
  *	     now
  *
  *	In the first form, the +/-HH:MM is always optional.  The fractional
@@ -420,8 +419,7 @@ __parse_date_or_time(date, dt)
  * STATIC: static void __compute_ymd __P((datetime_t *));
  */
 static void
-__compute_ymd(dt)
-	datetime_t *dt;
+__compute_ymd(datetime_t* dt)
 {
 	int Z, A, B, C, D, E, X1;
 	if (dt->validYMD)
@@ -447,8 +445,7 @@ __compute_ymd(dt)
  * STATIC: static void __compute_hms __P((datetime_t *));
  */
 static void
-__compute_hms(dt)
-	datetime_t *dt;
+__compute_hms(datetime_t* dt)
 {
 	int Z, s;
 	if (dt->validHMS)
@@ -472,8 +469,7 @@ __compute_hms(dt)
  * STATIC: static void __compute_ymd_hms __P((datetime_t *));
  */
 static void
-__compute_ymd_hms(dt)
-	datetime_t *dt;
+__compute_ymd_hms(datetime_t* dt)
 {
 	__compute_ymd(dt);
 	__compute_hms(dt);
@@ -486,8 +482,7 @@ __compute_ymd_hms(dt)
  * STATIC: static void __clear_ymd_hms_tz __P((datetime_t *));
  */
 static void
-__clear_ymd_hms_tz(dt)
-	datetime_t *dt;
+__clear_ymd_hms_tz(datetime_t* dt)
 {
 	dt->validYMD = 0;
 	dt->validHMS = 0;
@@ -502,8 +497,7 @@ __clear_ymd_hms_tz(dt)
  * STATIC: static double __localtime_offset __P((datetime_t *));
  */
 static double
-__localtime_offset(dt)
-	datetime_t *dt;
+__localtime_offset(datetime_t* dt)
 {
 	datetime_t x, y;
 	time_t t;
@@ -1020,8 +1014,7 @@ __strftime_sql_func(context, argc, argv)
  * PUBLIC: void __register_datetime_funcs __P((DBSQL *));
  */
 void
-__register_datetime_funcs(dbp)
-	DBSQL *dbp;
+__register_datetime_funcs(DBSQL* dbp)
 {
 	static struct {
 		char *name;
@@ -1040,8 +1033,8 @@ __register_datetime_funcs(dbp)
 	int i;
 
 	for (i = 0; i < sizeof(funcs) / sizeof(funcs[0]); i++) {
-		dbp->create_function(dbp, funcs[i].name, funcs[i].args,
-				     DBSQL_UTF8_ENCODED, NULL, funcs[i].func,
+		dbp->create_function(dbp, funcs[i].name, DBSQL_UTF8_ENCODED,
+                     funcs[i].args, NULL, funcs[i].func,
 				     NULL, NULL);
 		if (funcs[i].func) {
 			dbp->func_return_type(dbp, funcs[i].name,

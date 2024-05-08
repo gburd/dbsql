@@ -44,8 +44,7 @@
  * PUBLIC: int __safety_on __P((DBSQL *));
  */
 int
-__safety_on(dbp)
-	DBSQL *dbp;
+__safety_on(DBSQL* dbp)
 {
 	if (dbp->magic == DBSQL_STATUS_OPEN) {
 		dbp->magic = DBSQL_STATUS_BUSY;
@@ -68,8 +67,7 @@ __safety_on(dbp)
  * PUBLIC: int __safety_off __P((DBSQL *));
  */
 int
-__safety_off(dbp)
-	DBSQL *dbp;
+__safety_off(DBSQL* dbp)
 {
 	if (dbp->magic == DBSQL_STATUS_BUSY) {
 		dbp->magic = DBSQL_STATUS_OPEN;
@@ -95,8 +93,7 @@ __safety_off(dbp)
  * PUBLIC: int __safety_check __P((DBSQL *));
  */
 int
-__safety_check(dbp)
-	DBSQL *dbp;
+__safety_check(DBSQL* dbp)
 {
 	if (dbp->pVdbe != 0) {
 		dbp->magic = DBSQL_STATUS_ERROR;

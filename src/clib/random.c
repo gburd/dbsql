@@ -116,8 +116,7 @@
  */
 #ifndef HAVE_SRAND48_R
 void
-__rng_seed(buf)
-	char *buf;
+__rng_seed(char* buf)
 {
 	u_int32_t pid;
 	double jt;

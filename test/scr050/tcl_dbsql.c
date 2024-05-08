@@ -14,9 +14,9 @@
 
 /*
  * If TCL uses UTF-8 and DBSQL is configured to use iso8859, then we
- * have to do a translation when going between the two.  Set the 
+ * have to do a translation when going between the two.  Set the
  * UTF_TRANSLATION_NEEDED macro to indicate that we need to do
- * this translation.  
+ * this translation.
  */
 #if defined(TCL_UTF_MAX) && !defined(DBSQL_UTF8_ENCODING)
 #define UTF_TRANSLATION_NEEDED 1
@@ -125,7 +125,7 @@ static int __tcl_process_row(_data, ncol, col, col_names)
 					Tcl_DStringFree(&tcol);
 					Tcl_ExternalToUtfDString(NULL,
 						 col_names[i+ncol], -1, &tcol);
-					Tcl_SetVar2(data->interp, data->array, 
+					Tcl_SetVar2(data->interp, data->array,
 						    Tcl_DStringValue(&type),
 						    Tcl_DStringValue(&tcol),
 						    TCL_LIST_ELEMENT |
@@ -145,7 +145,7 @@ static int __tcl_process_row(_data, ncol, col, col_names)
 				Tcl_DStringInit(&tcol);
 				Tcl_ExternalToUtfDString(NULL, z, -1, &tcol);
 				Tcl_SetVar2(data->interp, data->array,
-					    data->col_names[i], 
+					    data->col_names[i],
 					    Tcl_DStringValue(&tcol), 0);
 				Tcl_DStringFree(&tcol);
 			}
@@ -294,11 +294,7 @@ __tcl_process_row2(_data, ncol, col, col_names)
  * col_names			Name for each column
  */
 static int
-__tcl_process_row3(_data, ncol, col, col_names)
-	void *_data;
-	int ncol;
-	char **col;
-	char **col_names;
+__tcl_process_row3(void* _data, int ncol, char* *col, char* *col_names)
 {
 	Tcl_Interp *interp = (Tcl_Interp*)_data;
 	Tcl_Obj *elem;
@@ -326,8 +322,7 @@ __tcl_process_row3(_data, ncol, col, col_names)
  *	Called when the command is deleted.
  */
 static void
-__tcl_delete_cmd(_dbctx)
-	void *_dbctx;
+__tcl_delete_cmd(void* _dbctx)
 {
 	dbsql_ctx_t *dbctx = (dbsql_ctx_t*)_dbctx;
 	dbctx->dbp->close(dbctx->dbp);
@@ -354,7 +349,8 @@ __tcl_delete_cmd(_dbctx)
  *	to execute SQL.
  */
 static int
-__tcl_busy_handler(cd, table, tries)
+__tcl_busy_handler(dbp, cd, table, tries)
+    DBSQL *dbp;
 	void *cd;
 	const char *table;
 	int tries;
@@ -384,8 +380,7 @@ __tcl_busy_handler(cd, table, tries)
  *	This routine is invoked as the 'progress callback' for the database.
  */
 static int
-__tcl_progress_handler(cd)
-	void *cd;
+__tcl_progress_handler(void* cd)
 {
 	int rc;
 	dbsql_ctx_t *dbctx = (dbsql_ctx_t*)cd;
@@ -427,8 +422,7 @@ __tcl_trace_handler(_dbctx, sql)
  *	of being committed.
  */
 static int
-__tcl_commit_handler(_dbctx)
-	void *_dbctx;
+__tcl_commit_handler(void* _dbctx)
 {
 	int rc;
 	dbsql_ctx_t *dbctx = (dbsql_ctx_t*)_dbctx;
@@ -464,7 +458,7 @@ __tcl_eval_sql_fn(context, argc, argv)
 	rc = Tcl_Eval(p->interp, Tcl_DStringValue(&cmd));
 	if (rc) {
 		dbsql_set_result_error(context,
-					Tcl_GetStringResult(p->interp), -1); 
+					Tcl_GetStringResult(p->interp), -1);
 	} else {
 		dbsql_set_result_string(context,
 					 Tcl_GetStringResult(p->interp), -1);
@@ -585,7 +579,7 @@ __tcl_dbsql_cmd_impl(_dbctx, interp, objc, objv)
 		"errorcode",            "eval",              "function",
 		"last_inserted_rowid",  "onecolumn",         "progress",
 		"timeout",              "trace",
-		0                    
+		0
 	};
 	enum DBSQL_enum {
 	DBSQL__AUTHORIZER,        DBSQL__BUSY,             DBSQL__CHANGES,
@@ -696,7 +690,7 @@ __tcl_dbsql_cmd_impl(_dbctx, interp, objc, objv)
 	case DBSQL__PROGRESS:
 		/*
 		 *    $db progress ?N CALLBACK?
-		 * 
+		 *
 		 * Invoke the given callback every N virtual machine
 		 * opcodes while executing queries.
 		 */
@@ -923,7 +917,7 @@ __tcl_dbsql_cmd_impl(_dbctx, interp, objc, objv)
 		break;
 	case DBSQL__LAST_INSERT_ROWID:
 		/*
-		*     $db last_inserted_rowid 
+		*     $db last_inserted_rowid
 		*
 		* Return an integer which is the ROWID for the most
 		* recent insert.
@@ -1050,11 +1044,7 @@ __tcl_dbsql_cmd_impl(_dbctx, interp, objc, objv)
  *          correctly.
  */
 static int
-__tcl_dbsql_impl(_dbctx, interp, objc, objv)
-	void *_dbctx;
-	Tcl_Interp *interp;
-	int objc;
-	Tcl_Obj *const*objv;
+__tcl_dbsql_impl(void* _dbctx, Tcl_Interp* interp, int objc, Tcl_Obj* const*objv)
 {
 	int rc;
 	int mode;
@@ -1189,8 +1179,7 @@ __tcl_dbsql_impl(_dbctx, interp, objc, objv)
  *	By using this single name, there are no Tcl namespace issues.
  */
 int
-dbsql_init_tcl_interface(interp)
-	Tcl_Interp *interp;
+dbsql_init_tcl_interface(Tcl_Interp* interp)
 {
 	const char *cmd = "dbsql";
 

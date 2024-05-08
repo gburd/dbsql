@@ -37,8 +37,7 @@
  * STATIC: static int __get_boolean __P((char *));
  */
 static int
-__get_boolean(z)
-	char *z;
+__get_boolean(char* z)
 {
 	static char *true[] = { "yes", "on", "true" };
 	int i;
@@ -68,8 +67,7 @@ __get_boolean(z)
  * STATIC: static int __get_safety_level __P((char *));
  */
 static int
-__get_safety_level(z)
-	char *z;
+__get_safety_level(char* z)
 {
 	static const struct {
 		const char *word;
@@ -111,11 +109,7 @@ __get_safety_level(z)
  * PUBLIC: void __pragma __P((parser_t *, token_t *, token_t *, int));
  */
 void
-__pragma(parser, left, right, minus_p)
-	parser_t *parser;
-	token_t *left;
-	token_t *right;
-	int minus_p;
+__pragma(parser_t* parser, token_t* left, token_t* right, int minus_p)
 {
 	char *left_name = 0;
 	char *right_name = 0;
