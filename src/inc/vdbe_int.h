@@ -25,15 +25,32 @@ extern "C" {
 #endif
 
 /*
- * This is the header file for information that is private to the
- * VDBE.
+ * This is the header file for information that is private to the VDBE.
+ *
+ * UPDATED for register-based VDBE (SQLite 3.52.0 architecture).
+ * Major changes:
+ *   - mem_t (Mem): 64-bit integers, encoding, BLOB, destructor callback
+ *   - cursor_t (VdbeCursor): cursor types, column cache, pointer array
+ *   - vdbe_t (Vdbe): register array replaces stack, pointer-based cursors
+ *   - Removed: stack pointer, legacy aggregator, keylist, set, sorter
  */
+
+/*
+ * Round up to the nearest multiple of 8.
+ */
+#ifndef ROUND8
+#define ROUND8(x)     (((x)+7)&~7)
+#endif
 
 /*
  * When converting from the native format to the key format and back
  * again, in addition to changing the byte order we invert the high-order
  * bit of the most significant byte.  This causes negative numbers to
  * sort before positive numbers in the memcmp() function.
+ *
+ * NOTE: These macros are retained for legacy 32-bit integer key support
+ * during the transition period.  New code should use 64-bit rowids
+ * (i64) directly via __sm_integer_key()/__sm_table_moveto().
  */
 #define KEY_TO_INT(X)   (__vdbe_byte_swap(X) ^ 0x80000000)
 #define INT_TO_KEY(X)   (__vdbe_byte_swap((X) ^ 0x80000000))
@@ -51,249 +68,481 @@ extern char *__opcode_names[];
  */
 typedef unsigned char bool_t;
 
-/*
- * The cursor can seek to a btree entry with a particular key, or
- * loop over all entries of the btree.  You can also insert new
- * entries or retrieve the key or data from the entry that the cursor
- * is currently pointing to.
- * 
- * Every cursor that the virtual machine has open is represented by an
- * instance of the following structure.
+/* Opaque type used by code in vdbe_sort.c */
+typedef struct vdbe_sorter vdbe_sorter_t;
+
+/* Elements of the linked list at vdbe.pAuxData */
+typedef struct aux_data aux_data_t;
+
+/* A cache of large TEXT or BLOB values in a VdbeCursor */
+typedef struct vdbe_txt_blb_cache vdbe_txt_blb_cache_t;
+
+/* ================================================================
+ * VdbeCursor -- register-based cursor structure
  *
- * If the cursor_t.isTriggerRow flag is set it means that this cursor is
- * really a single row that represents the NEW or OLD pseudo-table of
- * a row trigger.  The data for the row is stored in cursor_t.pData and
- * the rowid is in cursor_t.iKey.
+ * Replaces the old stack-based cursor_t.  Key changes:
+ *   - eCurType field selects among btree, sorter, vtab, pseudo cursors
+ *   - Union uc holds the type-specific cursor pointer
+ *   - Column cache fields for OP_Column optimization
+ *   - 64-bit movetoTarget for i64 rowid seeks
+ *   - Pointer-to-KeyInfo for index key comparison
+ *
+ * (SQLite: struct VdbeCursor, vdbeInt.h:79)
+ * ================================================================
  */
-struct cursor {
-	sm_cursor_t *pCursor; /* The cursor structure of the backend */
-	int lastRecno;        /* Last recno from a Next or NextIdx operation */
-	int nextRowid;        /* Next rowid returned by OP_NewRowid */
-	bool_t recnoIsValid;  /* True if lastRecno is valid */
-	bool_t keyAsData;     /* The OP_Column command works on key instead
-				 of data */
-	bool_t atFirst;       /* True if pointing to first entry */
-	bool_t useRandomRowid;/* Generate new record numbers semi-randomly */
-	bool_t nullRow;       /* True if pointing to a row with no data */
-	bool_t nextRowidValid;/* True if the nextRowid field is valid */
-	bool_t pseudoTable;   /* This is a NEW or OLD pseudo-tables of a
-				 trigger */
-	bool_t deferredMoveto;/* A call to __sm_moveto() is needed */
-	int movetoTarget;     /* Argument to the deferred __sm_moveto() */
-	sm_t *pBt;            /* Separate database holding temporary tables */
-	int nData;            /* Number of bytes in pData */
-	char *pData;          /* Data for a NEW or OLD pseudo-table */
-	int iKey;             /* Key for the NEW or OLD pseudo-table row */
+
+/* Types of VDBE cursors */
+#define CURTYPE_BTREE       0
+#define CURTYPE_SORTER      1
+#define CURTYPE_VTAB        2
+#define CURTYPE_PSEUDO      3
+
+typedef struct VdbeCursor VdbeCursor;
+struct VdbeCursor {
+	u8 eCurType;            /* One of the CURTYPE_* values above */
+	i8 iDb;                 /* Index of cursor database in db->aDb[] */
+	u8 nullRow;             /* True if pointing to a row with no data */
+	u8 deferredMoveto;      /* A call to __sm_moveto() is needed */
+	u8 isTable;             /* True for rowid tables.  False for indexes */
+#ifdef DBSQL_DEBUG
+	u8 seekOp;              /* Most recent seek operation on this cursor */
+	u8 wrFlag;              /* The wrFlag argument to __sm_cursor() */
+#endif
+	bool_t isEphemeral;     /* True for an ephemeral table */
+	bool_t useRandomRowid;  /* Generate new record numbers semi-randomly */
+	bool_t isOrdered;       /* True if the table is not unordered */
+	bool_t noReuse;         /* OpenEphemeral may not reuse this cursor */
+	bool_t colCache;        /* pCache pointer is initialized and non-NULL */
+	u16 seekHit;            /* See the OP_SeekHit and OP_IfNoHope opcodes */
+	union {
+		sm_t *pBtx;         /* Separate file holding temporary table */
+		u32 *aAltMap;       /* Mapping from table to index column numbers */
+	} ub;
+	i64 seqCount;           /* Sequence counter */
+
+	/*
+	 * Cached OP_Column parse information is only valid if cacheStatus
+	 * matches Vdbe.cacheCtr.  Vdbe.cacheCtr will never take on the
+	 * value of CACHE_STALE (0), so setting cacheStatus=CACHE_STALE
+	 * guarantees that the cache is out of date.
+	 */
+	u32 cacheStatus;        /* Cache is valid if this matches Vdbe.cacheCtr */
+	int seekResult;         /* Result of previous __sm_moveto() or 0
+				 * if there have been no prior seeks on the
+				 * cursor.  For CURTYPE_PSEUDO, seekResult is
+				 * the register holding the record. */
+
+	/*
+	 * When a new VdbeCursor is allocated, only the fields above are
+	 * zeroed.  The fields that follow are uninitialized, and must be
+	 * individually initialized prior to first use.
+	 */
+	VdbeCursor *pAltCursor; /* Associated index cursor from which to read */
+	union {
+		sm_cursor_t *pCursor;    /* CURTYPE_BTREE or _PSEUDO. SM cursor */
+		/* sqlite3_vtab_cursor *pVCur; CURTYPE_VTAB (future) */
+		vdbe_sorter_t *pSorter;  /* CURTYPE_SORTER. Sorter object */
+	} uc;
+	key_info_t *pKeyInfo;   /* Info about index keys needed by index cursors */
+	u32 iHdrOffset;         /* Offset to next unparsed byte of the header */
+	Pgno pgnoRoot;          /* Root page of the open btree cursor */
+	i16 nField;             /* Number of fields in the header */
+	u16 nHdrParsed;         /* Number of header fields parsed so far */
+	i64 movetoTarget;       /* Argument to the deferred __sm_moveto() */
+	u32 *aOffset;           /* Pointer to aType[nField] */
+	const u8 *aRow;         /* Data for the current row, if all on one page */
+	u32 payloadSize;        /* Total number of bytes in the record */
+	u32 szRow;              /* Bytes available in aRow */
+	vdbe_txt_blb_cache_t *pCache; /* Cache of large TEXT or BLOB values */
+
+	/*
+	 * Space is allocated for aType to hold at least 2*nField+1 entries:
+	 * nField slots for aType[] and nField+1 array slots for aOffset[].
+	 */
+	u32 aType[FLEXARRAY];   /* Type values for record decode. MUST BE LAST */
 };
 
 /*
- * A sorter builds a list of elements to be sorted.  Each element of
- * the list is an instance of the following structure.
+ * The size (in bytes) of a VdbeCursor object that has an nField value of N
+ * or less.  The value of SZ_VDBECURSOR(N) is guaranteed to be a multiple
+ * of 8.
  */
-typedef struct sorter sorter_t;
-struct sorter {
-  int nKey;           /* Number of bytes in the key */
-  char *zKey;         /* The key by which we will sort */
-  int nData;          /* Number of bytes in the data */
-  char *pData;        /* The data associated with this key */
-  sorter_t *pNext;    /* Next in the list */
+#define SZ_VDBECURSOR(N) \
+	(ROUND8(offsetof(VdbeCursor,aType)) + ((N)+1)*sizeof(u64))
+
+/* Return true if P is a null-only cursor */
+#define IsNullCursor(P) \
+	((P)->eCurType==CURTYPE_PSEUDO && (P)->nullRow && (P)->seekResult==0)
+
+/*
+ * A value for VdbeCursor.cacheStatus that means the cache is always invalid.
+ */
+#define CACHE_STALE 0
+
+/*
+ * Large TEXT or BLOB values can be slow to load, so we want to avoid
+ * loading them more than once.  For that reason, large TEXT and BLOB
+ * values can be stored in a cache defined by this object, and attached
+ * to the VdbeCursor using the pCache field.
+ */
+struct vdbe_txt_blb_cache {
+	char *pCValue;          /* A RCStr buffer to hold the value */
+	i64 iOffset;            /* File offset of the row being cached */
+	int iCol;               /* Column for which the cache is valid */
+	u32 cacheStatus;        /* Vdbe.cacheCtr value */
+	u32 colCacheCtr;        /* Column cache counter */
 };
 
-/* 
- * Number of buckets used for merge-sort.  
- */
-#define NSORT 30
-
 /*
- * Number of bytes of string storage space available to each stack
- * layer without having to malloc.  NBFS is short for Number of Bytes
- * For Strings.
+ * Backward compatibility note: cursor_t is forward-declared in
+ * dbsql_int.in as "struct cursor".  The old struct cursor definition
+ * has been replaced by VdbeCursor (struct VdbeCursor).  Code should
+ * migrate from cursor_t to VdbeCursor.  The cursor_t typedef in
+ * dbsql_int.in will be updated to point to VdbeCursor once all
+ * dependent code is migrated.
  */
-#define NBFS 32
 
-/*
- * A single level of the stack or a single memory cell
- * is an instance of the following structure. 
+
+/* ================================================================
+ * Mem (mem_t) -- register-based value cell
+ *
+ * Replaces the old stack-based mem_t.  Key changes:
+ *   - Union u holds i64 integer, double real, nZero, pDef
+ *   - 64-bit integer support (i64 vs old 32-bit int)
+ *   - Encoding field (enc) for UTF-8/UTF-16BE/UTF-16LE
+ *   - BLOB support (MEM_Blob flag)
+ *   - Destructor callback (xDel) for MEM_Dyn values
+ *   - Subtype field for extension types (JSON, etc.)
+ *   - Separate zMalloc buffer management (szMalloc)
+ *   - No more zShort inline buffer (replaced by zMalloc)
+ *
+ * (SQLite: struct sqlite3_value, vdbeInt.h:232)
+ * ================================================================
  */
 struct mem {
-	int i;              /* Integer value */
-	int n;              /* Number of characters in string value,
-			       including '\0' */
-	int flags;          /* Some combination of MEM_Null, MEM_Str,
-			       MEM_Dyn, etc. */
-/* Allowed values for mem_t.flags */
-#define MEM_Null      0x0001   /* Value is NULL */
-#define MEM_Str       0x0002   /* Value is a string */
-#define MEM_Int       0x0004   /* Value is an integer */
-#define MEM_Real      0x0008   /* Value is a real number */
-#define MEM_Dyn       0x0010   /* Need to call __os_free() on mem_t.z */
-#define MEM_Static    0x0020   /* mem_t.z points to a static string */
-#define MEM_Ephem     0x0040   /* mem_t.z points to an ephemeral string */
-#define MEM_Short     0x0080   /* mem_t.z points to mem_t.zShort */
-/*
- * The following MEM_ value appears only in AggElem.aMem.s.flag fields.
- * It indicates that the corresponding AggElem.aMem.z points to a
- * aggregate function context that needs to be finalized.
- */
-#define MEM_AggCtx    0x0100   /* mem_t.z points to an agg function context */
-	double r;           /* Real value */
-	char *z;            /* String value */
-	char zShort[NBFS];  /* Space for short strings */
+	union MemValue {
+		double r;           /* Real value used when MEM_Real is set */
+		i64 i;              /* Integer value used when MEM_Int is set */
+		int nZero;          /* Extra zero bytes when MEM_Zero|MEM_Blob */
+		const char *zPType; /* Pointer type when MEM_Term|MEM_Subtype|MEM_Null */
+		func_def_t *pDef;   /* Used only when flags==MEM_Agg */
+	} u;
+	char *z;                /* String or BLOB value */
+	int n;                  /* Number of characters in string value,
+				 * excluding '\0' */
+	u16 flags;              /* Some combination of MEM_Null, MEM_Str,
+				 * MEM_Dyn, etc. */
+	u8 enc;                 /* DBSQL_UTF8_ENCODED, etc. */
+	u8 eSubtype;            /* Subtype for this value */
+	/* ShallowCopy only needs to copy the information above */
+	DBSQL *db;              /* The associated database connection */
+	int szMalloc;           /* Size of the zMalloc allocation */
+	u32 uTemp;              /* Transient storage for serial_type in
+				 * OP_MakeRecord */
+	char *zMalloc;          /* Space to hold MEM_Str or MEM_Blob if
+				 * szMalloc>0 */
+	void (*xDel)(void*);    /* Destructor for Mem.z - only valid if
+				 * MEM_Dyn */
+#ifdef DBSQL_DEBUG
+	Mem *pScopyFrom;        /* This Mem is a shallow copy of pScopyFrom */
+	u16 mScopyFlags;        /* flags value immediately after the shallow
+				 * copy */
+#endif
 };
 typedef struct mem mem_t;
 
+/*
+ * Size of struct Mem not including the Mem.db member or anything that
+ * follows (i.e., the "shallow copy" portion).
+ */
+#define MEMCELLSIZE offsetof(Mem,db)
 
 /*
- * The "context" argument for a installable function.  A pointer to an
+ * MEM_ flag values for Mem.flags
+ *
+ * Affinity/type flags (one or more of the following represent the value):
+ */
+#define MEM_Undefined 0x0000   /* Value is undefined */
+#define MEM_Null      0x0001   /* Value is NULL (or a pointer) */
+#define MEM_Str       0x0002   /* Value is a string */
+#define MEM_Int       0x0004   /* Value is an integer */
+#define MEM_Real      0x0008   /* Value is a real number */
+#define MEM_Blob      0x0010   /* Value is a BLOB */
+#define MEM_IntReal   0x0020   /* MEM_Int that stringifies like MEM_Real */
+#define MEM_AffMask   0x003f   /* Mask of affinity bits */
+
+/*
+ * Extra bits that modify the meanings of the core datatypes above.
+ */
+#define MEM_FromBind  0x0040   /* Value originates from a bind */
+/*                    0x0080      Available */
+#define MEM_Cleared   0x0100   /* NULL set by OP_Null, not from data */
+#define MEM_Term      0x0200   /* String in Mem.z is zero terminated */
+#define MEM_Zero      0x0400   /* Mem.u.nZero contains count of 0s appended
+				* to blob */
+#define MEM_Subtype   0x0800   /* Mem.eSubtype is valid */
+#define MEM_TypeMask  0x0dbf   /* Mask of type bits */
+
+/*
+ * Bits that determine the storage for Mem.z for a string or blob or
+ * aggregate accumulator.
+ */
+#define MEM_Dyn       0x1000   /* Need to call Mem.xDel() on Mem.z */
+#define MEM_Static    0x2000   /* Mem.z points to a static string */
+#define MEM_Ephem     0x4000   /* Mem.z points to an ephemeral string */
+#define MEM_Agg       0x8000   /* Mem.z points to an agg function context */
+
+/* Legacy aliases for removed flags */
+#define MEM_Short     0        /* Removed: no more inline zShort buffer */
+#define MEM_AggCtx    MEM_Agg  /* Renamed to MEM_Agg */
+
+/*
+ * Return TRUE if Mem X contains dynamically allocated content -
+ * anything that needs to be deallocated to avoid a leak.
+ */
+#define VdbeMemDynamic(X)  \
+	(((X)->flags&(MEM_Agg|MEM_Dyn))!=0)
+
+/*
+ * Clear any existing type flags from a Mem and replace them with f.
+ */
+#define MemSetTypeFlag(p, f) \
+	((p)->flags = ((p)->flags&~(MEM_TypeMask|MEM_Zero))|f)
+
+/*
+ * True if Mem X is a NULL-nochng type.
+ */
+#define MemNullNochng(X) \
+	(((X)->flags&MEM_TypeMask)==(MEM_Null|MEM_Zero) \
+	  && (X)->n==0 && (X)->u.nZero==0)
+
+/*
+ * Return true if a memory cell has been initialized and is valid.
+ * For use inside assert() statements only.
+ */
+#ifdef DBSQL_DEBUG
+#define memIsValid(M)  ((M)->flags & MEM_AffMask)!=0
+#endif
+
+
+/* ================================================================
+ * VdbeFrame -- sub-program frame for OP_Program (triggers)
+ *
+ * When a sub-program is executed (OP_Program), a structure of this
+ * type is allocated to store the current value of the program counter,
+ * as well as the current memory cell array and various other frame
+ * specific values stored in the Vdbe struct.
+ *
+ * (SQLite: struct VdbeFrame, vdbeInt.h:194)
+ * ================================================================
+ */
+typedef struct VdbeFrame VdbeFrame;
+struct VdbeFrame {
+	vdbe_t *v;               /* VM this frame belongs to */
+	VdbeFrame *pParent;      /* Parent of this frame, or NULL if main */
+	vdbe_op_t *aOp;          /* Program instructions for parent frame */
+	Mem *aMem;               /* Array of memory cells for parent frame */
+	VdbeCursor **apCsr;      /* Array of Vdbe cursors for parent frame */
+	u8 *aOnce;               /* Bitmask used by OP_Once */
+	void *token;             /* Copy of sub_program_t.token */
+	i64 lastRowid;           /* Last insert rowid (db->lastRowid) */
+	aux_data_t *pAuxData;    /* Linked list of auxdata allocations */
+#ifdef DBSQL_DEBUG
+	u32 iFrameMagic;         /* magic number for sanity checking */
+#endif
+	int nCursor;             /* Number of entries in apCsr */
+	int pc;                  /* Program Counter in parent (calling) frame */
+	int nOp;                 /* Size of aOp array */
+	int nMem;                /* Number of entries in aMem */
+	int nChildMem;           /* Number of memory cells for child frame */
+	int nChildCsr;           /* Number of cursors for child frame */
+	i64 nChange;             /* Statement changes (Vdbe.nChange) */
+	i64 nDbChange;           /* Value of db->nChange */
+};
+
+/* Magic number for sanity checking on VdbeFrame objects */
+#define VDBE_FRAME_MAGIC 0x879fb71e
+
+/*
+ * Return a pointer to the array of registers allocated for use
+ * by a VdbeFrame.
+ */
+#define VdbeFrameMem(p) ((Mem *)&((u8 *)p)[ROUND8(sizeof(VdbeFrame))])
+
+
+/* ================================================================
+ * __dbsql_func -- function context (updated for register-based Mem)
+ *
+ * The "context" argument for an installable function.  A pointer to an
  * instance of this structure is the first argument to the routines used
- * implement the SQL functions.
+ * to implement the SQL functions.
  *
- * There is a typedef for this structure in dbsql.h.  So all routines,
- * even the public interface, can use a pointer to this structure.
- * But this file is the only place where the internal details of this
- * structure are known.
+ * Updated to use Mem* for return value (pOut) instead of inline mem_t,
+ * matching SQLite 3.52.0's sqlite3_context.
  *
- * This structure is defined inside of vdbe.c because it uses substructures
- * (mem_t) which are only defined there.
+ * (SQLite: struct sqlite3_context, vdbeInt.h:395)
+ * ================================================================
  */
 struct __dbsql_func {
-	func_def_t *pFunc;    /* Pointer to function information.
-				 !!! MUST BE FIRST IN STRUCT */
-	mem_t s;              /* The return value is stored here */
-	void *pAgg;           /* Aggregate context */
-	u_int8_t isError;     /* Set to true for an error */
-	u_int8_t isStep;      /* Current in the step function */
-	int cnt;              /* Number of times that the step function
-				 has been called */
+	Mem *pOut;                /* The return value is stored here */
+	func_def_t *pFunc;       /* Pointer to function information */
+	Mem *pMem;               /* Memory cell used to store aggregate context */
+	vdbe_t *pVdbe;           /* The VM that owns this context */
+	int iOp;                 /* Instruction number of OP_Function */
+	int isError;             /* Error code returned by the function */
+	u8 enc;                  /* Encoding to use for results */
+	u8 skipFlag;             /* Skip accumulator loading if true */
+	u16 argc;                /* Number of arguments */
+	Mem *argv[FLEXARRAY];    /* Argument set */
 };
 
 /*
- * An agg_t structure describes an Aggregator.  Each agg_t consists of
- * zero or more Aggregator elements (agg_elem_t).  Each agg_elem_t contains
- * a key and one or more values.  The values are used in processing
- * aggregate functions in a SELECT.  The key is used to implement
- * the GROUP BY clause of a select.
+ * The size (in bytes) of a __dbsql_func object that holds N argv entries.
  */
-struct agg {
-	int nMem;             /* Number of values stored in each AggElem */
-	agg_elem_t *pCurrent; /* The AggElem currently in focus */
-	hash_ele_t *pSearch;  /* The hash element for pCurrent */
-	hash_t hash;          /* Hash table of all aggregate elements */
-	func_def_t **apFunc;  /* Information about aggregate functions */
-};
-struct agg_elem {
-	char *zKey;           /* The key to this AggElem */
-	int nKey;             /* Number of bytes in the key, including '\0'
-				 at end */
-	mem_t aMem[1];        /* The values for this AggElem */
-};
+#define SZ_DBSQL_FUNC(N) \
+	(offsetof(struct __dbsql_func, argv) + (N)*sizeof(Mem*))
 
-/*
- * A Set structure is used for quick testing to see if a value
- * is part of a small set.  Sets are used to implement code like
- * this:
- *            x.y IN ('hi','hoo','hum')
- */
-typedef struct set set_t;
-struct set {
-	hash_t hash;             /* A set is just a hash table */
-	hash_ele_t *prev;        /* Previously accessed hash elemen */
-};
 
-/*
- * A keylist_t is a bunch of keys into a table.  The keylist can
- * grow without bound.  The keylist stores the ROWIDs of database
- * records that need to be deleted or updated.
- */
-struct keylist {
-	int nKey;             /* Number of slots in aKey[] */
-	int nUsed;            /* Next unwritten slot in aKey[] */
-	int nRead;            /* Next unread slot in aKey[] */
-	keylist_t *pNext;     /* Next block of keys */
-	int aKey[1];          /* One or more keys.  Extra space allocated
-				 as needed */
-};
-
-/*
- * An instance of the virtual machine.  This structure contains the complete
- * state of the virtual machine.
+/* ================================================================
+ * AuxData -- auxiliary data for user-defined functions
  *
- * The "sqlvm_t" structure pointer that is returned by dbsql_compile()
- * is really a pointer to an instance of this structure.
+ * Each auxiliary data pointer stored by a user defined function
+ * implementation calling set_auxdata() is stored in an instance of
+ * this structure.
+ *
+ * (SQLite: struct AuxData, vdbeInt.h:374)
+ * ================================================================
+ */
+struct aux_data {
+	int iAuxOp;              /* Instruction number of OP_Function opcode */
+	int iAuxArg;             /* Index of function argument */
+	void *pAux;              /* Aux data pointer */
+	void (*xDeleteAux)(void*); /* Destructor for the aux data */
+	aux_data_t *pNextAux;    /* Next element in list */
+};
+
+
+/* ================================================================
+ * Vdbe (vdbe_t) -- register-based virtual machine instance
+ *
+ * Replaces the old stack-based vdbe_t.  Key changes:
+ *   - Removed: aStack, pTos, popStack (stack machine eliminated)
+ *   - Removed: pSort, pFile, nField, azField, zLine (COPY/Sort removed)
+ *   - Removed: agg, nSet, aSet (legacy aggregator removed)
+ *   - Removed: pList, keylistStack* (keylist replaced by RowSet)
+ *   - Removed: returnStack[100], returnDepth (Gosub uses registers now)
+ *   - Removed: zArgv, azColName (replaced by register-based Mem arrays)
+ *   - Removed: xCallback, pCbArg (replaced by OP_ResultRow)
+ *   - Removed: nCallback, uniqueCnt, undoTransOnError, inTempTrans
+ *   - Added: apCsr (pointer array of VdbeCursor* replaces inline aCsr)
+ *   - Added: aVar as Mem* (typed bind parameters)
+ *   - Added: cacheCtr for column cache generation
+ *   - Added: nChange for DML change counting
+ *   - Added: aColName as Mem* array for column metadata
+ *   - Added: pResultRow for current output row pointer
+ *   - Added: pFrame/pDelFrame for sub-program (trigger) support
+ *   - Added: eVdbeState replaces magic number for lifecycle tracking
+ *   - Added: pAuxData for user-defined function aux data
+ *
+ * (SQLite: struct Vdbe, vdbeInt.h:458)
+ * ================================================================
  */
 struct vdbe {
-	DBSQL *db;            /* The whole database */
-	vdbe_t *pPrev,*pNext; /* Linked list of VDBEs with the same
-				 vdbe_t.db */
-	FILE *trace;          /* Write an execution trace here, if not NULL */
-	int nOp;              /* Number of instructions in the program */
-	int nOpAlloc;         /* Number of slots allocated for aOp[] */
-	vdbe_op_t *aOp;       /* Space to hold the virtual machine's program */
-	int nLabel;           /* Number of labels used */
-	int nLabelAlloc;      /* Number of slots allocated in aLabel[] */
-	int *aLabel;          /* Space to hold the labels */
-	mem_t *aStack;        /* The operand stack, except string values */
-	mem_t *pTos;          /* Top entry in the operand stack */
-	char **zArgv;         /* Text values used by the callback */
-	char **azColName;     /* Becomes the 4th parameter to callbacks */
-	int nCursor;          /* Number of slots in aCsr[] */
-	cursor_t *aCsr;       /* One element of this array for each open
-				 cursor */
-	sorter_t *pSort;      /* A linked list of objects to be sorted */
-	FILE *pFile;          /* At most one open file handler */
-	int nField;           /* Number of file fields */
-	char **azField;       /* Data for each file field */
-	int nVar;             /* Number of entries in azVariable[] */
-	char **azVar;         /* Values for the OP_Variable opcode */
-	int *anVar;           /* Length of each value in azVariable[] */
-	u_int8_t *abVar;      /* TRUE if azVariable[i] needs to be
-				 __os_free()ed */
-	char *zLine;          /* A single line from the input file */
-	int nLineAlloc;       /* Number of spaces allocated for zLine */
-	int magic;            /* Magic number for sanity checking */
-	int nMem;             /* Number of memory locations currently
-				 allocated */
-	mem_t *aMem;          /* The memory locations */
-	agg_t agg;            /* Aggregate information */
-	int nSet;             /* Number of sets allocated */
-	set_t *aSet;          /* An array of sets */
-	int nCallback;        /* Number of callbacks invoked so far */
-	keylist_t *pList;     /* A list of ROWIDs */
-	int keylistStackDepth;  /* The size of the "keylist" stack */
-	keylist_t **keylistStack; /* The stack used by opcodes ListPush &
-				     ListPop */
-	int pc;               /* The program counter */
-	int rc;               /* Value to return */
-	unsigned uniqueCnt;   /* Used by OP_MakeRecord when P2!=0 */
-	int errorAction;      /* Recovery action to do in case of an error */
-	int undoTransOnError; /* If error, either ROLLBACK or COMMIT */
-	int inTempTrans;      /* True if temp database is transactioned */
-	int returnStack[100]; /* Return address stack for OP_Gosub &
-				 OP_Return */
-	int returnDepth;      /* Next unused element in returnStack[] */
-	int nResColumn;       /* Number of columns in one row of the result
-				 set */
-	char **azResColumn;   /* Values for one row of result */ 
-	int (*xCallback)(void*,int,char**,char**); /* Callback for SELECT
-						      results */
-	void *pCbArg;         /* First argument to xCallback() */
-	int popStack;         /* Pop the stack this much on entry to
-				 __vdbe_exec() */
-	char *zErrMsg;        /* Error message written here */
-	u_int8_t explain;     /* True if EXPLAIN present on SQL command */
+	DBSQL *db;               /* The whole database */
+	vdbe_t *pPrev, *pNext;   /* Linked list of VDBEs with the same db */
+	parser_t *pParse;        /* Parsing context used to create this Vdbe */
+	ynVar nVar;              /* Number of entries in aVar[] */
+	u32 magic;               /* Magic number for sanity checking */
+	int nMem;                /* Number of memory locations currently
+				  * allocated */
+	int nCursor;             /* Number of slots in apCsr[] */
+	u32 cacheCtr;            /* VdbeCursor row cache generation counter */
+	int pc;                  /* The program counter */
+	int rc;                  /* Value to return */
+	i64 nChange;             /* Number of db changes made since last reset */
+	int iStatement;          /* Statement number (or 0 if has no opened
+				  * stmt) */
+	i64 iCurrentTime;        /* Value of julianday('now') for this
+				  * statement */
+	i64 nFkConstraint;       /* Number of imm. FK constraints this VM */
+	i64 nStmtDefCons;        /* Number of def. constraints when stmt
+				  * started */
+	i64 nStmtDefImmCons;     /* Number of def. imm constraints when stmt
+				  * started */
+	Mem *aMem;               /* The memory locations (register array) */
+	Mem **apArg;             /* Arguments for xUpdate and xFilter vtab
+				  * methods */
+	VdbeCursor **apCsr;      /* One element of this array for each open
+				  * cursor */
+	Mem *aVar;               /* Values for the OP_Variable opcode */
+
+	/*
+	 * When allocating a new Vdbe object, all of the fields below
+	 * should be initialized to zero or NULL.
+	 */
+
+	vdbe_op_t *aOp;          /* Space to hold the virtual machine's
+				  * program */
+	int nOp;                 /* Number of instructions in the program */
+	int nOpAlloc;            /* Number of slots allocated for aOp[] */
+	Mem *aColName;           /* Column names to return */
+	Mem *pResultRow;         /* Current output row */
+	char *zErrMsg;           /* Error message written here */
+	int *aLabel;             /* Space to hold the labels */
+	int nLabel;              /* Number of labels used */
+	int nLabelAlloc;         /* Number of slots allocated in aLabel[] */
+	FILE *trace;             /* Write an execution trace here, if not NULL */
+	u16 nResColumn;          /* Number of columns in one row of the result
+				  * set */
+	u16 nResAlloc;           /* Column slots allocated to aColName[] */
+	u8 errorAction;          /* Recovery action to do in case of an error */
+	u8 prepFlags;            /* Preparation flags */
+	u8 eVdbeState;           /* One of the VDBE_*_STATE values */
+	u8 expired;              /* 1: recompile immediately  2: when
+				  * convenient */
+	u8 explain;              /* 0: normal, 1: EXPLAIN, 2: EXPLAIN QUERY
+				  * PLAN */
+	u8 changeCntOn;          /* True to update the change-counter */
+	u8 usesStmtJournal;      /* True if uses a statement journal */
+	u8 readOnly;             /* True for statements that do not write */
+	u8 bIsReader;            /* True for statements that read */
+	u32 aCounter[9];         /* Counters used by stmt_status() */
+	char *zSql;              /* Text of the SQL statement that generated
+				  * this */
+	void *pFree;             /* Free this when deleting the vdbe */
+	VdbeFrame *pFrame;       /* Parent frame */
+	VdbeFrame *pDelFrame;    /* List of frame objects to free on VM reset */
+	int nFrame;              /* Number of frames in pFrame list */
+	u32 expmask;             /* Binding to these vars invalidates VM */
+	sub_program_t *pProgram; /* Linked list of all sub-programs used by
+				  * VM */
+	aux_data_t *pAuxData;    /* Linked list of auxdata allocations */
 #ifdef CONFIG_TEST
-	u_int32_t search_count; /* The number of OP_MoveTo or the OP_Next
-				   executed */
+	u32 search_count;        /* The number of seek/next operations */
+#endif
+#ifdef DBSQL_DEBUG
+	u32 nWrite;              /* Number of write operations that have
+				  * occurred */
 #endif
 };
 
 /*
-** The following are allowed values for vdbe_t.magic
-*/
+ * Allowed values for Vdbe.eVdbeState
+ */
+#define VDBE_INIT_STATE     0   /* Prepared statement under construction */
+#define VDBE_READY_STATE    1   /* Ready to run but not yet started */
+#define VDBE_RUN_STATE      2   /* Run in progress */
+#define VDBE_HALT_STATE     3   /* Finished.  Need reset() or finalize() */
+
+/*
+ * Legacy magic number defines -- these map to the new eVdbeState values
+ * for backward compatibility during transition.
+ */
 #define VDBE_MAGIC_INIT     0x26bceaa5    /* Building a VDBE program */
 #define VDBE_MAGIC_RUN      0xbdf20da3    /* VDBE is ready to execute */
 #define VDBE_MAGIC_HALT     0x519c2973    /* VDBE has completed execution */
 #define VDBE_MAGIC_DEAD     0xb606c3c8    /* The VDBE has been deallocated */
+
 
 #if defined(__cplusplus)
 }

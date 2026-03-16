@@ -1266,25 +1266,98 @@ __expr_type(expr_t* p)
 }
 
 /*
- * __expr_code --
- *	Generate code into the current Vdbe to evaluate the given
- *	expression and leave the result on the top of stack.
+ * __get_temp_reg --
+ *	Allocate and return a temporary register for intermediate results.
+ *	The caller should release the register with __release_temp_reg()
+ *	when done.
  *
- * PUBLIC: void __expr_code __P((parser_t *, expr_t *));
+ * PUBLIC: int __get_temp_reg __P((parser_t *));
+ */
+int
+__get_temp_reg(parser_t* parser)
+{
+	/* Simple allocation: just increment the register counter */
+	return ++parser->nMem;
+}
+
+/*
+ * __release_temp_reg --
+ *	Release a temporary register allocated by __get_temp_reg().
+ *	For now, this is a no-op as we don't yet have register reuse.
+ *
+ * PUBLIC: void __release_temp_reg __P((parser_t *, int));
  */
 void
-__expr_code(parser_t* parser, expr_t* expr)
+__release_temp_reg(parser_t* parser, int reg)
+{
+	/* For now, no-op.  Future optimization: maintain free list */
+	/* Could track if reg == parser->nMem and decrement, but
+	 * need to be careful about ordering */
+}
+
+/*
+ * __get_temp_range --
+ *	Allocate a range of consecutive temporary registers.
+ *	Returns the first register in the range.
+ *
+ * PUBLIC: int __get_temp_range __P((parser_t *, int));
+ */
+int
+__get_temp_range(parser_t* parser, int nreg)
+{
+	int base;
+	if (nreg <= 0)
+		return 0;
+	base = parser->nMem + 1;
+	parser->nMem += nreg;
+	return base;
+}
+
+/*
+ * __release_temp_range --
+ *	Release a range of consecutive temporary registers.
+ *
+ * PUBLIC: void __release_temp_range __P((parser_t *, int, int));
+ */
+void
+__release_temp_range(parser_t* parser, int base, int nreg)
+{
+	/* For now, no-op.  Future optimization: maintain free list */
+}
+
+/*
+ * __expr_code_target --
+ *	Generate code into the current Vdbe to evaluate the given
+ *	expression and store the result in the target register.
+ *
+ *	This is the register-based code generator (SQLite 3.52.0 style).
+ *	Every expression evaluation now targets a specific register instead
+ *	of pushing to a stack.
+ *
+ * PUBLIC: int __expr_code_target __P((parser_t *, expr_t *, int));
+ *
+ * RETURNS: The register holding the result (usually == target)
+ */
+int
+__expr_code_target(parser_t* parser, expr_t* expr, int target)
 {
 	vdbe_t *v = parser->pVdbe;
-	int i, op, dest, nexpr, nid, addr, expr_end_lable, jump_inst;
-	int expr_end_label;
+	int i, op, dest, nexpr, nid, addr, expr_end_label, jump_inst;
+	int r1, r2;
+	int regFree1 = 0;
+	int regFree2 = 0;
+	int inReg = target;
 	char *z;
 	expr_list_t *list;
 	func_def_t *def;
 	const char *id;
 
-	if (v == 0 || expr == 0)
-		return;
+	if (v == 0 || expr == 0) {
+		__vdbe_add_op(v, OP_Null, 0, target);
+		return target;
+	}
+
+	DBSQL_ASSERT(target > 0 && target <= parser->nMem);
 
 	switch(expr->op) {
 	case TK_PLUS:     op = OP_Add;      break;
@@ -1316,11 +1389,13 @@ __expr_code(parser_t* parser, expr_t* expr)
 	case TK_COLUMN:
 		if( parser->useAgg ) {
 			__vdbe_add_op(v, OP_AggGet, 0, expr->iAgg);
+			__vdbe_add_op(v, OP_SCopy, parser->nMem - 1, target);
 		} else if (expr->iColumn >= 0) {
 			__vdbe_add_op(v, OP_Column, expr->iTable,
 				      expr->iColumn);
+			__vdbe_change_p3(v, -1, 0, target);
 		} else {
-			__vdbe_add_op(v, OP_Recno, expr->iTable, 0);
+			__vdbe_add_op(v, OP_Rowid, expr->iTable, target);
 		}
 		break;
 	case TK_STRING:
@@ -1328,19 +1403,21 @@ __expr_code(parser_t* parser, expr_t* expr)
 	case TK_INTEGER:
 		if (expr->op == TK_INTEGER &&
 		    __str_int_in32b(expr->token.z)) {
-			__vdbe_add_op(v, OP_Integer, atoi(expr->token.z), 0);
+			__vdbe_add_op(v, OP_Integer, atoi(expr->token.z),
+				      target);
 		} else {
-			__vdbe_add_op(v, OP_String, 0, 0);
+			__vdbe_add_op(v, OP_String8, 0, target);
+			DBSQL_ASSERT(expr->token.z);
+			__vdbe_change_p4(v, -1, expr->token.z,
+					 expr->token.n);
+			__vdbe_dequote_p4(v, -1);
 		}
-		DBSQL_ASSERT(expr->token.z);
-		__vdbe_change_p3(v, -1, expr->token.z, expr->token.n);
-		__vdbe_dequote_p3(v, -1);
 		break;
 	case TK_NULL:
-		__vdbe_add_op(v, OP_String, 0, 0);
+		__vdbe_add_op(v, OP_Null, 0, target);
 		break;
 	case TK_VARIABLE:
-		__vdbe_add_op(v, OP_Variable, expr->iTable, 0);
+		__vdbe_add_op(v, OP_Variable, expr->iTable, target);
 		break;
 	case TK_LT: /* FALLTHROUGH */
 	case TK_LE: /* FALLTHROUGH */
@@ -1361,20 +1438,29 @@ __expr_code(parser_t* parser, expr_t* expr)
 	case TK_BITAND: /* FALLTHROUGH */
 	case TK_BITOR: /* FALLTHROUGH */
 	case TK_SLASH:
-		__expr_code(parser, expr->pLeft);
-		__expr_code(parser, expr->pRight);
-		__vdbe_add_op(v, op, 0, 0);
+		/* Binary operators: evaluate operands to temp registers,
+		 * then compute result into target register */
+		r1 = __expr_code_temp(parser, expr->pLeft, &regFree1);
+		r2 = __expr_code_temp(parser, expr->pRight, &regFree2);
+		__vdbe_add_op3(v, op, r2, r1, target);
+		__release_temp_reg(parser, regFree1);
+		__release_temp_reg(parser, regFree2);
 		break;
 	case TK_LSHIFT: /* FALLTHROUGH */
 	case TK_RSHIFT:
-		__expr_code(parser, expr->pRight);
-		__expr_code(parser, expr->pLeft);
-		__vdbe_add_op(v, op, 0, 0);
+		/* Shift operators: reversed operand order */
+		r2 = __expr_code_temp(parser, expr->pRight, &regFree2);
+		r1 = __expr_code_temp(parser, expr->pLeft, &regFree1);
+		__vdbe_add_op3(v, op, r2, r1, target);
+		__release_temp_reg(parser, regFree1);
+		__release_temp_reg(parser, regFree2);
 		break;
 	case TK_CONCAT:
-		__expr_code(parser, expr->pLeft);
-		__expr_code(parser, expr->pRight);
-		__vdbe_add_op(v, OP_Concat, 2, 0);
+		r1 = __expr_code_temp(parser, expr->pLeft, &regFree1);
+		r2 = __expr_code_temp(parser, expr->pRight, &regFree2);
+		__vdbe_add_op3(v, OP_Concat, r2, r1, target);
+		__release_temp_reg(parser, regFree1);
+		__release_temp_reg(parser, regFree2);
 		break;
 	case TK_UMINUS:
 		DBSQL_ASSERT(expr->pLeft);
@@ -1385,30 +1471,33 @@ __expr_code(parser_t* parser, expr_t* expr)
 			sprintf(z, "-%.*s", p->n, p->z);
 			if (expr->pLeft->op == TK_INTEGER &&
 			    __str_int_in32b(z)) {
-				__vdbe_add_op(v, OP_Integer, atoi(z), 0);
+				__vdbe_add_op(v, OP_Integer, atoi(z), target);
 			} else {
-				__vdbe_add_op(v, OP_String, 0, 0);
+				__vdbe_add_op(v, OP_String8, 0, target);
+				__vdbe_change_p4(v, -1, z, (p->n + 1));
 			}
-			__vdbe_change_p3(v, -1, z, (p->n + 1));
 			__dbsql_free(NULL, z);
 			break;
 		}
 		/* FALLTHROUGH */
 	case TK_BITNOT: /* FALLTHROUGH */
 	case TK_NOT:
-		__expr_code(parser, expr->pLeft);
-		__vdbe_add_op(v, op, 0, 0);
+		r1 = __expr_code_temp(parser, expr->pLeft, &regFree1);
+		__vdbe_add_op2(v, op, r1, target);
+		__release_temp_reg(parser, regFree1);
 		break;
 	case TK_ISNULL:
 	case TK_NOTNULL:
-		__vdbe_add_op(v, OP_Integer, 1, 0);
-		__expr_code(parser, expr->pLeft);
-		dest = __vdbe_current_addr(v) + 2;
-		__vdbe_add_op(v, op, 1, dest);
-		__vdbe_add_op(v, OP_AddImm, -1, 0);
+		__vdbe_add_op(v, OP_Integer, 1, target);
+		r1 = __expr_code_temp(parser, expr->pLeft, &regFree1);
+		addr = __vdbe_add_op1(v, op, r1);
+		__vdbe_add_op(v, OP_Integer, 0, target);
+		__vdbe_jump_here(v, addr);
+		__release_temp_reg(parser, regFree1);
 		break;
 	case TK_AGG_FUNCTION:
 		__vdbe_add_op(v, OP_AggGet, 0, expr->iAgg);
+		__vdbe_add_op(v, OP_SCopy, parser->nMem - 1, target);
 		break;
 	case TK_GLOB: /* FALLTHROUGH */
 	case TK_LIKE: /* FALLTHROUGH */
@@ -1418,76 +1507,109 @@ __expr_code(parser_t* parser, expr_t* expr)
 		__get_function_name(expr, &id, &nid);
 		def = __find_function(parser->db, id, nid, nexpr, 0);
 		DBSQL_ASSERT(def != 0);
-		for (i = 0; i < nexpr; i++) {
-			__expr_code(parser, list->a[i].pExpr);
+		/* Allocate consecutive registers for function arguments */
+		if (nexpr > 0) {
+			r1 = __get_temp_range(parser, nexpr);
+			for (i = 0; i < nexpr; i++) {
+				__expr_code_target(parser, list->a[i].pExpr,
+						   r1 + i);
+			}
+		} else {
+			r1 = 0;
 		}
-		__vdbe_add_op(v, OP_Function, nexpr, 0);
-		__vdbe_change_p3(v, -1, (char*)def, P3_POINTER);
+		__vdbe_add_op4(v, OP_Function, 0, r1, target,
+			       (char*)def, P4_FUNCDEF);
+		__vdbe_change_p5(v, (u8)nexpr);
+		if (nexpr > 0) {
+			__release_temp_range(parser, r1, nexpr);
+		}
 		break;
 	case TK_SELECT:
-		__vdbe_add_op(v, OP_MemLoad, expr->iColumn, 0);
+		/* Scalar subquery result is stored in memory cell */
+		__vdbe_add_op(v, OP_MemLoad, expr->iColumn, target);
 		break;
 	case TK_IN:
-		__vdbe_add_op(v, OP_Integer, 1, 0);
-		__expr_code(parser, expr->pLeft);
-		addr = __vdbe_current_addr(v);
-		__vdbe_add_op(v, OP_NotNull, -1, addr+4);
-		__vdbe_add_op(v, OP_Pop, 1, 0);
-		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_add_op(v, OP_Goto, 0, (addr + 6));
-		if (expr->pSelect) {
-			__vdbe_add_op(v, OP_Found, expr->iTable, (addr + 6));
-		} else {
-			__vdbe_add_op(v, OP_SetFound, expr->iTable,(addr + 6));
+		{
+			int destIfNull;
+			__vdbe_add_op(v, OP_Null, 0, target);
+			r1 = __expr_code_temp(parser, expr->pLeft, &regFree1);
+			destIfNull = __vdbe_make_label(v);
+			__vdbe_add_op2(v, OP_IsNull, r1, destIfNull);
+			if (expr->pSelect) {
+				__vdbe_add_op4(v, OP_Found, expr->iTable, 0,
+					       r1, 0, P4_INT32);
+			} else {
+				__vdbe_add_op4(v, OP_SetFound, expr->iTable,
+					       0, r1, 0, P4_INT32);
+			}
+			__vdbe_add_op(v, OP_Integer, 1, target);
+			__vdbe_resolve_label(v, destIfNull);
+			__release_temp_reg(parser, regFree1);
 		}
-		__vdbe_add_op(v, OP_AddImm, -1, 0);
 		break;
 	case TK_BETWEEN:
-		__expr_code(parser, expr->pLeft);
-		__vdbe_add_op(v, OP_Dup, 0, 0);
-		__expr_code(parser, expr->pList->a[0].pExpr);
-		__vdbe_add_op(v, OP_Ge, 0, 0);
-		__vdbe_add_op(v, OP_Pull, 1, 0);
-		__expr_code(parser, expr->pList->a[1].pExpr);
-		__vdbe_add_op(v, OP_Le, 0, 0);
-		__vdbe_add_op(v, OP_And, 0, 0);
+		{
+			int r3;
+			r1 = __expr_code_temp(parser, expr->pLeft, &regFree1);
+			r2 = __expr_code_temp(parser, expr->pList->a[0].pExpr,
+					      &regFree2);
+			r3 = __get_temp_reg(parser);
+			__vdbe_add_op3(v, OP_Ge, r2, r3, r1);
+			__release_temp_reg(parser, regFree2);
+			r2 = __expr_code_temp(parser, expr->pList->a[1].pExpr,
+					      &regFree2);
+			__vdbe_add_op3(v, OP_Le, r2, target, r1);
+			__vdbe_add_op3(v, OP_And, r3, target, target);
+			__release_temp_reg(parser, regFree1);
+			__release_temp_reg(parser, regFree2);
+			__release_temp_reg(parser, r3);
+		}
 		break;
 	case TK_UPLUS: /* FALLTHROUGH */
 	case TK_AS:
-		__expr_code(parser, expr->pLeft);
+		inReg = __expr_code_target(parser, expr->pLeft, target);
 		break;
 	case TK_CASE:
-		DBSQL_ASSERT(expr->pList);
-		DBSQL_ASSERT((expr->pList->nExpr % 2) == 0);
-		DBSQL_ASSERT(expr->pList->nExpr > 0);
-		nexpr = expr->pList->nExpr;
-		expr_end_label = __vdbe_make_label(v);
-		if (expr->pLeft) {
-			__expr_code(parser, expr->pLeft);
-		}
-		for (i = 0; i < nexpr; i += 2) {
-			__expr_code(parser, expr->pList->a[i].pExpr);
+		{
+			int caseReg = 0;
+			DBSQL_ASSERT(expr->pList);
+			DBSQL_ASSERT((expr->pList->nExpr % 2) == 0);
+			DBSQL_ASSERT(expr->pList->nExpr > 0);
+			nexpr = expr->pList->nExpr;
+			expr_end_label = __vdbe_make_label(v);
 			if (expr->pLeft) {
-				__vdbe_add_op(v, OP_Dup, 1, 1);
-				jump_inst = __vdbe_add_op(v, OP_Ne, 1, 0);
-				__vdbe_add_op(v, OP_Pop, 1, 0);
-			} else {
-				jump_inst = __vdbe_add_op(v, OP_IfNot, 1, 0);
+				caseReg = __expr_code_temp(parser, expr->pLeft,
+							   &regFree1);
 			}
-			__expr_code(parser, expr->pList->a[i+1].pExpr);
-			__vdbe_add_op(v, OP_Goto, 0, expr_end_label);
-			addr = __vdbe_current_addr(v);
-			__vdbe_change_p2(v, jump_inst, addr);
+			for (i = 0; i < nexpr; i += 2) {
+				int testReg;
+				testReg = __expr_code_temp(parser,
+						expr->pList->a[i].pExpr,
+						&regFree2);
+				if (expr->pLeft) {
+					__vdbe_add_op3(v, OP_Ne, testReg,
+						       caseReg, 0);
+					jump_inst = __vdbe_current_addr(v) - 1;
+				} else {
+					jump_inst = __vdbe_add_op1(v, OP_IfNot,
+								   testReg);
+				}
+				__release_temp_reg(parser, regFree2);
+				__expr_code_target(parser,
+						   expr->pList->a[i+1].pExpr,
+						   target);
+				__vdbe_add_op2(v, OP_Goto, 0, expr_end_label);
+				__vdbe_jump_here(v, jump_inst);
+			}
+			__release_temp_reg(parser, regFree1);
+			if (expr->pRight) {
+				__expr_code_target(parser, expr->pRight,
+						   target);
+			} else {
+				__vdbe_add_op(v, OP_Null, 0, target);
+			}
+			__vdbe_resolve_label(v, expr_end_label);
 		}
-		if (expr->pLeft) {
-			__vdbe_add_op(v, OP_Pop, 1, 0);
-		}
-		if (expr->pRight) {
-			__expr_code(parser, expr->pRight);
-		} else {
-			__vdbe_add_op(v, OP_String, 0, 0);
-		}
-		__vdbe_resolve_label(v, expr_end_label);
 		break;
 	case TK_RAISE:
 		if (!parser->trigStack) {
@@ -1495,7 +1617,7 @@ __expr_code(parser_t* parser, expr_t* expr)
 				    "RAISE() may only be used within a "
 				    "trigger-program");
 			parser->nErr++;
-			return;
+			return target;
 		}
 		if (expr->iColumn == OE_Rollback ||
 		    expr->iColumn == OE_Abort ||
@@ -1503,19 +1625,61 @@ __expr_code(parser_t* parser, expr_t* expr)
 			char *msg;
 			__dbsql_strndup(parser->db, expr->token.z, &msg,
 				     expr->token.n);
-			__vdbe_add_op(v, OP_Halt, DBSQL_CONSTRAINT,
-				      expr->iColumn);
+			__vdbe_add_op4(v, OP_Halt, DBSQL_CONSTRAINT,
+				       expr->iColumn, 0, msg, P4_DYNAMIC);
 			__str_unquote(msg);
-			__vdbe_change_p3(v, -1, msg, 0);
-			__dbsql_free(parser->db, msg);
 		} else {
 			DBSQL_ASSERT(expr->iColumn == OE_Ignore);
-			__vdbe_add_op(v, OP_Goto, 0,
-				      parser->trigStack->ignoreJump);
-			__vdbe_change_p3(v, -1, "(IGNORE jump)", 0);
+			__vdbe_add_op2(v, OP_Goto, 0,
+				       parser->trigStack->ignoreJump);
 		}
 		break;
 	}
+	return inReg;
+}
+
+/*
+ * __expr_code --
+ *	Wrapper for __expr_code_target() that allocates a temporary register
+ *	for the result.  This is the convenience function for code that still
+ *	expects stack-like behavior.
+ *
+ * PUBLIC: void __expr_code __P((parser_t *, expr_t *));
+ */
+void
+__expr_code(parser_t* parser, expr_t* expr)
+{
+	int target;
+	if (expr == 0)
+		return;
+	target = ++parser->nMem;
+	__expr_code_target(parser, expr, target);
+}
+
+/*
+ * __expr_code_temp --
+ *	Generate code to evaluate an expression and store the result in a
+ *	temporary register.  Return the register number.  If 'reg_ptr' is
+ *	not NULL and the expression uses a temporary register, store that
+ *	register number in *reg_ptr so the caller can release it later.
+ *
+ * PUBLIC: int __expr_code_temp __P((parser_t *, expr_t *, int *));
+ */
+int
+__expr_code_temp(parser_t* parser, expr_t* expr, int *reg_ptr)
+{
+	int r;
+	if (expr == 0) {
+		if (reg_ptr)
+			*reg_ptr = 0;
+		return 0;
+	}
+	r = __get_temp_reg(parser);
+	__expr_code_target(parser, expr, r);
+	if (reg_ptr) {
+		*reg_ptr = r;
+	}
+	return r;
 }
 
 /*

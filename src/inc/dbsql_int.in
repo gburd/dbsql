@@ -36,11 +36,11 @@
 #include <db.h>
 
 #include "sql_parser.h"
+#include "inc/sql_tokens.h"
 #include "inc/queue.h"
 #include "inc/hash.h"
 #include "inc/str.h"
 #include "inc/random.h"
-#include "inc/vdbe.h"
 #include "inc/debug.h"
 #include "inc/xvprintf.h"
 #include "inc/globals.h"
@@ -92,6 +92,8 @@ struct window;        typedef struct window window_t;
 struct returning;     typedef struct returning returning_t;
 struct indexed_expr;  typedef struct indexed_expr indexed_expr_t;
 struct parse_cleanup; typedef struct parse_cleanup parse_cleanup_t;
+struct rename_token;  typedef struct rename_token rename_token_t;
+struct table_lock;    typedef struct table_lock table_lock_t;
 struct subquery;      typedef struct subquery subquery_t;
 struct module;        typedef struct module module_t;
 struct vtable;        typedef struct vtable vtable_t;
@@ -215,10 +217,13 @@ typedef u_int16_t  u16;
 typedef u_int32_t  u32;
 typedef int8_t     i8;
 typedef int16_t    i16;
-#if defined(HAVE_LONG_LONG)
+/*
+ * 64-bit types: int64_t and u_int64_t are available on all modern platforms
+ * (C99+, POSIX).  The old HAVE_LONG_LONG guard from BDB is no longer needed
+ * since the register-based VDBE requires i64 throughout.
+ */
 typedef int64_t    i64;
 typedef u_int64_t  u64;
-#endif
 
 /*
  * A bitmask type used for column sets and other bit-vector operations.
@@ -277,6 +282,15 @@ typedef u64 tRowcnt;
 #else
 # define FLEXARRAY 1
 #endif
+
+/*
+ * VDBE public interface.
+ *
+ * Placed here (after integer type aliases, forward declarations, and
+ * FLEXARRAY) because vdbe.h now uses u8, u16, u32, i64, u64, FLEXARRAY,
+ * and forward-declared pointer types (func_def_t*, key_info_t*, etc.).
+ */
+#include "inc/vdbe.h"
 
 /*
  * Sort order constants.  Replace the old DBSQL_SO_* system with the
@@ -439,7 +453,55 @@ typedef struct sm_cursor {
 	int flags;
 #define SMC_RO_CURSOR 0x0001
 #define SMC_RW_CURSOR 0x0002
+#define SMC_INTKEY    0x0004   /* Table cursor (i64 rowid keys) */
+#define SMC_INDEX     0x0008   /* Index cursor (blob keys) */
+	int eState;                /* Cursor state: valid, invalid, or EOF */
+#define SMC_STATE_INVALID  0   /* Cursor not positioned */
+#define SMC_STATE_VALID    1   /* Cursor points to a valid entry */
+#define SMC_STATE_EOF      2   /* Cursor past end of table */
+	i64 cachedRowid;           /* Cached i64 rowid for table cursors */
+	int cachedRowidValid;      /* Non-zero if cachedRowid is valid */
 } sm_cursor_t;
+
+/*
+ * Payload descriptor for enhanced insert operations.
+ * Maps to SQLite 3.52.0's BtreePayload struct.
+ *
+ * For table btrees (INTKEY):
+ *   pKey is NULL, nKey is the i64 rowid.
+ *   pData/nData hold the record body.  nZero trailing zero bytes
+ *   are implied but not stored in pData.
+ *
+ * For index btrees (BLOBKEY):
+ *   pKey/nKey hold the entire key blob.
+ *   pData/nData/nZero are unused (zero).
+ */
+typedef struct sm_payload {
+	const void *pKey;     /* Key for index btrees; NULL for table btrees */
+	i64 nKey;             /* Key size for indexes; rowid for tables */
+	const void *pData;    /* Data for table btrees; unused for indexes */
+	int nData;            /* Size of pData; 0 if none */
+	int nZero;            /* Extra zero bytes appended after pData */
+} sm_payload_t;
+
+/*
+ * Flags for __sm_create_btree().
+ * These match SQLite 3.52.0's BTREE_INTKEY and BTREE_BLOBKEY.
+ */
+#define SM_BTREE_INTKEY  1   /* Table: i64 integer keys with data */
+#define SM_BTREE_BLOBKEY 2   /* Index: blob keys, no separate data */
+
+/*
+ * Flags for __sm_insert_ex().
+ */
+#define SM_INSERT_APPEND       0x08  /* Hint: key is larger than all existing */
+#define SM_INSERT_PREFORMAT    0x80  /* Data is a preformatted cell */
+
+/*
+ * Flags for __sm_delete_ex().
+ */
+#define SM_DELETE_SAVEPOSITION 0x02  /* Leave cursor pointing at NEXT or PREV */
+#define SM_DELETE_AUXDELETE    0x04  /* Not the primary delete operation */
 
 /*
  * Each database managed by the system is an instance of the following
@@ -1486,54 +1548,371 @@ struct agg_expr {
 	func_def_t *pFunc;       /* Information about the aggregate function */
 };
 
+/* ================================================================
+ * STEP 16: Parse struct prerequisites
+ *
+ * Types and structures required before Parse struct definition.
+ * These support SQLite 3.52.0's Parse functionality.
+ * ================================================================
+ */
+
 /*
- * An SQL parser context.  A copy of this structure is passed through
- * the parser and down into all the parser action routine in order to
- * carry around information that is global to the entire parse.
+ * Bitfield type for Parse struct flags.
+ */
+typedef unsigned int bft;
+
+/*
+ * Database bitmask type for tracking which attached databases are affected.
+ * In SQLite this uses complex logic for 30+ databases, but DBSQL typically
+ * has fewer attached databases, so we use simple unsigned int.
+ */
+#if DBSQL_MAX_ATTACHED > 30
+typedef unsigned char yDbMask[(DBSQL_MAX_ATTACHED+9)/8];
+#define DbMaskTest(M,I)    (((M)[(I)/8]&(1<<((I)&7)))!=0)
+#define DbMaskZero(M)      memset((M),0,sizeof(M))
+#define DbMaskSet(M,I)     (M)[(I)/8]|=(1<<((I)&7))
+#define DbMaskAllZero(M)   dbsql_db_mask_all_zero(M)
+#define DbMaskNonZero(M)   (dbsql_db_mask_all_zero(M)==0)
+#else
+typedef unsigned int yDbMask;
+#define DbMaskTest(M,I)    (((M)&(((yDbMask)1)<<(I)))!=0)
+#define DbMaskZero(M)      ((M)=0)
+#define DbMaskSet(M,I)     ((M)|=(((yDbMask)1)<<(I)))
+#define DbMaskAllZero(M)   ((M)==0)
+#define DbMaskNonZero(M)   ((M)!=0)
+#endif
+
+/*
+ * VList: Variable list for parameter name to number mapping.
+ * A VList records a mapping between parameters/variables/wildcards in the
+ * SQL text and the integer variable number associated with that parameter.
+ * Actually an opaque int* pointer to variable-length array.
+ */
+typedef int VList;
+
+/*
+ * Information about AUTOINCREMENT counters for a table.
+ * One instance per table with AUTOINCREMENT in the parse.
+ */
+struct autoinc_info {
+	autoinc_info_t *pNext;   /* Next info block in list */
+	table_t *pTab;           /* Table this info refers to */
+	int iDb;                 /* Index in db->aDb[] of database */
+	int regCtr;              /* Memory register holding rowid counter */
+};
+
+/*
+ * Compiled trigger program.
+ * At least one instance is created for each trigger that may fire while
+ * parsing INSERT, UPDATE, or DELETE. All stored in Parse.pTriggerPrg list
+ * and deleted once statement compilation completes.
+ *
+ * A sub-program implements the trigger body and WHEN clause, assuming a
+ * default ON CONFLICT clause. The aColmask[0] is set to old.* columns
+ * accessed (0 for INSERT triggers). aColmask[1] is new.* columns.
+ */
+struct trigger_prg {
+	trigger_t *pTrigger;     /* Trigger this program was coded from */
+	trigger_prg_t *pNext;    /* Next in Parse.pTriggerPrg list */
+	sub_program_t *pProgram; /* Program implementing pTrigger/orconf */
+	int orconf;              /* Default ON CONFLICT policy */
+	u32 aColmask[2];         /* Masks of old.*, new.* columns accessed */
+};
+
+/*
+ * Indexed expression optimization.
+ * For each index X with an expression or virtual generated column as argument,
+ * if X is in scope such that the expression value can be read from the index,
+ * there's an instance on Parse.pIdxExpr list.
+ *
+ * During code generation for expressions, this list is consulted; if a
+ * matching expression is found, the value is read from the index rather
+ * than being recomputed.
+ */
+struct indexed_expr {
+	expr_t *pExpr;           /* Expression contained in the index */
+	int iDataCur;            /* Data cursor associated with index */
+	int iIdxCur;             /* Index cursor */
+	int iIdxCol;             /* Index column containing pExpr value */
+	u8 bMaybeNullRow;        /* True if need OP_IfNullRow check */
+	u8 aff;                  /* Affinity of pExpr expression */
+	indexed_expr_t *pIENext; /* Next in list of all indexed expressions */
+#ifdef DBSQL_ENABLE_EXPLAIN_COMMENTS
+	const char *zIdxName;    /* Index name (bytecode comments only) */
+#endif
+};
+
+/*
+ * Parse cleanup operation.
+ * Specifies an operation to perform after parsing to deallocate resources
+ * obtained during parse that are no longer needed.
+ */
+struct parse_cleanup {
+	parse_cleanup_t *pNext;          /* Next cleanup task */
+	void *pPtr;                      /* Pointer to object to deallocate */
+	void (*xCleanup)(DBSQL *, void *); /* Deallocation routine */
+};
+
+/*
+ * RETURNING clause data.
+ * Used for INSERT/UPDATE/DELETE statements with RETURNING clause.
+ */
+struct returning {
+	parser_t *pParse;        /* The parse including RETURNING clause */
+	expr_list_t *pReturnEL;  /* List of expressions to return */
+	trigger_t retTrig;       /* Transient trigger implementing RETURNING */
+	trigger_step_t retTStep; /* The trigger step */
+	int iRetCur;             /* Transient table holding RETURNING results */
+	int nRetCol;             /* Number in pReturnEL after expansion */
+	int iRetReg;             /* Register array for RETURNING row */
+	char zName[40];          /* Trigger name: "dbsql_returning_%p" */
+};
+
+/*
+ * Rename token tracking for ALTER TABLE.
+ * Used to track tokens that need renaming when ALTER TABLE RENAME is used.
+ */
+struct rename_token {
+	const void *p;           /* Parse tree element created by token t */
+	token_t t;               /* Token that created parse tree element p */
+	rename_token_t *pNext;   /* Next in list of all RenameToken objects */
+};
+
+/*
+ * Table lock for shared-cache mode.
+ * Tracks table locks required by statement being compiled.
+ */
+struct table_lock {
+	int iDb;                 /* Database index in db->aDb[] */
+	Pgno iTab;               /* Root page of table */
+	u8 isWriteLock;          /* True for write lock, false for read */
+	const char *zLockName;   /* Name of table (for error messages) */
+};
+
+/* ================================================================
+ * STEP 17: Parse struct (SQLite 3.52.0 format)
+ *
+ * An SQL parser context passed through the parser and into parser action
+ * routines to carry information global to the entire parse.
+ *
+ * Updated from old DBSQL struct parser (27 fields) to SQLite 3.52.0's
+ * struct Parse (80+ fields). See parse_struct_migration_plan.md for
+ * complete field-by-field mapping.
+ *
+ * The structure is divided into three memory sections:
+ *
+ * SECTION 1 (Header): Fields from db through pCleanup
+ *   - Zeroed on Parse initialization
+ *   - Contains active parsing state
+ *
+ * SECTION 2 (Non-recursive): Fields from aTempReg through u1
+ *   - Set once, persist across recursive parsing
+ *   - Not zeroed between recursions
+ *   - Boundary at offsetof(Parse, aTempReg)
+ *
+ * SECTION 3 (Recursive): Fields from sLastToken through pRename
+ *   - Reset before and after each recursion level
+ *   - Contains per-statement state
+ *   - Boundary at offsetof(Parse, sLastToken)
+ *
+ * This division allows efficient initialization and supports recursive
+ * parsing (e.g., triggers, views, subqueries).
+ * ================================================================
  */
 struct parser {
-	DBSQL *db;               /* The main database structure */
+	/* ============================================================
+	 * SECTION 1: HEADER (zeroed on initialization)
+	 * ============================================================
+	 */
+
+	/* Core database & VDBE */
+	DBSQL *db;               /* Main database structure */
+	char *zErrMsg;           /* Error message */
+	vdbe_t *pVdbe;           /* Engine for executing database bytecode */
 	int rc;                  /* Return code from execution */
-	dbsql_callback xCallback;/* The callback function */
-	void *pArg;              /* First argument to the callback function */
-	char *zErrMsg;           /* An error message */
-	token_t sErrToken;       /* The token at which the error occurred */
-	token_t sFirstToken;     /* The first token parsed */
-	token_t sLastToken;      /* The last token parsed */
-	const char *zTail;       /* All SQL text past the last semicolon
-				    parsed */
-	table_t *pNewTable;      /* A table being constructed by CREATE TABLE*/
-	vdbe_t *pVdbe;           /* An engine for executing database bytecode*/
-	u_int8_t colNamesSet;    /* TRUE after OP_ColumnName has been issued
-				    to pVdbe */
-	u_int8_t explain;        /* True if the EXPLAIN flag is found on the
-				    query */
-	u_int8_t initFlag;       /* True if reparsing CREATE TABLEs */
-	u_int8_t nameClash;      /* A permanent table name clashes with temp
-				    table name */
-	u_int8_t useAgg;         /* If true, extract field values from the
-				    aggregator while generating expressions.
-				    Normally false. */
-	u_int8_t iDb;            /* Index of database whose schema is being
-				    parsed */
-	u_int8_t useCallback;    /* True if callbacks should be used to report
-				    results */
-	int newTnum;             /* Table number to use when reparsing CREATE
-				    TABLEs */
+
+	/* Query optimization & parsing state */
+	LogEst nQueryLoop;       /* Est iterations of query (10*log2(N)) */
+	u8 nested;               /* Nesting depth of parser/code generator */
+	u8 nTempReg;             /* Number of temp registers in aTempReg[] */
+	u8 isMultiWrite;         /* True if may modify/insert multiple rows */
+	u8 disableLookaside;     /* Lookaside memory disable counter */
+	u8 prepFlags;            /* SQLITE_PREPARE_* flags */
+	u8 withinRJSubrtn;       /* Nesting level for RIGHT JOIN subroutines */
+	u8 mSubrtnSig;           /* Mini Bloom filter on SubrtnSig.selId */
+	u8 eTriggerOp;           /* TK_UPDATE, TK_INSERT, or TK_DELETE */
+	u8 eOrconf;              /* Default ON CONFLICT policy for triggers */
+
+#if defined(DBSQL_DEBUG) || defined(DBSQL_COVERAGE_TEST)
+	u8 earlyCleanup;         /* OOM inside dbsql_parser_add_cleanup() */
+#endif
+#ifdef DBSQL_DEBUG
+	u8 ifNotExists;          /* Might be true if IF NOT EXISTS */
+	u8 isCreate;             /* CREATE TABLE/INDEX/VIEW or ALTER ADD COL */
+#endif
+
+	/* Statement property bitfields */
+	bft disableTriggers:1;   /* True to disable triggers */
+	bft mayAbort:1;          /* True if may throw ABORT exception */
+	bft hasCompound:1;       /* Need convertCompoundSelectToSubquery() */
+	bft bReturning:1;        /* Coding a RETURNING trigger */
+	bft bHasExists:1;        /* Has correlated "EXISTS (SELECT ...)" */
+	bft colNamesSet:1;       /* TRUE after OP_ColumnName issued to pVdbe */
+	bft bHasWith:1;          /* Statement contains WITH clause */
+	bft okConstFactor:1;     /* OK to factor out constants */
+	bft checkSchema:1;       /* Force schema cookie check after error */
+
+	/* Register & memory management */
+	int nRangeReg;           /* Size of temporary register block */
+	int iRangeReg;           /* First register in temp register block */
 	int nErr;                /* Number of errors seen */
-	int nTab;                /* Number of previously allocated VDBE
-				    cursors */
+	int nTab;                /* Number of previously allocated VDBE curs */
 	int nMem;                /* Number of memory cells used so far */
-	int nSet;                /* Number of sets used so far */
-	int nAgg;                /* Number of aggregate expressions */
-	int nVar;                /* Number of '?' variables seen in the SQL so
-				    far */
-	agg_expr_t *aAgg;        /* An array of aggregate expressions */
-	const char *zAuthContext;/* The 6th parameter to db->auth callbacks */
-	trigger_t *pNewTrigger;  /* trigger_t under construct by a CREATE
+	int szOpAlloc;           /* Bytes allocated for Vdbe.aOp[] */
+	int iSelfTab;            /* Table w/ index on expr, or neg base reg
+				    during check-constraint eval */
+
+	/* Label management for code generation */
+	int nLabel;              /* *Negative* of number of labels used */
+	int nLabelAlloc;         /* Number of slots in aLabel */
+	int *aLabel;             /* Space to hold the labels */
+
+	/* Expression & index optimization */
+	expr_list_t *pConstExpr; /* Constant expressions */
+	indexed_expr_t *pIdxEpr; /* Expressions used by active indexes */
+	indexed_expr_t *pIdxPartExpr; /* Exprs constrained by index WHERE */
+
+	/* Database write tracking */
+	yDbMask writeMask;       /* Start write transaction on these DBs */
+	yDbMask cookieMask;      /* Bitmask of schema verified databases */
+
+	/* Virtual table support */
+	int nMaxArg;             /* Max args to xUpdate/xFilter vtab methods */
+
+	/* SELECT statement tracking */
+	int nSelect;             /* Number of SELECT stmts (Select.selId ctr) */
+
+#ifndef DBSQL_OMIT_PROGRESS_CALLBACK
+	u32 nProgressSteps;      /* xProgress steps during dbsql_prepare() */
+#endif
+
+#ifndef DBSQL_OMIT_SHARED_CACHE
+	int nTableLock;          /* Number of locks in aTableLock */
+	table_lock_t *aTableLock;/* Required table locks for shared-cache */
+#endif
+
+	/* AUTOINCREMENT support */
+	autoinc_info_t *pAinc;   /* Information about AUTOINCREMENT counters */
+
+	/* Nested parsing context */
+	parser_t *pToplevel;     /* Parse struct for main program (or NULL) */
+
+	/* Trigger compilation */
+	table_t *pTriggerTab;    /* Table for which triggers are being coded */
+	trigger_prg_t *pTriggerPrg; /* Linked list of coded triggers */
+
+	/* Cleanup & resource management */
+	parse_cleanup_t *pCleanup; /* Cleanup operations to run after parse */
+
+	/* ============================================================
+	 * SECTION 2: NON-RECURSIVE (persist across recursions)
+	 * Fields from here down to sLastToken are NOT reset between
+	 * recursive calls. Boundary: offsetof(Parse, aTempReg)
+	 * ============================================================
+	 */
+
+	int aTempReg[8];         /* Holding area for temporary registers */
+	parser_t *pOuterParse;   /* Outer Parse object when nested */
+	token_t sNameToken;      /* Token with unqualified schema object name */
+	u32 oldmask;             /* Mask of old.* columns referenced */
+	u32 newmask;             /* Mask of new.* columns referenced */
+
+	/* Discriminated union for statement-specific data */
+	union {
+		/* These fields available when isCreate is true */
+		struct {
+			int addrCrTab;     /* Address of OP_CreateBtree on
+					      CREATE TABLE */
+			int regRowid;      /* Register holding rowid of CREATE
+					      TABLE entry */
+			int regRoot;       /* Register holding root page for new
+					      objects */
+			token_t constraintName; /* Name of constraint currently
+						   being parsed */
+		} cr;
+		/* These fields available to all other statements */
+		struct {
+			returning_t *pReturning; /* The RETURNING clause */
+		} d;
+	} u1;
+
+	/* ============================================================
+	 * SECTION 3: RECURSIVE (reset before/after each recursion)
+	 * Fields from sLastToken down are reset at beginning and end
+	 * of each recursion. Boundary: offsetof(Parse, sLastToken)
+	 * ============================================================
+	 */
+
+	token_t sLastToken;      /* Last token parsed */
+	ynVar nVar;              /* Number of '?' variables seen in SQL */
+	u8 iPkSortOrder;         /* ASC or DESC for INTEGER PRIMARY KEY */
+	u8 explain;              /* True if EXPLAIN flag found on query */
+	u8 eParseMode;           /* PARSE_MODE_XXX constant */
+
+#ifndef DBSQL_OMIT_VIRTUALTABLE
+	int nVtabLock;           /* Number of virtual tables to lock */
+#endif
+
+	int nHeight;             /* Expression tree height of current
+				    sub-select */
+	int addrExplain;         /* Address of current OP_Explain opcode */
+	VList *pVList;           /* Mapping between variable names & numbers */
+	vdbe_t *pReprepare;      /* VM being reprepared (dbsql_reprepare()) */
+	const char *zTail;       /* All SQL text past last semicolon parsed */
+	table_t *pNewTable;      /* Table being constructed by CREATE TABLE */
+	index_t *pNewIndex;      /* Index being constructed by CREATE INDEX,
+				    also used to hold redundant UNIQUE
+				    constraints during RENAME COLUMN */
+	trigger_t *pNewTrigger;  /* Trigger under construction by CREATE
 				    TRIGGER */
-	trigger_stack_t *trigStack; /* Trigger actions being coded */
+	const char *zAuthContext;/* 6th parameter to db->xAuth callbacks */
+
+#ifndef DBSQL_OMIT_VIRTUALTABLE
+	token_t sArg;            /* Complete text of a module argument */
+	table_t **apVtabLock;    /* Pointer to vtabs needing locking */
+#endif
+
+#ifndef DBSQL_OMIT_CTE
+	with_t *pWith;           /* Current WITH clause, or NULL */
+#endif
+
+#ifndef DBSQL_OMIT_ALTERTABLE
+	rename_token_t *pRename; /* Tokens subject to rename by ALTER TABLE */
+#endif
 };
+
+/*
+ * Allowed values for Parse.eParseMode
+ */
+#define PARSE_MODE_NORMAL        0  /* Normal parsing */
+#define PARSE_MODE_DECLARE_VTAB  1  /* Declaring virtual table */
+#define PARSE_MODE_RENAME        2  /* ALTER TABLE RENAME */
+#define PARSE_MODE_UNMAP         3  /* Unmapping tokens */
+
+/*
+ * Sizes and pointers of various parts of the Parse object.
+ * Used for efficient initialization of different Parse sections.
+ */
+#define PARSE_HDR(X) \
+	(((char *)(X)) + offsetof(parser_t, zErrMsg))
+#define PARSE_HDR_SZ \
+	(offsetof(parser_t, aTempReg) - offsetof(parser_t, zErrMsg))
+#define PARSE_RECURSE_SZ \
+	offsetof(parser_t, sLastToken)
+#define PARSE_TAIL_SZ \
+	(sizeof(parser_t) - PARSE_RECURSE_SZ)
+#define PARSE_TAIL(X) \
+	(((char *)(X)) + PARSE_RECURSE_SZ)
 
 /*
  * An instance of the following structure can be declared on a stack and used
@@ -1647,6 +2026,51 @@ struct trigger_stack {
 };
 
 /* ================================================================
+ * STEP 18: Walker struct  (MOVED BEFORE DbFixer -- db_fixer embeds
+ *          walker_t by value, so the complete type must be visible.)
+ *
+ * Generic tree-walking infrastructure.  Used by name resolution,
+ * expression rewriting, fix-database-references, and many other
+ * parse-tree transformations.
+ * (SQLite: struct Walker, sqliteInt.h:4374)
+ * ================================================================
+ */
+struct walker {
+	parser_t *pParse;                           /* Parser context */
+	int (*xExprCallback)(walker_t *, expr_t *); /* Callback for expressions */
+	int (*xSelectCallback)(walker_t *, select_t *);
+						    /* Callback for SELECTs */
+	void (*xSelectCallback2)(walker_t *, select_t *);
+						    /* Second callback */
+	int walkerDepth;                            /* Number of subqueries */
+	u16 eCode;                                  /* A small processing code */
+	u16 mWFlags;                                /* Use-dependent flags */
+	union {                                     /* Extra data for callback */
+		name_context_t *pNC;                /* Naming context */
+		int n;                              /* A counter */
+		int iCur;                           /* A cursor number */
+		int sz;                             /* String literal length */
+		src_list_t *pSrcList;               /* FROM clause */
+		int *aiCol;                         /* Array of column indexes */
+		expr_list_t *pGroupBy;              /* GROUP BY clause */
+		select_t *pSelect;                  /* HAVING to WHERE ctx */
+		table_t *pTab;                      /* Table of generated col */
+		struct db_fixer *pFix;              /* See dbsql_fix_select()
+						     * (forward ref -- uses
+						     * struct tag, not typedef,
+						     * because db_fixer is
+						     * defined below) */
+	} u;
+};
+
+/*
+ * Walker return codes.
+ */
+#define WRC_Continue    0   /* Continue down into children */
+#define WRC_Prune       1   /* Omit children but continue walking siblings */
+#define WRC_Abort       2   /* Abandon the tree walk */
+
+/* ================================================================
  * DbFixer struct (replaces ref_normalizer_ctx)
  *
  * Fixes database references in parse trees.  This is the SQLite 3.52.0
@@ -1713,44 +2137,10 @@ struct key_info {
 #define KEYINFO_ORDER_BIGNULL 0x02  /* NULLs sort larger than other values */
 
 /* ================================================================
- * STEP 18: Walker struct
- *
- * Generic tree-walking infrastructure.  Used by name resolution,
- * expression rewriting, fix-database-references, and many other
- * parse-tree transformations.
- * (SQLite: struct Walker, sqliteInt.h:4374)
+ * STEP 18: Walker struct (DUPLICATE REMOVED - definition is above
+ *          at line ~1721, before db_fixer which embeds it)
  * ================================================================
  */
-struct walker {
-	parser_t *pParse;                           /* Parser context */
-	int (*xExprCallback)(walker_t *, expr_t *); /* Callback for expressions */
-	int (*xSelectCallback)(walker_t *, select_t *);
-						    /* Callback for SELECTs */
-	void (*xSelectCallback2)(walker_t *, select_t *);
-						    /* Second callback */
-	int walkerDepth;                            /* Number of subqueries */
-	u16 eCode;                                  /* A small processing code */
-	u16 mWFlags;                                /* Use-dependent flags */
-	union {                                     /* Extra data for callback */
-		name_context_t *pNC;                /* Naming context */
-		int n;                              /* A counter */
-		int iCur;                           /* A cursor number */
-		int sz;                             /* String literal length */
-		src_list_t *pSrcList;               /* FROM clause */
-		int *aiCol;                         /* Array of column indexes */
-		expr_list_t *pGroupBy;              /* GROUP BY clause */
-		select_t *pSelect;                  /* HAVING to WHERE ctx */
-		table_t *pTab;                      /* Table of generated col */
-		db_fixer_t *pFix;                   /* See dbsql_fix_select() */
-	} u;
-};
-
-/*
- * Walker return codes.
- */
-#define WRC_Continue    0   /* Continue down into children */
-#define WRC_Prune       1   /* Omit children but continue walking siblings */
-#define WRC_Abort       2   /* Abandon the tree walk */
 
 /* ================================================================
  * STEP 19a: SelectDest struct
@@ -1994,6 +2384,293 @@ struct parse_cleanup {
 	void *pPtr;                     /* Pointer to object to clean up */
 	void (*xCleanup)(DBSQL *, void *); /* Cleanup function */
 };
+
+/* ================================================================
+ * Additional new structures from SQLite 3.52.0
+ * ================================================================
+ */
+
+/*
+ * Represents a virtual table module definition.
+ * (SQLite: struct Module, sqliteInt.h:2213)
+ */
+struct module {
+	const void *pModule;       /* Callback pointers (sqlite3_module*) */
+	const char *zName;         /* Name passed to create_module() */
+	int nRefModule;            /* Number of pointers to this object */
+	void *pAux;                /* pAux passed to create_module() */
+	void (*xDestroy)(void *);  /* Module destructor function */
+	table_t *pEpoTab;          /* Eponymous table for this module */
+};
+
+/*
+ * Per-connection virtual table instance.
+ * (SQLite: struct VTable, sqliteInt.h:2405)
+ */
+struct vtable {
+	DBSQL *db;                 /* Database connection associated with this table */
+	module_t *pMod;            /* Pointer to module implementation */
+	void *pVtab;               /* Pointer to vtab instance (sqlite3_vtab*) */
+	int nRef;                  /* Number of pointers to this structure */
+	u8 bConstraint;            /* True if constraints are supported */
+	u8 bAllSchemas;            /* True if might use any attached schema */
+	u8 eVtabRisk;              /* Riskiness of allowing hacker access */
+	int iSavepoint;            /* Depth of the SAVEPOINT stack */
+	vtable_t *pNext;           /* Next in linked list (see above) */
+};
+
+/*
+ * Details of a subquery implementation.
+ * (SQLite: struct Subquery, sqliteInt.h:3312)
+ */
+struct subquery {
+	select_t *pSelect;         /* A SELECT statement used in place of a table name */
+	int addrFillSub;           /* Address of subroutine to initialize a subquery */
+	int regReturn;             /* Register holding return address of addrFillSub */
+	int regResult;             /* Registers holding results of a co-routine */
+};
+
+/*
+ * Represents a single term in a FROM clause.
+ * In DBSQL this was previously inlined as src_list_item inside src_list.
+ * Now follows SQLite's approach with a separate SrcItem type.
+ * (SQLite: struct SrcItem, sqliteInt.h:3356)
+ */
+struct src_item {
+	char *zName;               /* Name of the table */
+	char *zAlias;              /* The "B" part of a "A AS B" phrase. zName is the "A" */
+	table_t *pSTab;            /* Table object for zName. Mnemonic: Srcitem-TABle */
+	struct {
+		u8 jointype;             /* Type of join between this table and the previous */
+		unsigned notIndexed :1;      /* True if there is a NOT INDEXED clause */
+		unsigned isIndexedBy :1;     /* True if there is an INDEXED BY clause */
+		unsigned isSubquery :1;      /* True if this term is a subquery */
+		unsigned isTabFunc :1;       /* True if table-valued-function syntax */
+		unsigned isCorrelated :1;    /* True if sub-query is correlated */
+		unsigned isMaterialized:1;   /* This is a materialized view */
+		unsigned viaCoroutine :1;    /* Implemented as a co-routine */
+		unsigned isRecursive :1;     /* True for recursive reference in WITH */
+		unsigned fromDDL :1;         /* Comes from sqlite_schema */
+		unsigned isCte :1;           /* This is a CTE */
+		unsigned notCte :1;          /* This item may not match a CTE */
+		unsigned isUsing :1;         /* u3.pUsing is valid */
+		unsigned isOn :1;            /* u3.pOn was once valid and non-NULL */
+		unsigned isSynthUsing :1;    /* u3.pUsing is synthesized from NATURAL */
+		unsigned isNestedFrom :1;    /* pSelect is a SF_NestedFrom subquery */
+		unsigned rowidUsed :1;       /* The ROWID of this table is referenced */
+		unsigned fixedSchema :1;     /* Uses u4.pSchema, not u4.zDatabase */
+		unsigned hadSchema :1;       /* Had u4.zDatabase before u4.pSchema */
+		unsigned fromExists :1;      /* Comes from WHERE EXISTS(...) */
+	} fg;
+	int iCursor;               /* The VDBE cursor number used to access this table */
+	Bitmask colUsed;           /* Bit N set if column N used. Details above for N>62 */
+	union {
+		char *zIndexedBy;          /* Identifier from "INDEXED BY <zIndex>" clause */
+		expr_list_t *pFuncArg;     /* Arguments to table-valued-function */
+		u32 nRow;                  /* Number of rows in a VALUES clause */
+	} u1;
+	union {
+		index_t *pIBIndex;         /* Index structure corresponding to u1.zIndexedBy */
+		cte_use_t *pCteUse;        /* CTE Usage info when fg.isCte is true */
+	} u2;
+	union {
+		expr_t *pOn;               /* fg.isUsing==0 =>  The ON clause of a join */
+		id_list_t *pUsing;         /* fg.isUsing==1 =>  The USING clause of a join */
+	} u3;
+	union {
+		schema_t *pSchema;         /* Schema to which this item is fixed */
+		char *zDatabase;           /* Name of database holding this table */
+		subquery_t *pSubq;         /* Description of a subquery */
+	} u4;
+};
+
+/*
+ * Represents a window function definition (OVER clause).
+ * Window functions are a major new feature affecting SELECT processing
+ * and VDBE code generation.
+ * (SQLite: struct Window, sqliteInt.h:4556)
+ */
+struct window {
+	char *zName;               /* Name of window (may be NULL) */
+	char *zBase;               /* Name of base window for chaining (may be NULL) */
+	expr_list_t *pPartition;   /* PARTITION BY clause */
+	expr_list_t *pOrderBy;     /* ORDER BY clause */
+	u8 eFrmType;               /* TK_RANGE, TK_GROUPS, TK_ROWS, or 0 */
+	u8 eStart;                 /* UNBOUNDED, CURRENT, PRECEDING or FOLLOWING */
+	u8 eEnd;                   /* UNBOUNDED, CURRENT, PRECEDING or FOLLOWING */
+	u8 bImplicitFrame;         /* True if frame was implicitly specified */
+	u8 eExclude;               /* TK_NO, TK_CURRENT, TK_TIES, TK_GROUP, or 0 */
+	expr_t *pStart;            /* Expression for "<expr> PRECEDING" */
+	expr_t *pEnd;              /* Expression for "<expr> FOLLOWING" */
+	window_t **ppThis;         /* Pointer to this object in Select.pWin list */
+	window_t *pNextWin;        /* Next window function belonging to this SELECT */
+	expr_t *pFilter;           /* The FILTER expression */
+	func_def_t *pWFunc;        /* The function */
+	int iEphCsr;               /* Partition buffer or Peer buffer */
+	int regAccum;              /* Accumulator */
+	int regResult;             /* Interim result */
+	int csrApp;                /* Function cursor (used by min/max) */
+	int regApp;                /* Function register (also used by min/max) */
+	int regPart;               /* Array of registers for PARTITION BY values */
+	expr_t *pOwner;            /* Expression object this window is attached to */
+	int nBufferCol;            /* Number of columns in buffer table */
+	int iArgCol;               /* Offset of first argument for this function */
+	int regOne;                /* Register containing constant value 1 */
+	int regStartRowid;
+	int regEndRowid;
+	u8 bExprArgs;              /* Defer evaluation of window function arguments
+	                              due to the SQLITE_SUBTYPE flag */
+};
+
+/*
+ * Compiled trigger program for a specific ON CONFLICT policy.
+ * Replaces DBSQL's trigger_stack approach.
+ * (SQLite: struct TriggerPrg, sqliteInt.h:3800)
+ */
+struct trigger_prg {
+	trigger_t *pTrigger;       /* Trigger this program was coded from */
+	trigger_prg_t *pNext;      /* Next entry in Parse.pTriggerPrg list */
+	void *pProgram;            /* Program implementing pTrigger/orconf (SubProgram*) */
+	int orconf;                /* Default ON CONFLICT policy */
+	u32 aColmask[2];           /* Masks of old.*, new.* columns accessed */
+};
+
+/*
+ * Tracks expressions in indexes for optimization.
+ * (SQLite: struct IndexedExpr, sqliteInt.h:3837)
+ */
+struct indexed_expr {
+	expr_t *pExpr;             /* The expression contained in the index */
+	int iDataCur;              /* The data cursor associated with the index */
+	int iIdxCur;               /* The index cursor */
+	int iIdxCol;               /* The index column that contains value of pExpr */
+	u8 bMaybeNullRow;          /* True if we need an OP_IfNullRow check */
+	u8 aff;                    /* Affinity of the pExpr expression */
+	indexed_expr_t *pIENext;   /* Next in a list of all indexed expressions */
+#ifdef DBSQL_ENABLE_EXPLAIN_COMMENTS
+	const char *zIdxName;      /* Name of index, used only for bytecode comments */
+#endif
+};
+
+/*
+ * Hash table for built-in function definitions.
+ * (SQLite: struct FuncDefHash, sqliteInt.h:1632)
+ */
+struct func_def_hash {
+	func_def_t *a[DBSQL_FUNC_HASH_SZ];  /* Hash table for functions */
+};
+
+#ifndef DBSQL_FUNC_HASH_SZ
+#define DBSQL_FUNC_HASH_SZ 61   /* Default hash size for function table */
+#endif
+
+/*
+ * Arguments to printf-like functions.
+ * (SQLite: struct PrintfArguments, sqliteInt.h:4827)
+ */
+struct printf_arguments {
+	int nArg;                  /* Total number of arguments */
+	int nUsed;                 /* Number of arguments used so far */
+	void **apArg;              /* The argument values (sqlite3_value**) */
+};
+
+/*
+ * Floating-point number decode structure.
+ * (SQLite: struct FpDecode, sqliteInt.h:4837)
+ */
+struct fp_decode {
+	int n;                     /* Significant digits in the decode */
+	int iDP;                   /* Location of the decimal point */
+	char *z;                   /* Start of significant digits */
+	char zBuf[20];             /* Storage for significant digits */
+	char sign;                 /* '+' or '-' */
+	char isSpecial;            /* 1: Infinity  2: NaN */
+};
+
+/*
+ * Reference-counted string.
+ * (SQLite: struct RCStr, sqliteInt.h:4230)
+ */
+struct rcstr {
+	u64 nRCRef;                /* Number of references */
+	/* Total structure size should be a multiple of 8 bytes for alignment */
+};
+
+/*
+ * Client data for sqlite3_set_clientdata() equivalent.
+ * (SQLite: struct DbClientData, sqliteInt.h:4511)
+ */
+struct db_client_data {
+	db_client_data_t *pNext;   /* Next in a linked list */
+	void *pData;               /* The data */
+	void (*xDestructor)(void *); /* Destructor. Might be NULL */
+	char zName[FLEXARRAY];     /* Name of this client data. MUST BE LAST */
+};
+
+/*
+ * Global configuration singleton.
+ * Many fields reference SQLite-specific subsystems and may not apply
+ * to DBSQL with BerkeleyDB storage.
+ * (SQLite: struct Sqlite3Config, sqliteInt.h:4279)
+ */
+struct dbsql_config {
+	int bMemstat;              /* True to enable memory status */
+	u8 bCoreMutex;             /* True to enable core mutexing */
+	u8 bFullMutex;             /* True to enable full mutexing */
+	u8 bOpenUri;               /* True to interpret filenames as URIs */
+	u8 bUseCis;                /* Use covering indices for full-scans */
+	u8 bSmallMalloc;           /* Avoid large memory allocations if true */
+	u8 bExtraSchemaChecks;     /* Verify type,name,tbl_name in schema */
+#ifdef DBSQL_DEBUG
+	u8 bJsonSelfcheck;         /* Double-check JSON parsing */
+#endif
+	int mxStrlen;              /* Maximum string length */
+	int neverCorrupt;          /* Database is always well-formed */
+	int szLookaside;           /* Default lookaside buffer size */
+	int nLookaside;            /* Default lookaside buffer count */
+	int nStmtSpill;            /* Stmt-journal spill-to-disk threshold */
+	void *pHeap;               /* Heap storage space */
+	int nHeap;                 /* Size of pHeap[] */
+	int mnReq, mxReq;          /* Min and max heap requests sizes */
+	i64 szMmap;                /* mmap() space per open file */
+	i64 mxMmap;                /* Maximum value for szMmap */
+	void *pPage;               /* Page cache memory */
+	int szPage;                /* Size of each page in pPage[] */
+	int nPage;                 /* Number of pages in pPage[] */
+	int mxParserStack;         /* maximum depth of the parser stack */
+	int sharedCacheEnabled;    /* true if shared-cache mode enabled */
+	u32 szPma;                 /* Maximum Sorter PMA size */
+	/* The above might be initialized to non-zero.  The following need to always
+	** initially be zero, however. */
+	int isInit;                /* True after initialization has finished */
+	int inProgress;            /* True while initialization in progress */
+	int isMutexInit;           /* True after mutexes are initialized */
+	int isMallocInit;          /* True after malloc is initialized */
+	int isPCacheInit;          /* True after malloc is initialized */
+	int nRefInitMutex;         /* Number of users of pInitMutex */
+	void *pInitMutex;          /* Mutex used by sqlite3_initialize() */
+	void (*xLog)(void *, int, const char *); /* Function for logging */
+	void *pLogArg;             /* First argument to xLog() */
+#ifndef DBSQL_OMIT_DESERIALIZE
+	i64 mxMemdbSize;           /* Default max memdb size */
+#endif
+	int bLocaltimeFault;       /* True to fail localtime() calls */
+	int (*xAltLocaltime)(const void *, void *); /* Alternative localtime() routine */
+	int iOnceResetThreshold;   /* When to reset OP_Once counters */
+	u32 szSorterRef;           /* Min size in bytes to use sorter-refs */
+	unsigned int iPrngSeed;    /* Alternative fixed seed for the PRNG */
+};
+
+#ifdef DBSQL_DEBUG
+/*
+ * Debug tree printing. Only in DBSQL_DEBUG builds.
+ * (SQLite: struct TreeView, sqliteInt.h:4527)
+ */
+struct tree_view {
+	int iLevel;                /* Which level of the tree we are on */
+	u8 bLine[100];             /* Draw vertical in column i if bLine[i] is true */
+};
+#endif
 
 #include "inc/dbsql_ext.h"
 #include "inc/os_ext.h"

@@ -1,0 +1,224 @@
+{
+  "description": "DBSQL naming conventions reference for SQLite to DBSQL transpilation",
+  "version": "1.0",
+  "patterns": {
+    "function_naming": {
+      "rule": "Add __ prefix and convert CamelCase to snake_case",
+      "examples": [
+        "sqliteParseBegin -> __parse_begin",
+        "sqliteVdbeExec -> __vdbe_exec",
+        "sqliteLocateTable -> __locate_table",
+        "sqliteExprCode -> __expr_code",
+        "sqliteFindFunction -> __find_function"
+      ]
+    },
+    "type_naming": {
+      "rule": "Add _t suffix to all typedef struct names",
+      "examples": [
+        "Table -> table_t",
+        "Vdbe -> vdbe_t",
+        "Expr -> expr_t",
+        "Parser -> parser_t",
+        "Token -> token_t",
+        "Index -> index_t",
+        "Select -> select_t"
+      ]
+    },
+    "type_substitutions": {
+      "u8": "u_int8_t",
+      "u16": "u_int16_t",
+      "u32": "u_int32_t",
+      "i64": "int64_t",
+      "u64": "uint64_t",
+      "sqlite_*": "dbsql_*"
+    },
+    "bdb_types_preserved": [
+      "DB",
+      "DBT",
+      "DBC",
+      "DB_ENV",
+      "DB_TXN",
+      "DB_SEQUENCE",
+      "DB_MPOOLFILE",
+      "DB_LOCK",
+      "DB_LOGC",
+      "DB_LSN",
+      "db_recno_t",
+      "db_seq_t",
+      "db_threadid_t",
+      "db_pgno_t"
+    ],
+    "hungarian_notation": {
+      "description": "Prefix conventions for struct field names",
+      "z": {
+        "meaning": "zero-terminated string (char *)",
+        "examples": [
+          "char *zName",
+          "char *zDflt",
+          "char *zType",
+          "char *zDatabase",
+          "char *zAlias",
+          "char *zSelect",
+          "char *zErrMsg",
+          "char *zTo",
+          "char *zCol"
+        ]
+      },
+      "n": {
+        "meaning": "count/number/length (int)",
+        "examples": [
+          "int nArg",
+          "int nCol",
+          "int nColumn",
+          "int nExpr",
+          "int nAlloc",
+          "int nId",
+          "int nLevel",
+          "int nLimit",
+          "int nOffset",
+          "int nErr",
+          "int nTab",
+          "int nMem",
+          "int nSet",
+          "int nAgg",
+          "int nVar"
+        ]
+      },
+      "a": {
+        "meaning": "array pointer (type_t *)",
+        "examples": [
+          "column_t *aCol",
+          "agg_expr_t *aAgg",
+          "db_t *aDb"
+        ]
+      },
+      "p": {
+        "meaning": "pointer to single item or list (type_t *)",
+        "examples": [
+          "func_def_t *pNext",
+          "void *pUserData",
+          "table_t *pTable",
+          "index_t *pIndex",
+          "expr_t *pExpr",
+          "select_t *pSelect"
+        ]
+      },
+      "i": {
+        "meaning": "index value/integer index (int)",
+        "examples": [
+          "int iPKey",
+          "int iFrom",
+          "int iTable",
+          "int iColumn",
+          "int iAgg",
+          "int iCursor",
+          "int iMem",
+          "int iCur",
+          "int iLeftJoin",
+          "int iContinue",
+          "int iBreak",
+          "int iLimit",
+          "int iOffset"
+        ]
+      },
+      "x": {
+        "meaning": "function pointer",
+        "examples": [
+          "void (*xFunc)(dbsql_func_t*,int,const char**)",
+          "void (*xStep)(dbsql_func_t*,int,const char**)",
+          "void (*xFinalize)(dbsql_func_t*)"
+        ]
+      },
+      "no_prefix": {
+        "meaning": "scalar types, enums, flags",
+        "examples": [
+          "u_int8_t readOnly",
+          "int dataType",
+          "u_int32_t flags"
+        ]
+      }
+    },
+    "header_markers": {
+      "PUBLIC": "Internal API - generates prototypes in inc/*_ext.h",
+      "STATIC": "File-local functions - generates prototypes in inc/*_decl.h",
+      "EXTERN": "External public API - generates prototypes in dbsql.h"
+    },
+    "code_style": {
+      "function_declarations": "ANSI C (not K&R style)",
+      "line_length": "79 characters maximum",
+      "indent": "tabs for indentation"
+    }
+  },
+  "function_mappings": {
+    "description": "Known SQLite to DBSQL function name mappings extracted from existing code",
+    "sqliteLocateTable": "__locate_table",
+    "sqliteFindTable": "__find_table",
+    "sqliteFindIndex": "__find_index",
+    "sqliteIdListAppend": "__id_list_append",
+    "sqliteIdListDup": "__id_list_dup",
+    "sqliteSrcListAppend": "__src_list_append",
+    "sqliteSrcListDup": "__src_list_dup",
+    "sqliteSrcListLookup": "__src_list_lookup",
+    "sqliteExpr": "__expr",
+    "sqliteExprFunction": "__expr_function",
+    "sqliteExprDup": "__expr_dup",
+    "sqliteExprListDup": "__expr_list_dup",
+    "sqliteExprListAppend": "__expr_list_append",
+    "sqliteSelectNew": "__select_new",
+    "sqliteSelectDup": "__select_dup",
+    "sqliteFindFunction": "__find_function",
+    "sqliteGetVdbe": "__parser_get_vdbe",
+    "sqliteWhereBegin": "__where_begin",
+    "sqliteVdbeCreate": "__vdbe_create",
+    "sqliteVdbeGetOp": "__vdbe_get_op",
+    "sqliteTableFromToken": "__table_from_token",
+    "sqliteSelectResultSet": "__select_result_set",
+    "sqliteTriggerSelectStep": "__trigger_select_step",
+    "sqliteTriggerInsertStep": "__trigger_insert_step",
+    "sqliteTriggerUpdateStep": "__trigger_update_step",
+    "sqliteTriggerDeleteStep": "__trigger_delete_step",
+    "sqliteAttach": "__attach",
+    "sqliteDetach": "__detach",
+    "sqliteVacuum": "__vacuum",
+    "sqliteParseBegin": "__parse_begin",
+    "sqliteRegisterDateTimeFunctions": "__register_datetime_funcs"
+  },
+  "type_mappings": {
+    "description": "Known SQLite to DBSQL type name mappings",
+    "Table": "table_t",
+    "Column": "column_t",
+    "Index": "index_t",
+    "Expr": "expr_t",
+    "ExprList": "expr_list_t",
+    "Parser": "parser_t",
+    "Token": "token_t",
+    "IdList": "id_list_t",
+    "SrcList": "src_list_t",
+    "WhereInfo": "where_info_t",
+    "WhereLevel": "where_level_t",
+    "Select": "select_t",
+    "Agg": "agg_t",
+    "AggExpr": "agg_expr_t",
+    "AggElem": "agg_elem_t",
+    "KeyList": "keylist_t",
+    "Cursor": "cursor_t",
+    "FuncDef": "func_def_t",
+    "Trigger": "trigger_t",
+    "TriggerStep": "trigger_step_t",
+    "TriggerStack": "trigger_stack_t",
+    "ForeignKey": "foreign_key_t",
+    "AuthContext": "auth_context_t",
+    "Vdbe": "vdbe_t",
+    "VdbeOp": "vdbe_op_t",
+    "Datetime": "datetime_t",
+    "SmCursor": "sm_cursor_t"
+  },
+  "notes": [
+    "Hungarian notation requires semantic analysis and cannot be fully automated",
+    "The 'a' vs 'p' distinction: 'a' is for arrays accessed by index, 'p' for single items or linked lists",
+    "BerkeleyDB types must never be modified during transpilation",
+    "Storage Manager interface (src/sm.c) must be preserved exactly",
+    "Line wrapping at 79 chars may require manual adjustment for readability",
+    "PUBLIC/STATIC/EXTERN markers placement requires understanding of function scope and API"
+  ]
+}

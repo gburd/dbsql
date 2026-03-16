@@ -19,6 +19,15 @@
 /*
  * This file contains code used for creating, destroying, and populating
  * a VDBE (also known as "dbsql_stmt_t").
+ *
+ * Updated for register-based VM execution model (SQLite 3.52.0 compatible).
+ * Key changes from the stack-based model:
+ *   - Instructions have 5 operands: P1, P2, P3 (int), P4 (union), P5 (u16)
+ *   - Values live in numbered registers (aMem[]) instead of an operand stack
+ *   - Cursors are a pointer array (apCsr[]) instead of inline array
+ *   - Result delivery via OP_ResultRow pointing to register range
+ *   - Variables stored as Mem structures (aVar[]) instead of string arrays
+ *   - Column names stored as Mem structures (aColName[])
  */
 
 #include "dbsql_config.h"
@@ -77,57 +86,158 @@ __vdbe_trace(vdbe_t* vm, FILE* trace)
 }
 
 /*
+ * __grow_op_array --
+ *	Ensure the op array has room for at least one more instruction.
+ *
+ * STATIC: static int __grow_op_array __P((vdbe_t *));
+ */
+static int
+__grow_op_array(vdbe_t* vm)
+{
+	int old_size = vm->nOpAlloc;
+	vm->nOpAlloc = (vm->nOpAlloc * 2) + 100;
+	if (__dbsql_realloc(NULL, (vm->nOpAlloc * sizeof(vdbe_op_t)),
+			 &vm->aOp) == ENOMEM) {
+		vm->nOpAlloc = old_size;
+		return ENOMEM;
+	}
+	memset(&vm->aOp[old_size], 0,
+	       (vm->nOpAlloc - old_size) * sizeof(vdbe_op_t));
+	return 0;
+}
+
+/*
  * __vdbe_add_op --
- *	Add a new instruction to the list of instructions current in the
- *	VDBE.  Return the address of the new instruction.
- *
- *	Parameters:
- *
- *	   p               Pointer to the VDBE
- *
- *	   op              The opcode for this instruction
- *
- *	   p1, p2          First two of the three possible operands.
- *
- *	Use the __vdbe_resolve_label() function to fix an address and
- *	the __vdbe_change_p3() function to change the value of the P3
- *	operand.
+ *	Add a new instruction with 2 integer operands (P1, P2).
+ *	P3 defaults to 0.  This is the legacy 2-operand interface
+ *	retained for compatibility.
  *
  * PUBLIC: int __vdbe_add_op __P((vdbe_t *, int, int, int));
  */
 int
 __vdbe_add_op(vdbe_t* vm, int op, int p1, int p2)
 {
+	return __vdbe_add_op3(vm, op, p1, p2, 0);
+}
+
+/*
+ * __vdbe_add_op3 --
+ *	Add a new instruction with 3 integer operands (P1, P2, P3).
+ *	P4 and P5 default to unused/0.
+ *
+ *	This is the primary instruction-emission function for the
+ *	register-based VM.
+ *
+ * PUBLIC: int __vdbe_add_op3 __P((vdbe_t *, int, int, int, int));
+ */
+int
+__vdbe_add_op3(vdbe_t* vm, int op, int p1, int p2, int p3)
+{
 	int i;
+	vdbe_op_t *pOp;
 
 	i = vm->nOp;
 	vm->nOp++;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	if (i >= vm->nOpAlloc) {
-		int old_size = vm->nOpAlloc;
-		vdbe_op_t *new;
-		vm->nOpAlloc = (vm->nOpAlloc * 2) + 100;
-		if (__dbsql_realloc(NULL, (vm->nOpAlloc * sizeof(vdbe_op_t)),
-				 &vm->aOp) == ENOMEM) {
-			vm->nOpAlloc = old_size;
+		if (__grow_op_array(vm)) {
+			vm->nOp--;
 			return 0;
 		}
-		memset(&vm->aOp[old_size], 0,
-		       (vm->nOpAlloc - old_size) * sizeof(vdbe_op_t));
 	}
-	vm->aOp[i].opcode = op;
-	vm->aOp[i].p1 = p1;
-	if (p2 < 0 && (-1 - p2) < vm->nLabel && vm->aLabel[-1 -p2] >= 0) {
+	pOp = &vm->aOp[i];
+	pOp->opcode = op;
+	pOp->p1 = p1;
+	if (p2 < 0 && (-1 - p2) < vm->nLabel && vm->aLabel[-1 - p2] >= 0) {
 		p2 = vm->aLabel[-1 - p2];
 	}
-	vm->aOp[i].p2 = p2;
-	vm->aOp[i].p3 = 0;
-	vm->aOp[i].p3type = P3_NOTUSED;
+	pOp->p2 = p2;
+	pOp->p3 = p3;
+	pOp->p4.p = 0;
+	pOp->p4type = P4_NOTUSED;
+	pOp->p5 = 0;
 #ifndef NDEBUG
 	if (dbsql_vdbe_add_op_trace)
 		__vdbe_print_op(0, i, &vm->aOp[i]);
 #endif
 	return i;
+}
+
+/*
+ * __vdbe_add_op4 --
+ *	Add an instruction with P4 as a string or pointer value.
+ *	If n is P4_STATIC, P4_DYNAMIC, or P4_POINTER, the pointer is
+ *	stored directly.  If n>=0, the string is copied.
+ *
+ * PUBLIC: int __vdbe_add_op4 __P((vdbe_t *, int, int, int, int,
+ * PUBLIC:                     const char *, int));
+ */
+int
+__vdbe_add_op4(vdbe_t* vm, int op, int p1, int p2, int p3,
+	       const char *p4, int p4type)
+{
+	int addr = __vdbe_add_op3(vm, op, p1, p2, p3);
+	__vdbe_change_p4(vm, addr, p4, p4type);
+	return addr;
+}
+
+/*
+ * __vdbe_add_op4_int --
+ *	Add an instruction with P4 as a 32-bit integer value.
+ *
+ * PUBLIC: int __vdbe_add_op4_int __P((vdbe_t *, int, int, int, int, int));
+ */
+int
+__vdbe_add_op4_int(vdbe_t* vm, int op, int p1, int p2, int p3, int p4)
+{
+	int addr = __vdbe_add_op3(vm, op, p1, p2, p3);
+	if (addr >= 0 && addr < vm->nOp) {
+		vm->aOp[addr].p4type = P4_INT32;
+		vm->aOp[addr].p4.i = p4;
+	}
+	return addr;
+}
+
+/*
+ * __vdbe_add_op1 --
+ *	Convenience wrapper: add an instruction with 1 operand (P1).
+ *	P2 and P3 default to 0.
+ *
+ * PUBLIC: int __vdbe_add_op1 __P((vdbe_t *, int, int));
+ */
+int
+__vdbe_add_op1(vdbe_t* vm, int op, int p1)
+{
+	return __vdbe_add_op3(vm, op, p1, 0, 0);
+}
+
+/*
+ * __vdbe_add_op2 --
+ *	Convenience wrapper: add an instruction with 2 operands (P1, P2).
+ *	P3 defaults to 0.
+ *
+ * PUBLIC: int __vdbe_add_op2 __P((vdbe_t *, int, int, int));
+ */
+int
+__vdbe_add_op2(vdbe_t* vm, int op, int p1, int p2)
+{
+	return __vdbe_add_op3(vm, op, p1, p2, 0);
+}
+
+/*
+ * __vdbe_jump_here --
+ *	Set the P2 field of the most recent instruction (or the instruction
+ *	at address 'addr') to the current program counter.  This is used to
+ *	resolve forward jumps.
+ *
+ * PUBLIC: void __vdbe_jump_here __P((vdbe_t *, int));
+ */
+void
+__vdbe_jump_here(vdbe_t* vm, int addr)
+{
+	if (addr >= 0 && addr < vm->nOp) {
+		__vdbe_change_p2(vm, addr, vm->nOp);
+	}
 }
 
 /*
@@ -223,7 +333,6 @@ __vdbe_add_op_list(vm, num_op, op)
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	if (vm->nOp + num_op >= vm->nOpAlloc) {
 		int old_size = vm->nOpAlloc;
-		vdbe_op_t *new;
 		vm->nOpAlloc = (vm->nOpAlloc * 2) + num_op + 10;
 		if (__dbsql_realloc(NULL, vm->nOpAlloc * sizeof(vdbe_op_t),
 				 &vm->aOp) == ENOMEM) {
@@ -241,8 +350,9 @@ __vdbe_add_op_list(vm, num_op, op)
 			vm->aOp[i + addr] = op[i];
 			if (p2 < 0)
 				vm->aOp[i + addr].p2 = addr + ADDR(p2);
-			vm->aOp[i + addr].p3type = op[i].p3 ?
-				P3_STATIC : P3_NOTUSED;
+			if (op[i].p4.p == 0) {
+				vm->aOp[i + addr].p4type = P4_NOTUSED;
+			}
 #ifndef NDEBUG
 			if (dbsql_vdbe_add_op_trace) {
 				__vdbe_print_op(0, i + addr, &vm->aOp[i+addr]);
@@ -257,9 +367,6 @@ __vdbe_add_op_list(vm, num_op, op)
 /*
  * __vdbe_change_p1 --
  *	Change the value of the P1 operand for a specific instruction.
- *	This routine is useful when a large program is loaded from a
- *	static array using __vdbe_add_op_list but we want to make a
- *	few minor changes to the program.
  *
  * PUBLIC: void __vdbe_change_p1 __P((vdbe_t *, int, int));
  */
@@ -292,31 +399,45 @@ __vdbe_change_p2(vdbe_t* vm, int addr, int val)
 /*
  * __vdbe_change_p3 --
  *	Change the value of the P3 operand for a specific instruction.
- *	This routine is useful when a large program is loaded from a
- *	static array using __vdbe_add_op_list but we want to make a
- *	few minor changes to the program.
+ *	In the register-based VM, P3 is an integer (register number).
  *
- *	If n>=0 then the P3 operand is dynamic, meaning that a copy of
- *	the string is made into memory obtained from __dbsql_calloc().
- *	A value of n==0 means copy bytes of 'p3' up to and including the
- *	first null byte.  If n>0 then copy n+1 bytes of zP3.
- *
- *	If n==P3_STATIC  it means that zP3 is a pointer to a constant static
- *	string and we can just copy the pointer.  n==P3_POINTER means 'p3' is
- *	a pointer to some object other than a string.
- *
- *	If addr<0 then change P3 on the most recently inserted instruction.
- *
- * PUBLIC: void __vdbe_change_p3 __P((vdbe_t *, int, const char *, int));
+ * PUBLIC: void __vdbe_change_p3 __P((vdbe_t *, int, int));
  */
 void
-__vdbe_change_p3(vm, addr, p3, n)
-	vdbe_t *vm;
-	int addr;
-	const char *p3;
-	int n;
+__vdbe_change_p3(vdbe_t* vm, int addr, int val)
 {
-	vdbe_op_t *op;
+	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
+	if (vm && addr >= 0 && vm->nOp > addr && vm->aOp) {
+		vm->aOp[addr].p3 = val;
+	}
+}
+
+/*
+ * __vdbe_change_p4 --
+ *	Change the P4 operand of the most recently coded instruction
+ *	or the instruction at address addr.
+ *
+ *	The P4 operand is a rich union type that can hold strings,
+ *	pointers, integers, collation sequences, key info, etc.
+ *
+ *	If p4type is P4_DYNAMIC, then the string pointed to by p4
+ *	was obtained from __dbsql_calloc() and ownership is transferred.
+ *	If p4type is P4_STATIC, then p4 points to a static string.
+ *	If p4type is P4_POINTER, then p4 is a pointer to an object.
+ *	If p4type is P4_INT32, then p4 is reinterpreted as an int.
+ *	If p4type is P4_KEYINFO, then p4 points to a key_info_t.
+ *	If p4type is P4_FUNCDEF, then p4 points to a func_def_t.
+ *	If p4type is P4_COLLSEQ, then p4 points to a coll_seq_t.
+ *	If p4type >= 0, then the string is copied (p4type bytes).
+ *
+ *	If addr < 0, change P4 on the most recently inserted instruction.
+ *
+ * PUBLIC: void __vdbe_change_p4 __P((vdbe_t *, int, const char *, int));
+ */
+void
+__vdbe_change_p4(vdbe_t* vm, int addr, const char *p4, int p4type)
+{
+	vdbe_op_t *pOp;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	if (vm == 0 || vm->aOp == 0)
 		return;
@@ -325,37 +446,97 @@ __vdbe_change_p3(vm, addr, p3, n)
 		if (addr < 0)
 			return;
 	}
-	op = &vm->aOp[addr];
-	if (op->p3 && op->p3type == P3_DYNAMIC) {
-		__dbsql_free(NULL, op->p3);
-		op->p3 = 0;
+	pOp = &vm->aOp[addr];
+	/* Free any existing dynamic P4 value */
+	__vdbe_free_p4(pOp->p4type, pOp->p4.p);
+	pOp->p4.p = 0;
+	pOp->p4type = P4_NOTUSED;
+	if (p4 == 0) {
+		return;
 	}
-	if (p3 == 0) {
-		op->p3 = 0;
-		op->p3type = P3_NOTUSED;
-	} else if (n < 0) {
-		op->p3 = (char*)p3;
-		op->p3type = n;
-	} else {
-		__str_nappend(&op->p3, p3, n, NULL);
-		op->p3type = P3_DYNAMIC;
+	if (p4type < 0) {
+		/* Negative p4type values indicate the type directly */
+		pOp->p4.p = (void*)p4;
+		pOp->p4type = p4type;
+		if (p4type == P4_INT32) {
+			/* For INT32, the pointer IS the integer value */
+			pOp->p4.i = (int)(intptr_t)p4;
+			pOp->p4type = P4_INT32;
+		}
+	} else if (p4type == P4_INT32) {
+		pOp->p4.i = (int)(intptr_t)p4;
+		pOp->p4type = P4_INT32;
+	} else if (p4type >= 0) {
+		/* Copy p4type bytes of the string */
+		int n = p4type;
+		if (n == 0)
+			n = strlen(p4);
+		__str_nappend((char**)&pOp->p4.z, p4, n, NULL);
+		pOp->p4type = P4_DYNAMIC;
 	}
 }
 
 /*
- * __vdbe_dequote_p3 --
- *	If the P3 operand to the specified instruction appears
- *	to be a quoted string token, then this procedure removes 
- *	the quotes.
+ * __vdbe_change_p5 --
+ *	Change the P5 flags of the most recently coded instruction.
  *
- *	The quoting operator can be either a grave ascent (ASCII 0x27)
- *	or a double quote character (ASCII 0x22).  Two quotes in a row
- *	resolve to be a single actual quote character within the string.
- *
- * PUBLIC: void __vdbe_dequote_p3 __P((vdbe_t *, int));
+ * PUBLIC: void __vdbe_change_p5 __P((vdbe_t *, u_int16_t));
  */
 void
-__vdbe_dequote_p3(vdbe_t* vm, int addr)
+__vdbe_change_p5(vdbe_t* vm, u_int16_t p5)
+{
+	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
+	if (vm->nOp > 0) {
+		vm->aOp[vm->nOp - 1].p5 = p5;
+	}
+}
+
+/*
+ * __vdbe_free_p4 --
+ *	Free the P4 value associated with an opcode based on its type.
+ *
+ * PUBLIC: void __vdbe_free_p4 __P((int, void *));
+ */
+void
+__vdbe_free_p4(int p4type, void *p4)
+{
+	if (p4 == 0)
+		return;
+	switch (p4type) {
+	case P4_DYNAMIC:
+		__dbsql_free(NULL, p4);
+		break;
+	case P4_KEYINFO:
+		__dbsql_free(NULL, p4);
+		break;
+	case P4_FUNCDEF:
+		/* FuncDefs are typically static or owned elsewhere */
+		break;
+	case P4_COLLSEQ:
+		/* CollSeqs are owned by the database connection */
+		break;
+	case P4_INT32:
+	case P4_STATIC:
+	case P4_POINTER:
+	case P4_NOTUSED:
+		/* No deallocation needed */
+		break;
+	default:
+		/* p4type >= 0 was copied into P4_DYNAMIC above */
+		break;
+	}
+}
+
+/*
+ * __vdbe_dequote_p4 --
+ *	If the P4 operand to the specified instruction appears
+ *	to be a quoted string token, then this procedure removes
+ *	the quotes.
+ *
+ * PUBLIC: void __vdbe_dequote_p4 __P((vdbe_t *, int));
+ */
+void
+__vdbe_dequote_p4(vdbe_t* vm, int addr)
 {
 	vdbe_op_t *op;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
@@ -367,20 +548,20 @@ __vdbe_dequote_p3(vdbe_t* vm, int addr)
 			return;
 	}
 	op = &vm->aOp[addr];
-	if (op->p3 == 0 || op->p3[0] == 0)
+	if (op->p4.z == 0 || op->p4.z[0] == 0)
 		return;
-	if (op->p3type == P3_POINTER)
+	if (op->p4type == P4_POINTER)
 		return;
-	if (op->p3type != P3_DYNAMIC) {
-		__dbsql_strdup(NULL, op->p3, &op->p3);
-		op->p3type = P3_DYNAMIC;
+	if (op->p4type != P4_DYNAMIC) {
+		__dbsql_strdup(NULL, op->p4.z, (char**)&op->p4.z);
+		op->p4type = P4_DYNAMIC;
 	}
-	__str_unquote(op->p3);
+	__str_unquote((char*)op->p4.z);
 }
 
 /*
  * __vdbe_compress_space --
- *	On the P3 argument of the given instruction, change all
+ *	On the P4 argument of the given instruction, change all
  *	strings of whitespace characters into a single space and
  *	delete leading and trailing whitespace.
  *
@@ -396,14 +577,14 @@ __vdbe_compress_space(vdbe_t* vm, int addr)
 	if (vm->aOp == 0 || addr < 0 || addr >= vm->nOp)
 		return;
 	op = &vm->aOp[addr];
-	if (op->p3type == P3_POINTER) {
+	if (op->p4type == P4_POINTER) {
 		return;
 	}
-	if (op->p3type != P3_DYNAMIC) {
-		__dbsql_strdup(NULL, op->p3, &op->p3);
-		op->p3type = P3_DYNAMIC;
+	if (op->p4type != P4_DYNAMIC) {
+		__dbsql_strdup(NULL, op->p4.z, (char**)&op->p4.z);
+		op->p4type = P4_DYNAMIC;
 	}
-	z = (unsigned char*)op->p3;
+	z = (unsigned char*)op->p4.z;
 	if (z == 0)
 		return;
 	i = j = 0;
@@ -458,6 +639,217 @@ __vdbe_get_op(vdbe_t* vm, int addr)
 }
 
 /*
+ * __vdbe_mem_release --
+ *	Release memory held by a Mem (register) cell.  Handles the xDel
+ *	destructor for MEM_Dyn values and the aggregate finalizer for
+ *	MEM_Agg values.
+ *
+ * PUBLIC: void __vdbe_mem_release __P((mem_t *));
+ */
+void
+__vdbe_mem_release(mem_t* p)
+{
+	if (p->flags & MEM_Dyn) {
+		if (p->xDel) {
+			p->xDel(p->z);
+		} else {
+			__dbsql_free(NULL, p->z);
+		}
+	} else if (p->flags & MEM_Agg) {
+		/* Aggregate context: finalize if needed */
+		if (p->u.pDef && p->u.pDef->xFinalize) {
+			dbsql_func_t ctx;
+			memset(&ctx, 0, sizeof(ctx));
+			ctx.pFunc = p->u.pDef;
+			ctx.s.flags = MEM_Null;
+			ctx.pAgg = p->z;
+			(*p->u.pDef->xFinalize)(&ctx);
+		}
+		__dbsql_free(NULL, p->zMalloc);
+	}
+	p->z = 0;
+	p->zMalloc = 0;
+	p->szMalloc = 0;
+	p->xDel = 0;
+	p->flags = MEM_Null;
+}
+
+/*
+ * __vdbe_mem_set_null --
+ *	Set a register to NULL.
+ *
+ * PUBLIC: void __vdbe_mem_set_null __P((mem_t *));
+ */
+void
+__vdbe_mem_set_null(mem_t* p)
+{
+	if (p->flags & (MEM_Dyn | MEM_Agg)) {
+		__vdbe_mem_release(p);
+	}
+	p->flags = MEM_Null;
+	p->z = 0;
+	p->n = 0;
+}
+
+/*
+ * __vdbe_mem_set_int64 --
+ *	Set a register to a 64-bit integer value.
+ *
+ * PUBLIC: void __vdbe_mem_set_int64 __P((mem_t *, int64_t));
+ */
+void
+__vdbe_mem_set_int64(mem_t* p, int64_t val)
+{
+	if (p->flags & (MEM_Dyn | MEM_Agg)) {
+		__vdbe_mem_release(p);
+	}
+	p->u.i = val;
+	p->flags = MEM_Int;
+}
+
+/*
+ * __vdbe_mem_set_double --
+ *	Set a register to a double value.
+ *
+ * PUBLIC: void __vdbe_mem_set_double __P((mem_t *, double));
+ */
+void
+__vdbe_mem_set_double(mem_t* p, double val)
+{
+	if (p->flags & (MEM_Dyn | MEM_Agg)) {
+		__vdbe_mem_release(p);
+	}
+	p->u.r = val;
+	p->flags = MEM_Real;
+}
+
+/*
+ * __vdbe_mem_set_str --
+ *	Set a register to a string value.  If xDel is not NULL, it will
+ *	be called to free the string when the register is released.
+ *	If n < 0, the string length is computed using strlen().
+ *
+ * PUBLIC: int __vdbe_mem_set_str __P((mem_t *, const char *, int,
+ * PUBLIC:                         void(*)(void*)));
+ */
+int
+__vdbe_mem_set_str(mem_t* p, const char *z, int n, void(*xDel)(void*))
+{
+	if (p->flags & (MEM_Dyn | MEM_Agg)) {
+		__vdbe_mem_release(p);
+	}
+	if (z == 0) {
+		p->flags = MEM_Null;
+		p->z = 0;
+		p->n = 0;
+		return DBSQL_SUCCESS;
+	}
+	if (n < 0)
+		n = strlen(z);
+	p->n = n;
+	p->enc = 1; /* DBSQL_UTF8 */
+	if (xDel == (void(*)(void*))(-1)) {
+		/* DBSQL_TRANSIENT: make a copy */
+		if (__dbsql_calloc(NULL, 1, n + 1, &p->z) == ENOMEM) {
+			p->flags = MEM_Null;
+			return ENOMEM;
+		}
+		memcpy(p->z, z, n);
+		p->z[n] = 0;
+		p->flags = MEM_Str | MEM_Dyn | MEM_Term;
+		p->xDel = 0; /* will use __dbsql_free */
+		p->zMalloc = p->z;
+		p->szMalloc = n + 1;
+	} else if (xDel == 0) {
+		/* DBSQL_STATIC: just store the pointer */
+		p->z = (char*)z;
+		p->flags = MEM_Str | MEM_Static | MEM_Term;
+		p->xDel = 0;
+	} else {
+		/* Dynamic with custom destructor */
+		p->z = (char*)z;
+		p->flags = MEM_Str | MEM_Dyn | MEM_Term;
+		p->xDel = xDel;
+	}
+	return DBSQL_SUCCESS;
+}
+
+/*
+ * __vdbe_mem_copy --
+ *	Make a full copy of a Mem cell.
+ *
+ * PUBLIC: int __vdbe_mem_copy __P((mem_t *, const mem_t *));
+ */
+int
+__vdbe_mem_copy(mem_t* pTo, const mem_t *pFrom)
+{
+	if (pTo->flags & (MEM_Dyn | MEM_Agg)) {
+		__vdbe_mem_release(pTo);
+	}
+	memcpy(pTo, pFrom, offsetof(mem_t, db));
+	pTo->xDel = 0;
+	pTo->zMalloc = 0;
+	pTo->szMalloc = 0;
+	if (pFrom->flags & (MEM_Str | MEM_Blob)) {
+		if (pFrom->flags & (MEM_Dyn | MEM_Ephem)) {
+			/* Make our own copy */
+			if (__dbsql_calloc(NULL, 1, pFrom->n + 1,
+					   &pTo->z) == ENOMEM) {
+				pTo->flags = MEM_Null;
+				return ENOMEM;
+			}
+			memcpy(pTo->z, pFrom->z, pFrom->n);
+			pTo->z[pFrom->n] = 0;
+			pTo->flags = (pFrom->flags & ~(MEM_Dyn | MEM_Ephem |
+						       MEM_Static)) |
+				     MEM_Dyn | MEM_Term;
+			pTo->zMalloc = pTo->z;
+			pTo->szMalloc = pFrom->n + 1;
+		}
+		/* If MEM_Static, the pointer is already copied above */
+	}
+	return DBSQL_SUCCESS;
+}
+
+/*
+ * __release_mem_array --
+ *	Release all memory held by an array of Mem cells.
+ *
+ * STATIC: static void __release_mem_array __P((mem_t *, int));
+ */
+static void
+__release_mem_array(mem_t* p, int n)
+{
+	mem_t *pEnd = &p[n];
+	while (p < pEnd) {
+		if (p->flags & (MEM_Dyn | MEM_Agg)) {
+			__vdbe_mem_release(p);
+		} else {
+			p->flags = MEM_Null;
+		}
+		p++;
+	}
+}
+
+/*
+ * __init_mem_array --
+ *	Initialize an array of Mem cells with a given database connection
+ *	and initial flags value.
+ *
+ * STATIC: static void __init_mem_array __P((mem_t *, int, DBSQL *, int));
+ */
+static void
+__init_mem_array(mem_t* p, int n, DBSQL *db, int flags)
+{
+	int i;
+	for (i = 0; i < n; i++) {
+		memset(&p[i], 0, sizeof(mem_t));
+		p[i].flags = flags;
+		p[i].db = db;
+	}
+}
+
+/*
  * dbsql_set_result_string --
  *	The following group or routines are employed by installable functions
  *	to return their results.
@@ -465,20 +857,6 @@ __vdbe_get_op(vdbe_t* vm, int addr)
  *	The dbsql_set_result_string() routine can be used to return a string
  *	value or to return a NULL.  To return a NULL, pass in NULL for
  *	'result'.
- *	A copy is made of the string before this routine returns so it is safe
- *	to pass in an ephemeral string.
- *
- *	dbsql_set_result_error() works like dbsql_set_result_string() except
- *	that it signals a fatal error.  The string argument, if any, is the
- *	error message.  If the argument is NULL a generic substitute error
- *	message is used.
- *
- *	The dbsql_set_result_int() and dbsql_set_result_double() set the
- *	return value of the user function to an integer or a double.
- *
- *	These routines are defined here in vdbe_aux.c because they depend on
- *	knowing the internals of the dbsql_func_t structure which is only
- *	defined in this source file.
  *
  * EXTERN: char *dbsql_set_result_string __P((dbsql_func_t *, const char *,
  * EXTERN:                               int));
@@ -491,7 +869,11 @@ dbsql_set_result_string(p, result, n)
 {
 	DBSQL_ASSERT(!p->isStep);
 	if (p->s.flags & MEM_Dyn) {
-		__dbsql_free(NULL, p->s.z);
+		if (p->s.xDel) {
+			p->s.xDel(p->s.z);
+		} else {
+			__dbsql_free(NULL, p->s.z);
+		}
 	}
 	if (result == 0) {
 		p->s.flags = MEM_Null;
@@ -501,19 +883,13 @@ dbsql_set_result_string(p, result, n)
 	} else {
 		if (n < 0)
 			n = strlen(result);
-		if (n < NBFS - 1) {
-			memcpy(p->s.zShort, result, n);
-			p->s.zShort[n] = 0;
-			p->s.flags = MEM_Str | MEM_Short;
-			p->s.z = p->s.zShort;
-		} else {
-			if (__dbsql_calloc(NULL, 1, n + 1, &p->s.z) != ENOMEM) {
-				memcpy(p->s.z, result, n);
-				p->s.z[n] = 0;
-			}
-			p->s.flags = MEM_Str | MEM_Dyn;
+		if (__dbsql_calloc(NULL, 1, n + 1, &p->s.z) != ENOMEM) {
+			memcpy(p->s.z, result, n);
+			p->s.z[n] = 0;
 		}
-		p->s.n = n + 1;
+		p->s.flags = MEM_Str | MEM_Dyn | MEM_Term;
+		p->s.xDel = 0;
+		p->s.n = n;
 	}
 	return p->s.z;
 }
@@ -528,7 +904,11 @@ dbsql_set_result_null(dbsql_func_t* p)
 {
 	DBSQL_ASSERT(!p->isStep);
 	if (p->s.flags & MEM_Dyn) {
-		__dbsql_free(NULL, p->s.z);
+		if (p->s.xDel) {
+			p->s.xDel(p->s.z);
+		} else {
+			__dbsql_free(NULL, p->s.z);
+		}
 	}
 	p->s.flags = MEM_Null;
 	p->s.z = 0;
@@ -545,9 +925,13 @@ dbsql_set_result_int(dbsql_func_t* p, int result)
 {
 	DBSQL_ASSERT(!p->isStep);
 	if (p->s.flags & MEM_Dyn) {
-		__dbsql_free(NULL, p->s.z);
+		if (p->s.xDel) {
+			p->s.xDel(p->s.z);
+		} else {
+			__dbsql_free(NULL, p->s.z);
+		}
 	}
-	p->s.i = result;
+	p->s.u.i = (int64_t)result;
 	p->s.flags = MEM_Int;
 }
 
@@ -557,11 +941,20 @@ dbsql_set_result_int(dbsql_func_t* p, int result)
  * EXTERN: void dbsql_set_result_int64 __P((dbsql_func_t *, int64_t));
  */
 void
-dbsql_set_result_int64(p, result) /*TODO*/
+dbsql_set_result_int64(p, result)
 	dbsql_func_t *p;
 	int64_t result;
 {
-	DBSQL_ASSERT(0);
+	DBSQL_ASSERT(!p->isStep);
+	if (p->s.flags & MEM_Dyn) {
+		if (p->s.xDel) {
+			p->s.xDel(p->s.z);
+		} else {
+			__dbsql_free(NULL, p->s.z);
+		}
+	}
+	p->s.u.i = result;
+	p->s.flags = MEM_Int;
 }
 
 /*
@@ -574,9 +967,13 @@ dbsql_set_result_double(dbsql_func_t* p, double result)
 {
 	DBSQL_ASSERT(!p->isStep);
 	if (p->s.flags & MEM_Dyn) {
-		__dbsql_free(NULL, p->s.z);
+		if (p->s.xDel) {
+			p->s.xDel(p->s.z);
+		} else {
+			__dbsql_free(NULL, p->s.z);
+		}
 	}
-	p->s.r = result;
+	p->s.u.r = result;
 	p->s.flags = MEM_Real;
 }
 
@@ -604,13 +1001,44 @@ dbsql_set_result_error(p, msg, n)
  * EXTERN:                            size_t, void(*)(void*)));
  */
 void
-dbsql_set_result_blob(p, result, size, finalize) /*TODO*/
+dbsql_set_result_blob(p, result, size, xDel)
 	dbsql_func_t *p;
 	const void *result;
 	size_t size;
-	void(*finalize)(void*);
+	void(*xDel)(void*);
 {
-	DBSQL_ASSERT(0);
+	DBSQL_ASSERT(!p->isStep);
+	if (p->s.flags & MEM_Dyn) {
+		if (p->s.xDel) {
+			p->s.xDel(p->s.z);
+		} else {
+			__dbsql_free(NULL, p->s.z);
+		}
+	}
+	if (result == 0 || size == 0) {
+		p->s.flags = MEM_Null;
+		p->s.z = 0;
+		p->s.n = 0;
+		return;
+	}
+	if (xDel == (void(*)(void*))(-1)) {
+		/* DBSQL_TRANSIENT */
+		if (__dbsql_calloc(NULL, 1, size, &p->s.z) != ENOMEM) {
+			memcpy(p->s.z, result, size);
+		}
+		p->s.flags = MEM_Blob | MEM_Dyn;
+		p->s.xDel = 0;
+	} else if (xDel == 0) {
+		/* DBSQL_STATIC */
+		p->s.z = (char*)result;
+		p->s.flags = MEM_Blob | MEM_Static;
+		p->s.xDel = 0;
+	} else {
+		p->s.z = (char*)result;
+		p->s.flags = MEM_Blob | MEM_Dyn;
+		p->s.xDel = xDel;
+	}
+	p->s.n = (int)size;
 }
 
 /*
@@ -620,13 +1048,13 @@ dbsql_set_result_blob(p, result, size, finalize) /*TODO*/
  * EXTERN:                            size_t, void(*)(void*)));
  */
 void
-dbsql_set_result_varchar(p, result, size, finalize) /*TODO*/
+dbsql_set_result_varchar(p, result, size, xDel)
 	dbsql_func_t *p;
 	const char *result;
 	size_t size;
-	void(*finalize)(void*);
+	void(*xDel)(void*);
 {
-	DBSQL_ASSERT(0);
+	__vdbe_mem_set_str(&p->s, result, (int)size, xDel);
 }
 
 /*
@@ -649,10 +1077,6 @@ dbsql_user_data(dbsql_func_t* p)
  *	context is allocated on the first call.  Subsequent calls return the
  *	same context that was returned on prior calls.
  *
- *	This routine is defined here in vdbe.c because it depends on knowing
- *	the internals of the dbsql_func_t structure which is only defined in
- *	this source file.
- *
  * EXTERN: void *dbsql_aggregate_context __P((dbsql_func_t *, int));
  */
 void *
@@ -660,24 +1084,18 @@ dbsql_aggregate_context(dbsql_func_t* p, int num_bytes)
 {
 	DBSQL_ASSERT(p && p->pFunc && p->pFunc->xStep);
 	if (p->pAgg == 0) {
-		if (num_bytes <= NBFS) {
-			p->pAgg = (void *)p->s.z;
-			memset(p->pAgg, 0, num_bytes);
-		} else {
-			__dbsql_calloc(NULL, 1, num_bytes, &p->pAgg);
+		if (num_bytes <= 0) {
+			return 0;
 		}
+		__dbsql_calloc(NULL, 1, num_bytes, &p->pAgg);
 	}
 	return p->pAgg;
 }
 
 /*
  * dbsql_aggregate_count --
- *	Return the number of times the Step function of a aggregate has been 
+ *	Return the number of times the Step function of a aggregate has been
  *	called.
- *
- *	This routine is defined here in vdbe.c because it depends on knowing
- *	the internals of the dbsql_func_t structure which is only defined in
- *	this source file.
  *
  * EXTERN: int dbsql_aggregate_count __P((dbsql_func_t *));
  */
@@ -698,19 +1116,26 @@ dbsql_aggregate_count(dbsql_func_t* p)
 void
 __vdbe_print_op(FILE* out, int pc, vdbe_op_t* op)
 {
-	char *p3;
-	char ptr[40];
-	if (op->p3type == P3_POINTER) {
-		sprintf(ptr, "ptr(%p)", op->p3);
-		p3 = ptr;
+	char *p4str;
+	char ptr[50];
+	if (op->p4type == P4_POINTER) {
+		sprintf(ptr, "ptr(%p)", op->p4.p);
+		p4str = ptr;
+	} else if (op->p4type == P4_INT32) {
+		sprintf(ptr, "%d", op->p4.i);
+		p4str = ptr;
+	} else if (op->p4type == P4_DYNAMIC || op->p4type == P4_STATIC) {
+		p4str = (char*)op->p4.z;
 	} else {
-		p3 = op->p3;
+		p4str = 0;
 	}
 	if (out == 0)
 		out = stdout;
-	fprintf(out,"%4d %-12s %4d %4d %s\n",
+	fprintf(out, "%4d %-12s %4d %4d %4d %s %d\n",
 		pc, __opcode_names[op->opcode],
-		op->p1, op->p2, p3 ? p3 : "");
+		op->p1, op->p2, op->p3,
+		p4str ? p4str : "",
+		op->p5);
 	fflush(out);
 }
 #endif
@@ -723,6 +1148,9 @@ __vdbe_print_op(FILE* out, int pc, vdbe_op_t* op)
  *	running the code, it invokes the callback once for each instruction.
  *	This feature is used to implement "EXPLAIN".
  *
+ *	For the register-based VM, EXPLAIN shows 8 columns:
+ *	addr, opcode, p1, p2, p3, p4, p5, comment
+ *
  * PUBLIC: int __vdbe_list __P((vdbe_t *));
  */
 int
@@ -730,21 +1158,20 @@ __vdbe_list(vdbe_t* vm)
 {
 	int i;
 	DBSQL *db = vm->db;
-	static char *column_names[] = {
-		"addr", "opcode", "p1",  "p2",  "p3", 
-		"int",  "text",   "int", "int", "text",
-		0
-	};
+	mem_t *pMem;
 
-	DBSQL_ASSERT(vm->popStack == 0);
 	DBSQL_ASSERT(vm->explain);
-	vm->azColName = column_names;
-	vm->azResColumn = vm->zArgv;
-	for (i = 0; i < 5; i++) {
-		vm->zArgv[i] = vm->aStack[i].zShort;
-	}
+
+	/* Use the first 8 registers as scratch space for EXPLAIN output */
+	if (vm->nMem < 8)
+		return DBSQL_ERROR;
+
 	vm->rc = DBSQL_SUCCESS;
+	vm->nResColumn = 8;
+
 	for (i = vm->pc; vm->rc == DBSQL_SUCCESS && i < vm->nOp; i++) {
+		vdbe_op_t *pOp = &vm->aOp[i];
+
 		if (db->flags & DBSQL_Interrupt) {
 			db->flags &= ~DBSQL_Interrupt;
 			if (db->magic != DBSQL_STATUS_BUSY) {
@@ -756,66 +1183,132 @@ __vdbe_list(vdbe_t* vm)
 				     (char*)0);
 			break;
 		}
-		sprintf(vm->zArgv[0], "%d", i);
-		sprintf(vm->zArgv[2], "%d", vm->aOp[i].p1);
-		sprintf(vm->zArgv[3], "%d", vm->aOp[i].p2);
-		if (vm->aOp[i].p3type == P3_POINTER) {
-			sprintf(vm->aStack[4].zShort, "ptr(%p)",
-				vm->aOp[i].p3);
-			vm->zArgv[4] = vm->aStack[4].zShort;
+
+		/* addr */
+		pMem = &vm->aMem[0];
+		__vdbe_mem_set_int64(pMem, i);
+
+		/* opcode */
+		pMem = &vm->aMem[1];
+		__vdbe_mem_set_str(pMem, __opcode_names[pOp->opcode],
+				   -1, 0);
+
+		/* p1 */
+		pMem = &vm->aMem[2];
+		__vdbe_mem_set_int64(pMem, pOp->p1);
+
+		/* p2 */
+		pMem = &vm->aMem[3];
+		__vdbe_mem_set_int64(pMem, pOp->p2);
+
+		/* p3 */
+		pMem = &vm->aMem[4];
+		__vdbe_mem_set_int64(pMem, pOp->p3);
+
+		/* p4 */
+		pMem = &vm->aMem[5];
+		if (pOp->p4type == P4_DYNAMIC || pOp->p4type == P4_STATIC) {
+			__vdbe_mem_set_str(pMem, pOp->p4.z, -1, 0);
+		} else if (pOp->p4type == P4_INT32) {
+			char buf[30];
+			sprintf(buf, "%d", pOp->p4.i);
+			__vdbe_mem_set_str(pMem, buf, -1,
+					   (void(*)(void*))(-1));
 		} else {
-			vm->zArgv[4] = vm->aOp[i].p3;
+			__vdbe_mem_set_null(pMem);
 		}
-		vm->zArgv[1] = __opcode_names[vm->aOp[i].opcode];
-		if (vm->xCallback == 0) {
-			vm->pc = i + 1;
-			vm->azResColumn = vm->zArgv;
-			vm->nResColumn = 5;
-			return DBSQL_ROW;
-		}
-		if (__safety_off(db)) {
-			vm->rc = DBSQL_MISUSE;
-			break;
-		}
-		if (vm->xCallback(vm->pCbArg, 5, vm->zArgv, vm->azColName)) {
-			vm->rc = DBSQL_ABORT;
-		}
-		if (__safety_on(db)) {
-			vm->rc = DBSQL_MISUSE;
-		}
+
+		/* p5 */
+		pMem = &vm->aMem[6];
+		__vdbe_mem_set_int64(pMem, pOp->p5);
+
+		/* comment (empty for now) */
+		pMem = &vm->aMem[7];
+		__vdbe_mem_set_null(pMem);
+
+		vm->pc = i + 1;
+		vm->pResultRow = &vm->aMem[0];
+		return DBSQL_ROW;
 	}
 	return vm->rc == DBSQL_SUCCESS ? DBSQL_DONE : DBSQL_ERROR;
 }
 
 /*
- * __vdbe_make_ready --
- *	Prepare a virtual machine for execution.  This involves things such
- *	as allocating stack space and initializing the program counter.
- *	After the VDBE has be prepped, it can be executed by one or more
- *	calls to __vdbe_exec().  
+ * __vdbe_set_num_cols --
+ *	Set the number of result columns for this statement.
+ *	Allocates the aColName array.
  *
- *	The behavior of __vdbe_exec() is influenced by the parameters to
- *	this routine.  If 'callback' is NULL, then __vdbe_exec() will return
- *	with DBSQL_ROW whenever there is a row of the result set ready
- *	to be delivered.  vm->azResColumn will point to the row and 
- *	vm->nResColumn gives the number of columns in the row.  If 'callback'
- *	is not NULL, then the 'callback()' routine is invoked to process each
- *	row in the result set.
- *
- * PUBLIC: void __vdbe_make_ready __P((vdbe_t *, int, dbsql_callback, void *,
- * PUBLIC:                        int));
- *
- * vm				The VDBE
- * num_var			Number of '?' seen in the SQL statement
- * callback			Result callback
- * callback_arg			1st argument to callback()
- * explain_p			True if the EXPLAIN keywords is present
+ * PUBLIC: void __vdbe_set_num_cols __P((vdbe_t *, int));
  */
 void
-__vdbe_make_ready(vdbe_t* vm, int num_var, dbsql_callback callback, void* callback_arg, int explain_p)
+__vdbe_set_num_cols(vdbe_t* vm, int nResColumn)
 {
 	int n;
 
+	if (vm->aColName) {
+		__release_mem_array(vm->aColName,
+				    vm->nResColumn * COLNAME_N);
+		__dbsql_free(NULL, vm->aColName);
+	}
+	n = nResColumn * COLNAME_N;
+	vm->nResColumn = nResColumn;
+	if (__dbsql_calloc(NULL, n, sizeof(mem_t), &vm->aColName) == ENOMEM)
+		return;
+	__init_mem_array(vm->aColName, n, vm->db, MEM_Null);
+}
+
+/*
+ * __vdbe_set_col_name --
+ *	Set the name of the idx'th column of the result set.
+ *
+ *	var is one of the COLNAME_* constants (COLNAME_NAME, COLNAME_DECLTYPE,
+ *	etc.).  zName must be a nul-terminated string.
+ *
+ *	This must be called after __vdbe_set_num_cols().
+ *
+ * PUBLIC: int __vdbe_set_col_name __P((vdbe_t *, int, int, const char *,
+ * PUBLIC:                          void(*)(void*)));
+ */
+int
+__vdbe_set_col_name(vdbe_t* vm, int idx, int var, const char *zName,
+		    void(*xDel)(void*))
+{
+	int rc;
+	mem_t *pColName;
+	DBSQL_ASSERT(idx < vm->nResColumn);
+	DBSQL_ASSERT(var < COLNAME_N);
+	if (vm->aColName == 0)
+		return ENOMEM;
+	pColName = &vm->aColName[idx + var * vm->nResColumn];
+	rc = __vdbe_mem_set_str(pColName, zName, -1, xDel);
+	return rc;
+}
+
+/*
+ * __vdbe_make_ready --
+ *	Prepare a virtual machine for execution.  This involves allocating
+ *	registers, cursor slots, and variable storage, then initializing the
+ *	program counter.
+ *
+ *	After the VDBE has been prepped, it can be executed by one or more
+ *	calls to __vdbe_exec().
+ *
+ *	For the register-based VM:
+ *	  - aMem[0..nMem-1] is the register array
+ *	  - apCsr[0..nCursor-1] is the cursor pointer array
+ *	  - aVar[0..nVar-1] is the bound parameter array
+ *
+ * PUBLIC: void __vdbe_make_ready __P((vdbe_t *, int, int, int, int));
+ *
+ * vm		The VDBE
+ * nVar		Number of '?' parameters in the SQL statement
+ * nMem		Number of registers needed
+ * nCursor	Number of cursor slots needed
+ * explain_p	True if the EXPLAIN keyword is present
+ */
+void
+__vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
+{
 	DBSQL_ASSERT(vm != 0);
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 
@@ -828,48 +1321,79 @@ __vdbe_make_ready(vdbe_t* vm, int num_var, dbsql_callback callback, void* callba
 	}
 
 	/*
-	 * No instruction ever pushes more than a single element onto the
-	 * stack.  And the stack never grows on successive executions of the
-	 * same loop.  So the total number of instructions is an upper bound
-	 * on the maximum stack depth required.
-	 *
-	 * Allocation all the stack space we will ever need.
+	 * Resolve any remaining labels in the instruction stream.
 	 */
-	if (vm->aStack == 0) {
-		vm->nVar = num_var;
-		DBSQL_ASSERT(num_var >= 0);
-		n = explain_p ? 10 : vm->nOp;
-		__dbsql_calloc(NULL, 1,
-			 /* aStack and zArgv */
-			 (n * (sizeof(vm->aStack[0]) + (2 * sizeof(char*))) +
-			 /* azVar, anVar, abVar */
-			 (vm->nVar * (sizeof(char*)) + sizeof(int) + 1)),
-			 &vm->aStack);
-			vm->zArgv = (char**)&vm->aStack[n];
-			vm->azColName = (char**)&vm->zArgv[n];
-			vm->azVar = (char**)&vm->azColName[n];
-			vm->anVar = (int*)&vm->azVar[vm->nVar];
-			vm->abVar = (u_int8_t*)&vm->anVar[vm->nVar];
+	/* Labels should already be resolved by code generators,
+	 * but ensure P2 label references are patched. */
+
+	/*
+	 * For EXPLAIN mode, ensure at least 10 registers for output.
+	 */
+	if (explain_p) {
+		if (nMem < 10) nMem = 10;
 	}
 
-	__hash_init(&vm->agg.hash, DBSQL_HASH_BINARY, 0);
-	vm->agg.pSearch = 0;
+	/*
+	 * Each cursor uses a memory cell.  The first cursor (cursor 0)
+	 * can use aMem[0].  Allocate space for cursors at the end of aMem[].
+	 */
+	nMem += nCursor;
+	if (nCursor == 0 && nMem > 0) nMem++;  /* Space for aMem[0] */
+
+	/*
+	 * Allocate the register array (aMem).
+	 */
+	if (vm->aMem == 0) {
+		vm->nVar = nVar;
+		vm->nMem = nMem;
+		vm->nCursor = nCursor;
+
+		if (nMem > 0) {
+			if (__dbsql_calloc(NULL, nMem, sizeof(mem_t),
+					   &vm->aMem) == ENOMEM) {
+				vm->nMem = 0;
+				return;
+			}
+			__init_mem_array(vm->aMem, nMem, vm->db, MEM_Null);
+		}
+
+		/*
+		 * Allocate the bound parameter array (aVar).
+		 */
+		if (nVar > 0) {
+			if (__dbsql_calloc(NULL, nVar, sizeof(mem_t),
+					   &vm->aVar) == ENOMEM) {
+				vm->nVar = 0;
+				return;
+			}
+			__init_mem_array(vm->aVar, nVar, vm->db, MEM_Null);
+		}
+
+		/*
+		 * Allocate the cursor pointer array (apCsr).
+		 */
+		if (nCursor > 0) {
+			if (__dbsql_calloc(NULL, nCursor,
+					   sizeof(cursor_t*),
+					   &vm->apCsr) == ENOMEM) {
+				vm->nCursor = 0;
+				return;
+			}
+			/* Already zeroed by calloc */
+		}
+	}
+
 #ifdef MEMORY_DEBUG
 	if (__os_file_exists("vdbe_trace")){
 		vm->trace = stdout;
 	}
 #endif
-	vm->pTos = &vm->aStack[-1];
-	vm->pc = 0;
+	vm->pc = -1; /* Will be set to 0 on first step */
 	vm->rc = DBSQL_SUCCESS;
-	vm->uniqueCnt = 0;
-	vm->returnDepth = 0;
 	vm->errorAction = OE_Abort;
-	vm->undoTransOnError = 0;
-	vm->xCallback = callback;
-	vm->pCbArg = callback_arg;
-	vm->popStack =  0;
 	vm->explain |= explain_p;
+	vm->cacheCtr = 1;
+	vm->pResultRow = 0;
 	vm->magic = VDBE_MAGIC_RUN;
 #ifdef VDBE_PROFILE
 	{
@@ -903,7 +1427,7 @@ __vdbe_sorter_reset(vdbe_t* vm)
 
 /*
  * __vdbe_agg_reset --
- *	Reset an Agg structure.  Delete all its contents. 
+ *	Reset an Agg structure.  Delete all its contents.
  *
  *	For installable aggregate functions, if the step function has been
  *	called, make sure the finalizer function has also been called.  The
@@ -928,15 +1452,23 @@ __vdbe_agg_reset(agg_t* agg)
 				ctx.pFunc = agg->apFunc[i];
 				ctx.s.flags = MEM_Null;
 				ctx.pAgg = mem->z;
-				ctx.cnt = mem->i;
+				ctx.cnt = mem->u.i;
 				ctx.isStep = 0;
 				ctx.isError = 0;
 				(*agg->apFunc[i]->xFinalize)(&ctx);
-				if (mem->z != 0 && mem->z != mem->zShort) {
-					__dbsql_free(NULL, mem->z);
+				if (mem->flags & MEM_Dyn) {
+					if (mem->xDel) {
+						mem->xDel(mem->z);
+					} else {
+						__dbsql_free(NULL, mem->z);
+					}
 				}
 			} else if (mem->flags & MEM_Dyn) {
-				__dbsql_free(NULL, mem->z);
+				if (mem->xDel) {
+					mem->xDel(mem->z);
+				} else {
+					__dbsql_free(NULL, mem->z);
+				}
 			}
 		}
 		__dbsql_free(NULL, elem);
@@ -966,28 +1498,49 @@ __vdbe_keylist_free(keylist_t* p)
 }
 
 /*
- * __vdbe_cleanup_cursor --
- *	Close a cursor and release all the resources that cursor happens
- *	to hold.
+ * __vdbe_free_cursor --
+ *	Close a cursor and release all the resources it holds.
+ *	This handles the new pointer-based cursor model where cursors
+ *	can be of different types.
  *
- * PUBLIC: void __vdbe_cleanup_cursor __P((cursor_t *));
+ * PUBLIC: void __vdbe_free_cursor __P((vdbe_t *, VdbeCursor *));
  */
 void
-__vdbe_cleanup_cursor(cursor_t* cx)
+__vdbe_free_cursor(vdbe_t* vm, VdbeCursor* pCur)
 {
-	if (cx->pCursor) {
-		__sm_close_cursor(cx->pCursor);
+	if (pCur == 0)
+		return;
+
+	switch (pCur->eCurType) {
+	case CURTYPE_BTREE:
+		if (pCur->uc.pCursor != 0) {
+			__sm_close_cursor(pCur->uc.pCursor);
+		}
+		if (pCur->isEphemeral && pCur->ub.pBtx != 0) {
+			__sm_close(pCur->ub.pBtx);
+		}
+		break;
+	case CURTYPE_SORTER:
+		/* Sorter cleanup would go here */
+		break;
+	case CURTYPE_VTAB:
+		/* Virtual table cleanup would go here */
+		break;
+	case CURTYPE_PSEUDO:
+		/* Pseudo-table cleanup - nothing to do */
+		break;
 	}
-	if (cx->pBt) {
-		__sm_close_db(cx->pBt);
-	}
-	__dbsql_free(NULL, cx->pData);
-	memset(cx, 0, sizeof(cursor_t));
+
+	__dbsql_free(vm->db, pCur);
 }
 
 /*
  * __close_all_cursors --
- *	Close all cursors
+ *	Close all cursors.  In the register-based VM, cursors are stored
+ *	as a pointer array (apCsr[]), not an inline array.
+ *
+ *	Also release any dynamic memory held by registers, since register
+ *	values may hold pointers to cursor-related resources.
  *
  * STATIC: static void __close_all_cursors __P((vdbe_t *));
  */
@@ -995,12 +1548,21 @@ static void
 __close_all_cursors(vdbe_t* vm)
 {
 	int i;
-	for (i = 0; i < vm->nCursor; i++) {
-		__vdbe_cleanup_cursor(&vm->aCsr[i]);
+
+	/* Close all open cursors */
+	if (vm->apCsr) {
+		for (i = 0; i < vm->nCursor; i++) {
+			if (vm->apCsr[i]) {
+				__vdbe_free_cursor(vm, vm->apCsr[i]);
+				vm->apCsr[i] = 0;
+			}
+		}
 	}
-	__dbsql_free(NULL, vm->aCsr);
-	vm->aCsr = 0;
-	vm->nCursor = 0;
+
+	/* Release all register memory */
+	if (vm->aMem) {
+		__release_mem_array(vm->aMem, vm->nMem);
+	}
 }
 
 /*
@@ -1008,36 +1570,17 @@ __close_all_cursors(vdbe_t* vm)
  *	Clean up the VM after execution.
  *
  *	This routine will automatically close any cursors, lists, and/or
- *	sorters that were left open.  It also deletes the values of
- *	variables in the azVariable[] array.
+ *	sorters that were left open.  It also releases register values
+ *	and bound parameter values.
  *
  * STATIC: static void __cleanup __P((vdbe_t *));
  */
 static void
 __cleanup(vdbe_t* vm)
 {
-	int i;
-	if (vm->aStack) {
-		mem_t *tos = vm->pTos;
-		while(tos >= vm->aStack) {
-			if (tos->flags & MEM_Dyn) {
-				__dbsql_free(NULL, tos->z);
-			}
-			tos--;
-		}
-		vm->pTos = tos;
-	}
 	__close_all_cursors(vm);
-	if (vm->aMem) {
-		for(i = 0; i < vm->nMem; i++) {
-			if (vm->aMem[i].flags & MEM_Dyn) {
-				__dbsql_free(NULL, vm->aMem[i].z);
-			}
-		}
-	}
-	__dbsql_free(NULL, vm->aMem);
-	vm->aMem = 0;
-	vm->nMem = 0;
+
+	/* Clean up legacy structures still in use during transition */
 	if (vm->pList) {
 		__vdbe_keylist_free(vm->pList);
 		vm->pList = 0;
@@ -1060,6 +1603,7 @@ __cleanup(vdbe_t* vm)
 	vm->nLineAlloc = 0;
 	__vdbe_agg_reset(&vm->agg);
 	if (vm->aSet) {
+		int i;
 		for(i = 0; i < vm->nSet; i++) {
 			__hash_clear(&vm->aSet[i].hash);
 		}
@@ -1078,6 +1622,7 @@ __cleanup(vdbe_t* vm)
 	}
 	__dbsql_free(NULL, vm->zErrMsg);
 	vm->zErrMsg = 0;
+	vm->pResultRow = 0;
 }
 
 /*
@@ -1087,12 +1632,12 @@ __cleanup(vdbe_t* vm)
  *
  *	After this routine is run, the VDBE should be ready to be executed
  *	again.
+ *
  * PUBLIC: int __vdbe_reset __P((vdbe_t *, char **));
  */
 int
 __vdbe_reset(vdbe_t* vm, char* *err_msgs)
 {
-	int i;
 	DBSQL *db = vm->db;
 
 	if (vm->magic != VDBE_MAGIC_RUN && vm->magic != VDBE_MAGIC_HALT) {
@@ -1111,7 +1656,7 @@ __vdbe_reset(vdbe_t* vm, char* *err_msgs)
 	if (vm->rc != DBSQL_SUCCESS) {
 		switch(vm->errorAction) {
 		case OE_Abort:
-			/* FALLTHROUG */
+			/* FALLTHROUGH */
 		case OE_Rollback:
 			/* TODO __sm_abort_txn(db); */
 			db->flags &= ~DBSQL_InTrans;
@@ -1127,14 +1672,13 @@ __vdbe_reset(vdbe_t* vm, char* *err_msgs)
 		}
 		__rollback_internal_changes(db);
 	}
-	DBSQL_ASSERT(vm->pTos < &vm->aStack[vm->pc]);
 #ifdef VDBE_PROFILE
 	{
 		FILE *out = fopen("vdbe_profile.out", "a");
 		if (out) {
 			int i;
 			fprintf(out, "---- ");
-			for (i = 0; i < p->nOp; i++) {
+			for (i = 0; i < vm->nOp; i++) {
 				fprintf(out, "%02x", vm->aOp[i].opcode);
 			}
 			fprintf(out, "\n");
@@ -1182,11 +1726,9 @@ __vdbe_finalize(vdbe_t* vm, char* *err_msgs)
 
 /*
  * __api_bind --
- *	Set the values of all variables.  Variable $1 in the original SQL will
- *	be the string azValue[0].  $2 will have the value azValue[1].  And
- *	so forth.  If a value is out of range (for example $3 when nValue==2)
- *	then its value will be NULL.
- *	This routine overrides any prior call.
+ *	Bind a value to a parameter.  Variable $1 in the original SQL
+ *	will be the value at index 1.  Uses the new Mem-based variable
+ *	storage (aVar[]).
  *
  * PUBLIC: int __api_bind __P((dbsql_stmt_t *, int, const char *, int,
  * PUBLIC:                int));
@@ -1200,32 +1742,36 @@ __api_bind(p, i, val, len, copy)
 	int copy;
 {
 	vdbe_t *vm = (vdbe_t*)p;
-	if (vm->magic != VDBE_MAGIC_RUN || vm->pc != 0) {
+	mem_t *pVar;
+
+	if (vm->magic != VDBE_MAGIC_RUN || vm->pc != -1) {
 		return DBSQL_MISUSE;
 	}
 	if (i < 1 || i > vm->nVar) {
 		return DBSQL_RANGE;
 	}
-	i--;
-	if (vm->abVar[i]) {
-		__dbsql_free(NULL, vm->azVar[i]);
-	}
+	i--; /* Convert to 0-based index */
+	pVar = &vm->aVar[i];
+
+	/* Release any prior value */
+	__vdbe_mem_release(pVar);
+
 	if (val == 0) {
-		copy = 0;
-		len = 0;
+		pVar->flags = MEM_Null;
+		return DBSQL_SUCCESS;
 	}
 	if (len < 0) {
 		len = strlen(val) + 1;
 	}
 	if (copy) {
-		if (__dbsql_calloc(NULL, 1, len, &vm->azVar[i]) != ENOMEM)
-			memcpy(vm->azVar[i], val, len);
+		return __vdbe_mem_set_str(pVar, val, len,
+					  (void(*)(void*))(-1));
 	} else {
-		vm->azVar[i] = (char*)val;
+		pVar->z = (char*)val;
+		pVar->n = len;
+		pVar->flags = MEM_Str | MEM_Static;
+		return DBSQL_SUCCESS;
 	}
-	vm->abVar[i] = copy;
-	vm->anVar[i] = len;
-	return DBSQL_SUCCESS;
 }
 
 
@@ -1242,6 +1788,8 @@ __vdbe_delete(vdbe_t* vm)
 	if (vm == 0)
 		return;
 	__cleanup(vm);
+
+	/* Unlink from the database's VDBE list */
 	if (vm->pPrev) {
 		vm->pPrev->pNext = vm->pNext;
 	} else {
@@ -1252,22 +1800,37 @@ __vdbe_delete(vdbe_t* vm)
 		vm->pNext->pPrev = vm->pPrev;
 	}
 	vm->pPrev = vm->pNext = 0;
+
+	/* Free the opcodes and their P4 values */
 	if (vm->nOpAlloc == 0) {
 		vm->aOp = 0;
 		vm->nOp = 0;
 	}
 	for (i = 0; i < vm->nOp; i++) {
-		if (vm->aOp[i].p3type == P3_DYNAMIC) {
-			__dbsql_free(NULL, vm->aOp[i].p3);
-		}
+		__vdbe_free_p4(vm->aOp[i].p4type, vm->aOp[i].p4.p);
 	}
-	for(i = 0; i < vm->nVar; i++) {
-		if (vm->abVar[i])
-			__dbsql_free(NULL, vm->azVar[i]);
+
+	/* Free bound parameters */
+	if (vm->aVar) {
+		__release_mem_array(vm->aVar, vm->nVar);
+		__dbsql_free(NULL, vm->aVar);
 	}
+
+	/* Free column name array */
+	if (vm->aColName) {
+		__release_mem_array(vm->aColName,
+				    vm->nResColumn * COLNAME_N);
+		__dbsql_free(NULL, vm->aColName);
+	}
+
+	/* Free the register array */
+	__dbsql_free(NULL, vm->aMem);
+
+	/* Free the cursor pointer array */
+	__dbsql_free(NULL, vm->apCsr);
+
 	__dbsql_free(NULL, vm->aOp);
 	__dbsql_free(NULL, vm->aLabel);
-	__dbsql_free(NULL, vm->aStack);
 	vm->magic = VDBE_MAGIC_DEAD;
 	__dbsql_free(NULL, vm);
 }
@@ -1277,16 +1840,8 @@ __vdbe_delete(vdbe_t* vm)
  *	Convert an integer in between the native integer format and
  *	the bigEndian format used as the record number for tables.
  *
- *	The bigEndian format (most significant byte first) is used for
- *	record numbers so that records will sort into the correct order
- *	even though memcmp() is used to compare the keys.  On machines
- *	whose native integer format is little endian (ex: i486) the
- *	order of bytes is reversed.  On native big-endian machines
- *	(ex: Alpha, Sparc, Motorola) the byte order is the same.
- *
- *	This function is its own inverse.  In other words
- *
- *         X == byteSwap(byteSwap(X))
+ *	This function is retained for backward compatibility with legacy
+ *	key encoding.  New code should use native i64 keys directly.
  *
  * PUBLIC: int __vdbe_byte_swap __P((int));
  */
@@ -1310,6 +1865,9 @@ __vdbe_byte_swap(int x)
  *	MoveTo now.  Return an error code.  If no MoveTo is pending, this
  *	routine does nothing and returns DBSQL_SUCCESS.
  *
+ *	Updated for i64 movetoTarget to support the register-based VM's
+ *	native 64-bit row IDs.
+ *
  * PUBLIC: int __vdbe_cursor_moveto __P((cursor_t *));
  */
 int
@@ -1317,12 +1875,20 @@ __vdbe_cursor_moveto(cursor_t* p)
 {
 	if (p->deferredMoveto) {
 		int res;
+		int encoded_key;
 #ifdef CONFIG_TEST
 		extern int dbsql_search_count;
 #endif
-		__sm_moveto(p->pCursor, (char*)&p->movetoTarget,
+		/*
+		 * Convert the i64 movetoTarget to the legacy encoded key
+		 * format for the SM layer.  Once the SM supports native
+		 * i64 keys (__sm_table_moveto), this encoding step will
+		 * be removed.
+		 */
+		encoded_key = INT_TO_KEY((int)p->movetoTarget);
+		__sm_moveto(p->pCursor, (char*)&encoded_key,
 			    sizeof(int), &res);
-		p->lastRecno = KEY_TO_INT(p->movetoTarget);
+		p->lastRecno = (int64_t)(int)p->movetoTarget;
 		p->recnoIsValid = (res == 0);
 		if (res < 0) {
 			__sm_next(p->pCursor, &res);
@@ -1331,6 +1897,102 @@ __vdbe_cursor_moveto(cursor_t* p)
 		dbsql_search_count++;
 #endif
 		p->deferredMoveto = 0;
+		p->cacheStatus = 0; /* CACHE_STALE */
 	}
 	return DBSQL_SUCCESS;
+}
+
+/*
+ * __vdbe_int_value --
+ *	Extract a 64-bit integer value from a register (Mem).
+ *
+ * PUBLIC: int64_t __vdbe_int_value __P((const mem_t *));
+ */
+int64_t
+__vdbe_int_value(const mem_t* pMem)
+{
+	if (pMem->flags & MEM_Int) {
+		return pMem->u.i;
+	} else if (pMem->flags & MEM_Real) {
+		return (int64_t)pMem->u.r;
+	} else if (pMem->flags & (MEM_Str | MEM_Blob)) {
+		int64_t val = 0;
+		if (pMem->z) {
+			val = (int64_t)strtoll(pMem->z, 0, 10);
+		}
+		return val;
+	}
+	return 0;
+}
+
+/*
+ * __vdbe_real_value --
+ *	Extract a double value from a register (Mem).
+ *
+ * PUBLIC: double __vdbe_real_value __P((const mem_t *));
+ */
+double
+__vdbe_real_value(const mem_t* pMem)
+{
+	if (pMem->flags & MEM_Real) {
+		return pMem->u.r;
+	} else if (pMem->flags & MEM_Int) {
+		return (double)pMem->u.i;
+	} else if (pMem->flags & (MEM_Str | MEM_Blob)) {
+		double val = 0.0;
+		if (pMem->z) {
+			val = strtod(pMem->z, 0);
+		}
+		return val;
+	}
+	return 0.0;
+}
+
+/*
+ * __vdbe_mem_grow --
+ *	Ensure that the Mem has at least n bytes of writeable buffer space.
+ *	If preserve is true, preserve existing content.
+ *
+ * PUBLIC: int __vdbe_mem_grow __P((mem_t *, int, int));
+ */
+int
+__vdbe_mem_grow(mem_t* pMem, int n, int preserve)
+{
+	if (pMem->szMalloc < n) {
+		char *zNew = 0;
+		if (__dbsql_calloc(NULL, 1, n, &zNew) == ENOMEM) {
+			return ENOMEM;
+		}
+		if (preserve && pMem->z && pMem->n > 0) {
+			int copyLen = pMem->n < n ? pMem->n : n;
+			memcpy(zNew, pMem->z, copyLen);
+		}
+		if (pMem->zMalloc) {
+			__dbsql_free(NULL, pMem->zMalloc);
+		}
+		pMem->zMalloc = zNew;
+		pMem->szMalloc = n;
+		pMem->z = zNew;
+	} else if (!pMem->zMalloc || pMem->z != pMem->zMalloc) {
+		/* We have enough malloc space but z doesn't point to it */
+		if (preserve && pMem->z && pMem->n > 0) {
+			int copyLen = pMem->n < n ? pMem->n : n;
+			memcpy(pMem->zMalloc, pMem->z, copyLen);
+		}
+		pMem->z = pMem->zMalloc;
+	}
+	return DBSQL_SUCCESS;
+}
+
+/*
+ * __vdbe_mem_clear_and_resize --
+ *	Release existing content and resize the buffer.
+ *
+ * PUBLIC: int __vdbe_mem_clear_and_resize __P((mem_t *, int));
+ */
+int
+__vdbe_mem_clear_and_resize(mem_t* pMem, int n)
+{
+	__vdbe_mem_set_null(pMem);
+	return __vdbe_mem_grow(pMem, n, 0);
 }
