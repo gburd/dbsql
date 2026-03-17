@@ -85,6 +85,8 @@ void __update(parser, tab_list, changes, where, on_error)
 	int reg_old = 0;         /* First register for old column values */
 	int reg_new = 0;         /* First register for new column values */
 	int reg_rowset = 0;      /* RowSet for multi-pass updates */
+	int new_idx = 0;         /* Cursor for NEW pseudo-table */
+	int old_idx = 0;         /* Cursor for OLD pseudo-table */
 
 	select_t *view;
 
@@ -107,7 +109,7 @@ void __update(parser, tab_list, changes, where, on_error)
 					  TK_UPDATE, TK_AFTER, TK_ROW,
 					  changes);
 	row_triggers_exist = before_triggers || after_triggers;
-	is_view_p = (table->pSelect != 0);
+	is_view_p = (table->u.view.pSelect != 0);
 	if (__is_table_read_only(parser, table, before_triggers)) {
 		goto update_cleanup;
 	}
@@ -163,7 +165,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		}
 		for (j = 0; j < table->nCol; j++) {
 			if (strcasecmp(table->aCol[j].zName,
-						  changes->a[i].zName) == 0) {
+						  changes->a[i].zEName) == 0) {
 				if (j == table->iPKey) {
 					recno_will_change_p = 1;
 					recno = changes->a[i].pExpr;
@@ -173,12 +175,12 @@ void __update(parser, tab_list, changes, where, on_error)
 			}
 		}
 		if (j >= table->nCol) {
-			if (__is_row_id(changes->a[i].zName)) {
+			if (__is_row_id(changes->a[i].zEName)) {
 				recno_will_change_p = 1;
 				recno = changes->a[i].pExpr;
 			} else {
 				__error_msg(parser, "no such column: %s",
-					    changes->a[i].zName);
+					    changes->a[i].zEName);
 				goto update_cleanup;
 			}
 		}
@@ -305,7 +307,7 @@ void __update(parser, tab_list, changes, where, on_error)
 	 * a temporary table.
 	 */
 	if (is_view_p) {
-		view = __select_dup(table->pSelect);
+		view = __select_dup(table->u.view.pSelect);
 		__select(parser, view, SRT_TempTable, cur, 0, 0, 0);
 		__select_delete(view);
 	}
@@ -366,7 +368,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		 */
 		for(i = 0; i < table->nCol; i++) {
 			if (i == table->iPKey) {
-				__vdbe_add_op3(v, OP_Null, 0, reg_old + i, 0);
+				__vdbe_add_op3(v, OP_Integer, 0, reg_old + i, 0);
 			} else {
 				__vdbe_add_op3(v, OP_Column, data_cur, i, reg_old + i);
 			}
@@ -380,25 +382,25 @@ void __update(parser, tab_list, changes, where, on_error)
 			__expr_code(parser, recno);
 			/* Result is at top of register stack */
 			expr_reg = parser->nMem;
-			__vdbe_add_op3(v, OP_SCopy, expr_reg, reg_new_rowid, 0);
+			__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new_rowid, 0);
 		} else {
-			__vdbe_add_op3(v, OP_Copy, reg_old_rowid, reg_new_rowid, 0);
+			__vdbe_add_op3(v, OP_Dup, reg_old_rowid, reg_new_rowid, 0);
 		}
 
 		for(i = 0; i < table->nCol; i++) {
 			if (i == table->iPKey) {
-				__vdbe_add_op3(v, OP_Null, 0, reg_new + i, 0);
+				__vdbe_add_op3(v, OP_Integer, 0, reg_new + i, 0);
 				continue;
 			}
 			j = xref[i];
 			if (j < 0) {
-				__vdbe_add_op3(v, OP_Copy, reg_old + i, reg_new + i, 0);
+				__vdbe_add_op3(v, OP_Dup, reg_old + i, reg_new + i, 0);
 			}else{
 				int expr_reg;
 				__expr_code(parser, changes->a[j].pExpr);
 				/* Result is at top of register stack */
 				expr_reg = parser->nMem;
-				__vdbe_add_op3(v, OP_SCopy, expr_reg, reg_new + i, 0);
+				__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new + i, 0);
 			}
 		}
 
@@ -469,10 +471,10 @@ void __update(parser, tab_list, changes, where, on_error)
 			int expr_reg;
 			__expr_code(parser, recno);
 			expr_reg = parser->nMem;
-			__vdbe_add_op3(v, OP_SCopy, expr_reg, reg_new_rowid, 0);
+			__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new_rowid, 0);
 			__vdbe_add_op(v, OP_MustBeInt, reg_new_rowid, 0);
 		} else {
-			__vdbe_add_op3(v, OP_Copy, reg_old_rowid, reg_new_rowid, 0);
+			__vdbe_add_op3(v, OP_Dup, reg_old_rowid, reg_new_rowid, 0);
 		}
 
 		/*
@@ -480,7 +482,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		 */
 		for (i = 0; i < table->nCol; i++) {
 			if (i == table->iPKey) {
-				__vdbe_add_op3(v, OP_Null, 0, reg_new + i, 0);
+				__vdbe_add_op3(v, OP_Integer, 0, reg_new + i, 0);
 				continue;
 			}
 			j = xref[i];
@@ -490,7 +492,7 @@ void __update(parser, tab_list, changes, where, on_error)
 				int expr_reg;
 				__expr_code(parser, changes->a[j].pExpr);
 				expr_reg = parser->nMem;
-				__vdbe_add_op3(v, OP_SCopy, expr_reg, reg_new + i, 0);
+				__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new + i, 0);
 			}
 		}
 
@@ -519,15 +521,15 @@ void __update(parser, tab_list, changes, where, on_error)
 		/*
 		 * Create the new index entries and the new record.
 		 * The record is now in registers reg_new through reg_new+nCol-1.
-		 * Use OP_MakeRecord to pack it, then OP_Insert to write it.
+		 * Use OP_MakeRecord to pack it, then OP_PutIntKey to write it.
 		 */
 		__vdbe_add_op3(v, OP_MakeRecord, reg_new, table->nCol,
 			       areg_idx[total_num_idx]);
 		if (recno_will_change_p) {
-			__vdbe_add_op3(v, OP_Insert, data_cur,
+			__vdbe_add_op3(v, OP_PutIntKey, data_cur,
 				       areg_idx[total_num_idx], reg_new_rowid);
 		} else {
-			__vdbe_add_op3(v, OP_Insert, data_cur,
+			__vdbe_add_op3(v, OP_PutIntKey, data_cur,
 				       areg_idx[total_num_idx], reg_old_rowid);
 		}
 
@@ -542,19 +544,19 @@ void __update(parser, tab_list, changes, where, on_error)
 					int col = idx->aiColumn[j];
 					if (col < 0) {
 						/* Rowid column */
-						__vdbe_add_op3(v, OP_Copy,
+						__vdbe_add_op3(v, OP_Dup,
 							       recno_will_change_p ?
 							       reg_new_rowid : reg_old_rowid,
 							       reg_idx + j, 0);
 					} else {
-						__vdbe_add_op3(v, OP_Copy,
+						__vdbe_add_op3(v, OP_Dup,
 							       reg_new + col,
 							       reg_idx + j, 0);
 					}
 				}
 				__vdbe_add_op3(v, OP_MakeRecord, reg_idx,
 					       idx->nColumn, reg_idx + idx->nColumn);
-				__vdbe_add_op3(v, OP_IdxInsert, idx_cur + i,
+				__vdbe_add_op3(v, OP_IdxPut, idx_cur + i,
 					       reg_idx + idx->nColumn, 0);
 			}
 		}

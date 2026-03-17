@@ -672,6 +672,13 @@ struct func_def {
 		func_destructor_t *pDestructor; /* Reference counted destructor
 						   (user-defined) */
 	} u;
+
+	/* Legacy DBSQL compatibility shims */
+	void (*xFunc)(dbsql_func_t*, int, const char**);
+				 /* Legacy: alias for xSFunc */
+	void (*xStep)(dbsql_func_t*, int, const char**);
+				 /* Legacy: alias for xSFunc */
+	int dataType;            /* Legacy: return data type */
 };
 
 /*
@@ -1081,6 +1088,7 @@ struct index {
 struct token {
 	const char *z;           /* Text of the token.  Not NULL-terminated! */
 	unsigned int n;          /* Number of characters in this token */
+	int dyn;                 /* Legacy: true if dynamically allocated */
 };
 
 /* ================================================================
@@ -1120,8 +1128,11 @@ struct expr {
 #endif
 	u32 flags;               /* Various flags.  EP_* See below */
 	union {
-		char *zToken;    /* Token value. Zero terminated and
-				    dequoted */
+		struct {         /* Token with explicit length */
+			char *z; /* Token string pointer */
+			int n;   /* Token length */
+		} zToken;
+		char *zTokenStr; /* Simple token string pointer */
 		int iValue;      /* Non-negative integer value if EP_IntValue */
 	} u;
 
@@ -1172,6 +1183,13 @@ struct expr {
 			int regReturn;  /* Register used to hold return addr */
 		} sub;
 	} y;
+
+	/* Legacy DBSQL compatibility shims */
+	int dataType;            /* Legacy: data type of expression result */
+	int iDb;                 /* Legacy: database index */
+	expr_list_t *pList;      /* Legacy: alias for x.pList */
+	select_t *pSelect;        /* Legacy: alias for x.pSelect */
+	token_t span;             /* Legacy: source text span */
 };
 
 /*
@@ -1251,6 +1269,7 @@ struct expr_list {
 	struct expr_list_item {
 		expr_t *pExpr;   /* The parse tree for this expression */
 		char *zEName;    /* Token associated with this expression */
+		char *zName;     /* Legacy alias for zEName (compatibility) */
 		struct {
 			u8 sortFlags;       /* Mask of KEYINFO_ORDER_* flags */
 			unsigned eEName :2; /* Meaning of zEName */
@@ -1278,6 +1297,9 @@ struct expr_list {
 						is cached.  Used only by
 						Parse.pConstExpr */
 		} u;
+		/* Legacy compatibility fields for old code */
+		u8 sortOrder;    /* Legacy: same as fg.sortFlags & 1 */
+		u8 isAgg;        /* Legacy: 1 if aggregate function */
 	} a[FLEXARRAY];          /* One slot for each expression */
 };
 
@@ -1309,8 +1331,10 @@ struct expr_list {
  */
 struct id_list {
 	int nId;                 /* Number of identifiers on the list */
+	int nAlloc;              /* Legacy: number allocated (for compat) */
 	struct id_list_item {
 		char *zName;     /* Name of the identifier */
+		int idx;         /* Legacy: index */
 	} a[FLEXARRAY];
 };
 
@@ -1348,8 +1372,10 @@ struct src_list {
 		char *zName;     /* Name of the table */
 		char *zAlias;    /* The "B" part of a "A AS B" phrase */
 		table_t *pTab;   /* An SQL table corresponding to zName */
-		select_t *pSelect; /* A SELECT statement used in place of
-				      a table name */
+		union {
+			select_t *pSelect; /* A SELECT statement used in
+					      place of a table name */
+		} x;
 		int jointype;    /* Type of join between this table and the
 				    next */
 		int iCursor;     /* The VDBE cursor number used to access
@@ -1357,6 +1383,7 @@ struct src_list {
 		Bitmask colUsed; /* Bit N set if column N of pTab is used */
 		expr_t *pOn;     /* The ON clause of a join */
 		id_list_t *pUsing; /* The USING clause of a join */
+		select_t *pSelect;    /* Legacy: alias for x.pSelect */
 	} a[FLEXARRAY];          /* One entry for each identifier on the
 				    list */
 };
@@ -1451,6 +1478,11 @@ struct select {
 	window_t *pWin;          /* List of window functions */
 	window_t *pWinDefn;      /* List of named window definitions */
 #endif
+
+	/* Legacy DBSQL compatibility shims */
+	char *zSelect;           /* Legacy: SQL text of this SELECT */
+	int isDistinct;          /* Legacy: true if SELECT DISTINCT */
+	int nOffset;             /* Legacy: OFFSET value */
 };
 
 /*
@@ -1857,8 +1889,10 @@ struct parser {
 	void *pArg;              /* Argument to callback function */
 	int nSet;                /* Number of SET operations */
 	int nAgg;                /* Number of aggregate functions */
+	int useAgg;              /* Legacy: true if using aggregates */
 	int newTnum;             /* Root page number for new table/index */
 	token_t sFirstToken;     /* First token in the statement */
+	agg_expr_t *aAgg;           /* Array of aggregate info */
 
 	/* Cleanup & resource management */
 	parse_cleanup_t *pCleanup; /* Cleanup operations to run after parse */
