@@ -126,6 +126,8 @@ struct agg_elem;      typedef struct agg_elem agg_elem_t;
 struct keylist;       typedef struct keylist keylist_t;
 struct cursor;        typedef struct cursor cursor_t;
 struct trigger_stack; typedef struct trigger_stack trigger_stack_t;
+struct sm;            typedef struct sm sm_t;
+struct sm_cursor;     typedef struct sm_cursor sm_cursor_t;
 
 /*
  * A "format version" is used to know how data was written into the keys
@@ -291,6 +293,14 @@ typedef u64 tRowcnt;
  * and forward-declared pointer types (func_def_t*, key_info_t*, etc.).
  */
 #include "inc/vdbe.h"
+
+/*
+ * VDBE internal structures.
+ *
+ * Must be included after vdbe.h and after type aliases (u8, u32, i64, etc.)
+ * are defined, as vdbe_int.h depends on both.
+ */
+#include "inc/vdbe_int.h"
 
 /*
  * Sort order constants.  Replace the old DBSQL_SO_* system with the
@@ -598,7 +608,8 @@ struct __dbsql_db {
  * mutexes, which depend on things like cache line alignment.  Mutex alignment
  * is handled separately, in mutex.h.
  */
-@uintmax_t_decl@
+/* uintmax_t is defined in stdint.h on modern systems */
+#include <stdint.h>
 
 /*
  *
@@ -609,7 +620,7 @@ struct __dbsql_db {
  * get upset about that.  So far we haven't run on any machine where there
  * isn't an integral type the same size as a pointer -- here's hoping.
  */
-@uintptr_t_decl@
+/* uintptr_t is defined in stdint.h on modern systems */
 
 /*
  * Convert a pointer to a small integral value.
@@ -703,6 +714,13 @@ struct column {
 	u16 iDflt;             /* 1-based index into pDfltList for DEFAULT.
 				  0 means "no default" */
 	u16 colFlags;          /* Boolean properties.  See COLFLAG_ defines */
+
+	/* Legacy DBSQL compatibility shims */
+	char *zName;           /* Alias for zCnName */
+	char *zDflt;           /* Legacy: default value (use iDflt index now) */
+	char *zType;           /* Legacy: type name (use eCType now) */
+	u8 sortOrder;          /* Legacy: sort order */
+	int isPrimKey;         /* Deprecated: use colFlags & COLFLAG_PRIMKEY */
 };
 
 /*
@@ -839,6 +857,13 @@ struct table {
 	schema_t *pSchema;       /* Schema that contains this table */
 	u8 aHx[16];              /* Column aHx[K%sizeof(aHx)] might have
 				    hash K */
+
+	/* Legacy DBSQL compatibility shims (to be refactored) */
+	int iDb;                 /* Database index (0=main, 1=temp, 2+=attached) */
+	foreign_key_t *pFKey;    /* Alias for u.tab.pFKey */
+	int readOnly;            /* Deprecated: use TF_Readonly flag instead */
+	select_t *pSelect;       /* Alias for u.view.pSelect (for views) */
+	int hasPrimKey;          /* Deprecated: use TF_HasPrimaryKey flag */
 };
 
 /*
@@ -908,6 +933,10 @@ struct foreign_key {
 	trigger_t *apTrigger[2]; /* Triggers for aAction[] actions.
 				    [0] = ON UPDATE trigger
 				    [1] = ON DELETE trigger */
+
+	/* Legacy DBSQL compatibility shims (to be refactored) */
+	int insertConf;                /* Legacy field (not used in SQLite 3.52.0) */
+
 	struct col_map {         /* Mapping of columns in pFrom to columns
 				    in zTo */
 		int iFrom;       /* Index of column in pFrom */
@@ -915,6 +944,10 @@ struct foreign_key {
 				    PRIMARY KEY */
 	} aCol[FLEXARRAY];       /* One entry for each of nCol columns */
 };
+
+/* Compatibility macros for legacy foreign key action access */
+#define FK_ACTION_DELETE(fk) ((fk)->aAction[1])
+#define FK_ACTION_UPDATE(fk) ((fk)->aAction[0])
 
 /*
  * There are many ways to to resolve a constraint error.  ROLLBACK
@@ -1019,6 +1052,10 @@ struct index {
 #endif
 	Bitmask colNotIdxed;     /* Bitmask of columns NOT covered by this
 				    index */
+
+	/* Legacy DBSQL compatibility shims (to be refactored) */
+	int autoIndex;           /* True if created by CREATE TABLE (not CREATE INDEX) */
+	int iDb;                 /* Database index (0=main, 1=temp, 2+=attached) */
 };
 
 /*
@@ -1658,14 +1695,14 @@ struct parse_cleanup {
  * Used for INSERT/UPDATE/DELETE statements with RETURNING clause.
  */
 struct returning {
-	parser_t *pParse;        /* The parse including RETURNING clause */
-	expr_list_t *pReturnEL;  /* List of expressions to return */
-	trigger_t retTrig;       /* Transient trigger implementing RETURNING */
-	trigger_step_t retTStep; /* The trigger step */
-	int iRetCur;             /* Transient table holding RETURNING results */
-	int nRetCol;             /* Number in pReturnEL after expansion */
-	int iRetReg;             /* Register array for RETURNING row */
-	char zName[40];          /* Trigger name: "dbsql_returning_%p" */
+	parser_t *pParse;          /* The parse including RETURNING clause */
+	expr_list_t *pReturnEL;    /* List of expressions to return */
+	trigger_t *pRetTrig;       /* Transient trigger implementing RETURNING (pointer to avoid incomplete type) */
+	trigger_step_t *pRetTStep; /* The trigger step (pointer to avoid incomplete type) */
+	int iRetCur;               /* Transient table holding RETURNING results */
+	int nRetCol;               /* Number in pReturnEL after expansion */
+	int iRetReg;               /* Register array for RETURNING row */
+	char zName[40];            /* Trigger name: "dbsql_returning_%p" */
 };
 
 /*
@@ -1810,6 +1847,18 @@ struct parser {
 	/* Trigger compilation */
 	table_t *pTriggerTab;    /* Table for which triggers are being coded */
 	trigger_prg_t *pTriggerPrg; /* Linked list of coded triggers */
+	trigger_stack_t *trigStack; /* TEMP: Stack of active triggers (old mechanism) */
+	int iDb;                 /* TEMP: Default database index for stmt */
+
+	/* Legacy DBSQL fields (to be refactored) */
+	int initFlag;            /* True if during database initialization */
+	int (*xCallback)(void*,int,char**,char**); /* Callback function */
+	int useCallback;         /* True to use xCallback */
+	void *pArg;              /* Argument to callback function */
+	int nSet;                /* Number of SET operations */
+	int nAgg;                /* Number of aggregate functions */
+	int newTnum;             /* Root page number for new table/index */
+	token_t sFirstToken;     /* First token in the statement */
 
 	/* Cleanup & resource management */
 	parse_cleanup_t *pCleanup; /* Cleanup operations to run after parse */
@@ -1953,6 +2002,9 @@ struct trigger {
 	schema_t *pTabSchema;    /* Schema containing the table */
 	trigger_step_t *step_list;/* Link list of trigger program steps */
 	trigger_t *pNext;        /* Next trigger associated with the table */
+
+	/* Legacy DBSQL compatibility shim */
+	int iDb;                 /* Database index (0=main, 1=temp, 2+=attached) */
 };
 
 /* ================================================================
@@ -2161,19 +2213,10 @@ struct select_dest {
 };
 
 /* ================================================================
- * STEP 19b: AutoincInfo struct
- *
- * Per-table autoincrement information generated during INSERT
- * code generation.  Needed to support autoincrement within triggers.
- * (SQLite: struct AutoincInfo, sqliteInt.h:3772)
+ * STEP 19b: AutoincInfo struct - DUPLICATE REMOVED
+ * Original definition at line 1599
  * ================================================================
  */
-struct autoinc_info {
-	autoinc_info_t *pNext;   /* Next info block in a list */
-	table_t *pTab;           /* Table this info refers to */
-	int iDb;                 /* Index of database holding pTab */
-	int regCtr;              /* Memory register holding the counter */
-};
 
 /* ================================================================
  * STEP 19c: NameContext struct
@@ -2283,21 +2326,10 @@ struct with {
 	(offsetof(with_t, a) + (N) * sizeof(cte_t))
 
 /* ================================================================
- * STEP 19f: Returning struct
- *
- * Information about RETURNING clauses on DML statements.
- * (SQLite: struct Returning, sqliteInt.h:~line 4166)
+ * STEP 19f: Returning struct - DUPLICATE REMOVED
+ * Original definition at line 1662
  * ================================================================
  */
-struct returning {
-	parser_t *pParse;              /* The parse that includes the RETURNING */
-	expr_list_t *pReturnEL;       /* List of RETURNING expressions */
-	trigger_t retTrig;             /* Trigger used to implement RETURNING */
-	trigger_step_t retTStep;       /* Trigger step implementing the clause */
-	int iRetCur;                   /* VDBE cursor used by retTrig */
-	int nRetCol;                   /* Number of columns returned */
-	int iRetReg;                   /* First register for the columns */
-};
 
 /* ================================================================
  * STEP 19g: IndexSample struct (STAT4)
@@ -2372,18 +2404,10 @@ struct lookaside {
 };
 
 /* ================================================================
- * STEP 19j: ParseCleanup struct
- *
- * Deferred cleanup operations for the parser.  Items to be freed
- * or finalized when the parser_t object is destroyed.
- * (SQLite: struct ParseCleanup, sqliteInt.h:~line 3783)
+ * STEP 19j: ParseCleanup struct - DUPLICATE REMOVED
+ * Original definition at line 1652
  * ================================================================
  */
-struct parse_cleanup {
-	parse_cleanup_t *pNext;         /* Next cleanup operation in the list */
-	void *pPtr;                     /* Pointer to object to clean up */
-	void (*xCleanup)(DBSQL *, void *); /* Cleanup function */
-};
 
 /* ================================================================
  * Additional new structures from SQLite 3.52.0
@@ -2522,47 +2546,21 @@ struct window {
 	                              due to the SQLITE_SUBTYPE flag */
 };
 
-/*
- * Compiled trigger program for a specific ON CONFLICT policy.
- * Replaces DBSQL's trigger_stack approach.
- * (SQLite: struct TriggerPrg, sqliteInt.h:3800)
- */
-struct trigger_prg {
-	trigger_t *pTrigger;       /* Trigger this program was coded from */
-	trigger_prg_t *pNext;      /* Next entry in Parse.pTriggerPrg list */
-	void *pProgram;            /* Program implementing pTrigger/orconf (SubProgram*) */
-	int orconf;                /* Default ON CONFLICT policy */
-	u32 aColmask[2];           /* Masks of old.*, new.* columns accessed */
-};
+/* Duplicate struct trigger_prg removed - defined earlier at line 1616 */
 
-/*
- * Tracks expressions in indexes for optimization.
- * (SQLite: struct IndexedExpr, sqliteInt.h:3837)
- */
-struct indexed_expr {
-	expr_t *pExpr;             /* The expression contained in the index */
-	int iDataCur;              /* The data cursor associated with the index */
-	int iIdxCur;               /* The index cursor */
-	int iIdxCol;               /* The index column that contains value of pExpr */
-	u8 bMaybeNullRow;          /* True if we need an OP_IfNullRow check */
-	u8 aff;                    /* Affinity of the pExpr expression */
-	indexed_expr_t *pIENext;   /* Next in a list of all indexed expressions */
-#ifdef DBSQL_ENABLE_EXPLAIN_COMMENTS
-	const char *zIdxName;      /* Name of index, used only for bytecode comments */
-#endif
-};
+/* Duplicate struct indexed_expr removed - defined earlier at line 1634 */
 
 /*
  * Hash table for built-in function definitions.
  * (SQLite: struct FuncDefHash, sqliteInt.h:1632)
  */
-struct func_def_hash {
-	func_def_t *a[DBSQL_FUNC_HASH_SZ];  /* Hash table for functions */
-};
-
 #ifndef DBSQL_FUNC_HASH_SZ
 #define DBSQL_FUNC_HASH_SZ 61   /* Default hash size for function table */
 #endif
+
+struct func_def_hash {
+	func_def_t *a[DBSQL_FUNC_HASH_SZ];  /* Hash table for functions */
+};
 
 /*
  * Arguments to printf-like functions.
