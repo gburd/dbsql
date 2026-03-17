@@ -451,6 +451,112 @@ def check_ansi_declarations(filepath, lines):
 
 
 # ---------------------------------------------------------------------------
+# Check 7: VDBE opcode validation (SQLite 3.52.0)
+# ---------------------------------------------------------------------------
+
+def validate_vdbe_opcodes(filepath, lines):
+    """Validate VdbeOp structure initialization patterns."""
+    violations = []
+    text = "".join(lines)
+
+    # Check P5 flag initialization
+    p5_pattern = r'\.p5\s*=\s*(?P<value>0x[0-9a-fA-F]+|\d+)'
+    for match in re.finditer(p5_pattern, text):
+        value = match.group('value')
+        lineno = text[:match.start()].count("\n") + 1
+        # P5 should be u16, check range
+        int_val = int(value, 0)
+        if int_val > 0xFFFF:
+            violations.append(Violation(
+                filepath, lineno, "VDBE_P5",
+                f"P5 value out of range (u16): {value}",
+                lines[lineno - 1].rstrip(),
+            ))
+
+    # Validate register number ranges (0-255 typical)
+    reg_pattern = r'(?:p1|p2|p3)\s*=\s*(?P<reg>\d+)'
+    for match in re.finditer(reg_pattern, text):
+        reg_str = match.group('reg')
+        reg = int(reg_str)
+        lineno = text[:match.start()].count("\n") + 1
+        if reg > 255:
+            violations.append(Violation(
+                filepath, lineno, "VDBE_REG",
+                f"Register number unusually high: {reg}",
+                lines[lineno - 1].rstrip(),
+            ))
+
+    return violations
+
+
+def validate_mem_structure(filepath, lines):
+    """Validate Mem (register) initialization patterns."""
+    violations = []
+    text = "".join(lines)
+
+    # Check for invalid MEM_* flag combinations
+    flag_pattern = r'(?P<var>\w+)->flags\s*=\s*(?P<flags>MEM_\w+(?:\s*\|\s*MEM_\w+)*)'
+    for match in re.finditer(flag_pattern, text):
+        flags_str = match.group('flags')
+        lineno = text[:match.start()].count("\n") + 1
+        # Validate MEM_* flag combinations
+        if 'MEM_Int' in flags_str and 'MEM_Real' in flags_str:
+            violations.append(Violation(
+                filepath, lineno, "MEM_FLAGS",
+                f"Invalid MEM flag combination (Int+Real): {flags_str}",
+                lines[lineno - 1].rstrip(),
+            ))
+        if 'MEM_Str' in flags_str and 'MEM_Blob' in flags_str:
+            violations.append(Violation(
+                filepath, lineno, "MEM_FLAGS",
+                f"Invalid MEM flag combination (Str+Blob): {flags_str}",
+                lines[lineno - 1].rstrip(),
+            ))
+
+    return violations
+
+
+def validate_register_addressing(filepath, lines):
+    """Validate register addressing is 0-indexed."""
+    violations = []
+    text = "".join(lines)
+
+    # Check for 1-indexed patterns (common mistake)
+    suspicious_patterns = [
+        (r'(?:reg|iReg)\s*=\s*1;\s*//.*(?:first|start)', "Register starts at 1"),
+        (r'(?:reg|iReg)\s*=\s*0;\s*//.*(?:skip|unused)', "Register 0 marked as unused"),
+    ]
+
+    for pattern, desc in suspicious_patterns:
+        for match in re.finditer(pattern, text):
+            lineno = text[:match.start()].count("\n") + 1
+            violations.append(Violation(
+                filepath, lineno, "REG_ADDR",
+                f"Suspicious register pattern: {desc}",
+                lines[lineno - 1].rstrip(),
+            ))
+
+    return violations
+
+
+def check_vdbe_code(filepath, lines):
+    """Main validation entry for VDBE-related files."""
+    violations = []
+    filename = os.path.basename(filepath)
+
+    # Run VDBE checks on vdbe.c and code generators
+    if 'vdbe' in filename.lower():
+        violations.extend(validate_vdbe_opcodes(filepath, lines))
+        violations.extend(validate_mem_structure(filepath, lines))
+        violations.extend(validate_register_addressing(filepath, lines))
+
+    if filename.startswith('cg_'):
+        violations.extend(validate_register_addressing(filepath, lines))
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
 # Main driver
 # ---------------------------------------------------------------------------
 
@@ -461,6 +567,7 @@ ALL_CHECKS = [
     ("Header markers", check_header_markers),
     ("Line length", check_line_length),
     ("ANSI C declarations", check_ansi_declarations),
+    ("VDBE validation", check_vdbe_code),
 ]
 
 
@@ -513,6 +620,10 @@ def main():
         help="Disable header marker checking",
     )
     parser.add_argument(
+        "--no-vdbe", action="store_true",
+        help="Disable VDBE validation checking",
+    )
+    parser.add_argument(
         "--summary-only", action="store_true",
         help="Only print summary, not individual violations",
     )
@@ -532,6 +643,9 @@ def main():
     if args.no_markers:
         ALL_CHECKS = [(n, f) for n, f in ALL_CHECKS
                        if n != "Header markers"]
+    if args.no_vdbe:
+        ALL_CHECKS = [(n, f) for n, f in ALL_CHECKS
+                       if n != "VDBE validation"]
 
     files = collect_files(args.path)
     if not files:

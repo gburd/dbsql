@@ -125,6 +125,70 @@ def _build_typedef_map():
 _build_typedef_map()
 
 
+# ----------------------------------------------------------------
+# SQLite 3.52.0 structure field mappings
+# These handle non-mechanical transformations (renamed fields,
+# nested union changes). Regular CamelCase->snake_case field
+# conversions are handled by convert_field_names().
+# ----------------------------------------------------------------
+STRUCTURE_FIELD_MAPPINGS = {
+    # VdbeOp structure - special field renames
+    "comment": "zComment",  # SQLite uses "comment", DBSQL uses "zComment"
+
+    # Expr structure - union restructuring
+    # SQLite Expr.u.zToken (char*) -> DBSQL expr_t.u.zToken.z (struct {char *z; int n})
+    # This is a structural change that needs special handling in actual code
+}
+
+# ----------------------------------------------------------------
+# SQLite 3.52.0 Opcodes (70+ new opcodes)
+# ----------------------------------------------------------------
+NEW_OPCODES_3_52_0 = [
+    # Load/Store
+    "OP_Move", "OP_Copy", "OP_SCopy",
+
+    # Arithmetic
+    "OP_Add", "OP_Subtract", "OP_Multiply", "OP_Divide",
+    "OP_Remainder", "OP_Concat",
+
+    # Comparison
+    "OP_Eq", "OP_Ne", "OP_Lt", "OP_Le", "OP_Gt", "OP_Ge",
+
+    # Control Flow
+    "OP_If", "OP_IfNot", "OP_IfPos", "OP_IfNeg", "OP_IfZero",
+    "OP_Gosub", "OP_Return", "OP_Yield",
+
+    # Cursor Operations
+    "OP_OpenRead", "OP_OpenWrite", "OP_Close",
+    "OP_SeekGE", "OP_SeekGT", "OP_SeekLE", "OP_SeekLT",
+    "OP_SeekRowid", "OP_NotExists", "OP_Found", "OP_NotFound",
+    "OP_Rewind", "OP_Next", "OP_Prev", "OP_Last",
+
+    # Data Operations
+    "OP_Column", "OP_Rowid", "OP_NewRowid",
+    "OP_MakeRecord", "OP_InsertInt", "OP_Delete",
+    "OP_IdxInsert", "OP_IdxDelete", "OP_IdxRowid",
+
+    # Results
+    "OP_ResultRow", "OP_Halt", "OP_Integer", "OP_String",
+    "OP_Null", "OP_Blob", "OP_Variable",
+
+    # Aggregates
+    "OP_AggStep", "OP_AggFinal", "OP_AggValue", "OP_AggInverse",
+
+    # Sorting
+    "OP_SorterOpen", "OP_SorterInsert", "OP_SorterSort",
+    "OP_SorterData", "OP_SorterNext",
+
+    # Functions
+    "OP_Function", "OP_PureFunc",
+
+    # Utilities
+    "OP_Cast", "OP_Affinity", "OP_MustBeInt",
+    "OP_BitAnd", "OP_BitOr", "OP_ShiftLeft", "OP_ShiftRight",
+]
+
+
 # ================================================================
 # Transformation functions
 # ================================================================
@@ -223,6 +287,73 @@ def convert_sqlite_types(text):
         text,
     )
 
+    return text
+
+
+def convert_field_names(text):
+    """
+    Convert CamelCase struct field names to snake_case.
+
+    Handles field access patterns like:
+      pMem->szMalloc  -> pMem->sz_malloc
+      pParse->nRangeReg -> pParse->n_range_reg
+      expr.isMultiWrite -> expr.is_multi_write
+
+    This applies after type conversion, so type names are already
+    converted (e.g., mem_t, parser_t).
+    """
+    # Match field access patterns: identifier followed by -> or . and
+    # then a CamelCase field name
+    pattern = r'((?:[a-zA-Z_]\w*|\))(?:->|\.))(([a-z][a-zA-Z0-9]*[A-Z]|[a-z]*[A-Z]+)[a-zA-Z0-9]*)'
+
+    def replace_field(m):
+        prefix = m.group(1)  # variable name + accessor (-> or .)
+        field_name = m.group(2)  # the CamelCase field name
+
+        # Skip if field starts with capital letter (likely a type name)
+        if field_name[0].isupper():
+            return m.group(0)
+
+        # Skip known preserved field names (single char + uppercase,
+        # like p1, p2, p3, p4, p5 in VdbeOp)
+        if len(field_name) == 2 and field_name[0].islower() and field_name[1].isdigit():
+            return m.group(0)
+
+        # Convert to snake_case
+        snake_name = _camel_to_snake(field_name)
+        return prefix + snake_name
+
+    text = re.sub(pattern, replace_field, text)
+
+    # Handle specific field renames that aren't pure CamelCase conversion
+    for original, replacement in STRUCTURE_FIELD_MAPPINGS.items():
+        pattern = r'(->|\.)\b' + re.escape(original) + r'\b'
+        text = re.sub(pattern, r'\1' + replacement, text)
+
+    return text
+
+
+def convert_structure_fields(text):
+    """
+    Convert SQLite 3.52.0 structure field references to DBSQL
+    conventions.
+
+    This is now a wrapper that calls convert_field_names() for the
+    actual conversion work.
+    """
+    return convert_field_names(text)
+
+
+def convert_opcode_names(text):
+    """
+    Convert SQLite 3.52.0 opcode names to DBSQL conventions.
+
+    Opcode identifiers remain the same (OP_*) but ensure they
+    are recognized during transpilation.
+    """
+    # Opcode names don't need conversion, they use the same OP_*
+    # prefix in both SQLite and DBSQL. This function exists for
+    # completeness and future opcode-specific transformations.
     return text
 
 
@@ -438,6 +569,8 @@ def transpile(text, module_name):
     text = convert_function_names(text)
     text = convert_type_names(text)
     text = convert_sqlite_types(text)
+    text = convert_structure_fields(text)
+    text = convert_opcode_names(text)
     text = preserve_bdb_types(text)
     text = add_header_markers(text, module_name)
     text = fix_line_length(text)
@@ -448,18 +581,60 @@ def transpile(text, module_name):
 # CLI interface
 # ================================================================
 
+def run_tests():
+    """Run self-tests on the transpilation functions."""
+    test_cases = [
+        # Test structure field access with CamelCase->snake_case
+        ("pOp->p5 = 0x01;", "pOp->p5 = 0x01;"),
+        ("pMem->szMalloc", "pMem->sz_malloc"),
+        ("pParse->nRangeReg", "pParse->n_range_reg"),
+        ("pParse->isMultiWrite", "pParse->is_multi_write"),
+
+        # Test function name conversion
+        ("sqlite3VdbeExec", "__vdbe_exec"),
+        ("sqliteParseBegin", "__parse_begin"),
+
+        # Test type conversion
+        ("u8 flags;", "u_int8_t flags;"),
+        ("u32 sz;", "u_int32_t sz;"),
+
+        # Test typedef conversion
+        ("Parse *pParse", "parser_t *pParse"),
+        ("Expr *pExpr", "expr_t *pExpr"),
+
+        # Test field access after type conversion
+        ("pMem->u.i = 42;", "pMem->u.i = 42;"),
+    ]
+
+    print("Running transpilation self-tests...")
+    passed = 0
+    failed = 0
+
+    for input_text, expected in test_cases:
+        result = transpile(input_text, "test")
+        if expected in result:
+            passed += 1
+            print(f"  PASS: {input_text} -> {expected}")
+        else:
+            failed += 1
+            print(f"  FAIL: {input_text}")
+            print(f"    Expected: {expected}")
+            print(f"    Got: {result}")
+
+    print(f"\nTest results: {passed} passed, {failed} failed")
+    return 0 if failed == 0 else 1
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Transpile SQLite C source to DBSQL conventions",
     )
     parser.add_argument(
         "--input", "-i",
-        required=True,
         help="Input SQLite C source file",
     )
     parser.add_argument(
         "--output", "-o",
-        required=True,
         help="Output DBSQL C source file",
     )
     parser.add_argument(
@@ -477,7 +652,19 @@ def main():
         action="store_true",
         help="Print to stdout instead of writing output file",
     )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Run self-tests and exit",
+    )
     args = parser.parse_args()
+
+    if args.test:
+        return run_tests()
+
+    if not args.input or not args.output:
+        parser.error("--input and --output are required (use --test for self-tests)")
+        return 1
 
     with open(args.input, "r") as f:
         text = f.read()
@@ -485,6 +672,8 @@ def main():
     text = convert_function_names(text)
     text = convert_type_names(text)
     text = convert_sqlite_types(text)
+    text = convert_structure_fields(text)
+    text = convert_opcode_names(text)
     text = preserve_bdb_types(text)
     text = add_header_markers(text, args.module)
 
