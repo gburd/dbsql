@@ -241,10 +241,10 @@ struct mem {
 				 * OP_MakeRecord */
 	char *zMalloc;          /* Space to hold MEM_Str or MEM_Blob if
 				 * szMalloc>0 */
-	void (*xDel)(void*);    /* Destructor for Mem.z - only valid if
+	void (*xDel)(void*);    /* Destructor for mem_t.z - only valid if
 				 * MEM_Dyn */
 #ifdef DBSQL_DEBUG
-	Mem *pScopyFrom;        /* This Mem is a shallow copy of pScopyFrom */
+	mem_t *pScopyFrom;      /* This mem_t is a shallow copy of pScopyFrom */
 	u16 mScopyFlags;        /* flags value immediately after the shallow
 				 * copy */
 #endif
@@ -252,13 +252,13 @@ struct mem {
 typedef struct mem mem_t;
 
 /*
- * Size of struct Mem not including the Mem.db member or anything that
+ * Size of struct mem_t not including the mem_t.db member or anything that
  * follows (i.e., the "shallow copy" portion).
  */
-#define MEMCELLSIZE offsetof(Mem,db)
+#define MEMCELLSIZE offsetof(mem_t,db)
 
 /*
- * MEM_ flag values for Mem.flags
+ * MEM_ flag values for mem_t.flags
  *
  * Affinity/type flags (one or more of the following represent the value):
  */
@@ -277,40 +277,40 @@ typedef struct mem mem_t;
 #define MEM_FromBind  0x0040   /* Value originates from a bind */
 /*                    0x0080      Available */
 #define MEM_Cleared   0x0100   /* NULL set by OP_Null, not from data */
-#define MEM_Term      0x0200   /* String in Mem.z is zero terminated */
-#define MEM_Zero      0x0400   /* Mem.u.nZero contains count of 0s appended
+#define MEM_Term      0x0200   /* String in mem_t.z is zero terminated */
+#define MEM_Zero      0x0400   /* mem_t.u.nZero contains count of 0s appended
 				* to blob */
-#define MEM_Subtype   0x0800   /* Mem.eSubtype is valid */
+#define MEM_Subtype   0x0800   /* mem_t.eSubtype is valid */
 #define MEM_TypeMask  0x0dbf   /* Mask of type bits */
 
 /*
- * Bits that determine the storage for Mem.z for a string or blob or
+ * Bits that determine the storage for mem_t.z for a string or blob or
  * aggregate accumulator.
  */
-#define MEM_Dyn       0x1000   /* Need to call Mem.xDel() on Mem.z */
-#define MEM_Static    0x2000   /* Mem.z points to a static string */
-#define MEM_Ephem     0x4000   /* Mem.z points to an ephemeral string */
-#define MEM_Agg       0x8000   /* Mem.z points to an agg function context */
+#define MEM_Dyn       0x1000   /* Need to call mem_t.xDel() on mem_t.z */
+#define MEM_Static    0x2000   /* mem_t.z points to a static string */
+#define MEM_Ephem     0x4000   /* mem_t.z points to an ephemeral string */
+#define MEM_Agg       0x8000   /* mem_t.z points to an agg function context */
 
 /* Legacy aliases for removed flags */
 #define MEM_Short     0        /* Removed: no more inline zShort buffer */
 #define MEM_AggCtx    MEM_Agg  /* Renamed to MEM_Agg */
 
 /*
- * Return TRUE if Mem X contains dynamically allocated content -
+ * Return TRUE if mem_t X contains dynamically allocated content -
  * anything that needs to be deallocated to avoid a leak.
  */
 #define VdbeMemDynamic(X)  \
 	(((X)->flags&(MEM_Agg|MEM_Dyn))!=0)
 
 /*
- * Clear any existing type flags from a Mem and replace them with f.
+ * Clear any existing type flags from a mem_t and replace them with f.
  */
 #define MemSetTypeFlag(p, f) \
 	((p)->flags = ((p)->flags&~(MEM_TypeMask|MEM_Zero))|f)
 
 /*
- * True if Mem X is a NULL-nochng type.
+ * True if mem_t X is a NULL-nochng type.
  */
 #define MemNullNochng(X) \
 	(((X)->flags&MEM_TypeMask)==(MEM_Null|MEM_Zero) \
@@ -326,22 +326,22 @@ typedef struct mem mem_t;
 
 
 /* ================================================================
- * VdbeFrame -- sub-program frame for OP_Program (triggers)
+ * vdbe_frame_t -- sub-program frame for OP_Program (triggers)
  *
  * When a sub-program is executed (OP_Program), a structure of this
  * type is allocated to store the current value of the program counter,
  * as well as the current memory cell array and various other frame
- * specific values stored in the Vdbe struct.
+ * specific values stored in the vdbe_t struct.
  *
  * (SQLite: struct VdbeFrame, vdbeInt.h:194)
  * ================================================================
  */
-typedef struct VdbeFrame VdbeFrame;
-struct VdbeFrame {
+typedef struct vdbe_frame vdbe_frame_t;
+struct vdbe_frame {
 	vdbe_t *v;               /* VM this frame belongs to */
-	VdbeFrame *pParent;      /* Parent of this frame, or NULL if main */
+	vdbe_frame_t *pParent;   /* Parent of this frame, or NULL if main */
 	vdbe_op_t *aOp;          /* Program instructions for parent frame */
-	Mem *aMem;               /* Array of memory cells for parent frame */
+	mem_t *aMem;             /* Array of memory cells for parent frame */
 	VdbeCursor **apCsr;      /* Array of Vdbe cursors for parent frame */
 	u8 *aOnce;               /* Bitmask used by OP_Once */
 	void *token;             /* Copy of sub_program_t.token */
@@ -365,42 +365,42 @@ struct VdbeFrame {
 
 /*
  * Return a pointer to the array of registers allocated for use
- * by a VdbeFrame.
+ * by a vdbe_frame_t.
  */
-#define VdbeFrameMem(p) ((Mem *)&((u8 *)p)[ROUND8(sizeof(VdbeFrame))])
+#define VdbeFrameMem(p) ((mem_t *)&((u8 *)p)[ROUND8(sizeof(vdbe_frame_t))])
 
 
 /* ================================================================
- * __dbsql_func -- function context (updated for register-based Mem)
+ * __dbsql_func -- function context (updated for register-based mem_t)
  *
  * The "context" argument for an installable function.  A pointer to an
  * instance of this structure is the first argument to the routines used
  * to implement the SQL functions.
  *
- * Updated to use Mem* for return value (pOut) instead of inline mem_t,
+ * Updated to use mem_t* for return value (pOut) instead of inline mem_t,
  * matching SQLite 3.52.0's sqlite3_context.
  *
  * (SQLite: struct sqlite3_context, vdbeInt.h:395)
  * ================================================================
  */
 struct __dbsql_func {
-	Mem *pOut;                /* The return value is stored here */
+	mem_t *pOut;             /* The return value is stored here */
 	func_def_t *pFunc;       /* Pointer to function information */
-	Mem *pMem;               /* Memory cell used to store aggregate context */
+	mem_t *pMem;             /* Memory cell used to store aggregate context */
 	vdbe_t *pVdbe;           /* The VM that owns this context */
 	int iOp;                 /* Instruction number of OP_Function */
 	int isError;             /* Error code returned by the function */
 	u8 enc;                  /* Encoding to use for results */
 	u8 skipFlag;             /* Skip accumulator loading if true */
 	u16 argc;                /* Number of arguments */
-	Mem *argv[FLEXARRAY];    /* Argument set */
+	mem_t *argv[FLEXARRAY]; /* Argument set */
 };
 
 /*
  * The size (in bytes) of a __dbsql_func object that holds N argv entries.
  */
 #define SZ_DBSQL_FUNC(N) \
-	(offsetof(struct __dbsql_func, argv) + (N)*sizeof(Mem*))
+	(offsetof(struct __dbsql_func, argv) + (N)*sizeof(mem_t*))
 
 
 /* ================================================================
@@ -423,7 +423,7 @@ struct aux_data {
 
 
 /* ================================================================
- * Vdbe (vdbe_t) -- register-based virtual machine instance
+ * vdbe_t -- register-based virtual machine instance
  *
  * Replaces the old stack-based vdbe_t.  Key changes:
  *   - Removed: aStack, pTos, popStack (stack machine eliminated)
@@ -431,14 +431,14 @@ struct aux_data {
  *   - Removed: agg, nSet, aSet (legacy aggregator removed)
  *   - Removed: pList, keylistStack* (keylist replaced by RowSet)
  *   - Removed: returnStack[100], returnDepth (Gosub uses registers now)
- *   - Removed: zArgv, azColName (replaced by register-based Mem arrays)
+ *   - Removed: zArgv, azColName (replaced by register-based mem_t arrays)
  *   - Removed: xCallback, pCbArg (replaced by OP_ResultRow)
  *   - Removed: nCallback, uniqueCnt, undoTransOnError, inTempTrans
  *   - Added: apCsr (pointer array of VdbeCursor* replaces inline aCsr)
- *   - Added: aVar as Mem* (typed bind parameters)
+ *   - Added: aVar as mem_t* (typed bind parameters)
  *   - Added: cacheCtr for column cache generation
  *   - Added: nChange for DML change counting
- *   - Added: aColName as Mem* array for column metadata
+ *   - Added: aColName as mem_t* array for column metadata
  *   - Added: pResultRow for current output row pointer
  *   - Added: pFrame/pDelFrame for sub-program (trigger) support
  *   - Added: eVdbeState replaces magic number for lifecycle tracking
@@ -469,15 +469,15 @@ struct vdbe {
 				  * started */
 	i64 nStmtDefImmCons;     /* Number of def. imm constraints when stmt
 				  * started */
-	Mem *aMem;               /* The memory locations (register array) */
-	Mem **apArg;             /* Arguments for xUpdate and xFilter vtab
+	mem_t *aMem;             /* The memory locations (register array) */
+	mem_t **apArg;           /* Arguments for xUpdate and xFilter vtab
 				  * methods */
 	VdbeCursor **apCsr;      /* One element of this array for each open
 				  * cursor */
-	Mem *aVar;               /* Values for the OP_Variable opcode */
+	mem_t *aVar;             /* Values for the OP_Variable opcode */
 
 	/*
-	 * When allocating a new Vdbe object, all of the fields below
+	 * When allocating a new vdbe_t object, all of the fields below
 	 * should be initialized to zero or NULL.
 	 */
 
@@ -485,8 +485,8 @@ struct vdbe {
 				  * program */
 	int nOp;                 /* Number of instructions in the program */
 	int nOpAlloc;            /* Number of slots allocated for aOp[] */
-	Mem *aColName;           /* Column names to return */
-	Mem *pResultRow;         /* Current output row */
+	mem_t *aColName;         /* Column names to return */
+	mem_t *pResultRow;       /* Current output row */
 	char *zErrMsg;           /* Error message written here */
 	int *aLabel;             /* Space to hold the labels */
 	int nLabel;              /* Number of labels used */
@@ -510,8 +510,8 @@ struct vdbe {
 	char *zSql;              /* Text of the SQL statement that generated
 				  * this */
 	void *pFree;             /* Free this when deleting the vdbe */
-	VdbeFrame *pFrame;       /* Parent frame */
-	VdbeFrame *pDelFrame;    /* List of frame objects to free on VM reset */
+	vdbe_frame_t *pFrame;    /* Parent frame */
+	vdbe_frame_t *pDelFrame; /* List of frame objects to free on VM reset */
 	int nFrame;              /* Number of frames in pFrame list */
 	u32 expmask;             /* Binding to these vars invalidates VM */
 	sub_program_t *pProgram; /* Linked list of all sub-programs used by

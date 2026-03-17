@@ -47,7 +47,7 @@ typedef struct vdbe vdbe_t;
  * The names of the following types declared in vdbe_int.h are required
  * for the VdbeOp definition.
  */
-typedef struct mem Mem;
+typedef struct mem mem_t;
 typedef struct sub_program sub_program_t;
 
 /*
