@@ -143,7 +143,7 @@ void __update(parser, tab_list, changes, where, on_error)
 	data_cur = cur;
 	idx_cur = parser->nTab;
 	tab_list->a[0].iCursor = data_cur;
-	for (idx = table->pIndex; idx; idx = idx->next_vdbe) {
+	for (idx = table->pIndex; idx; idx = idx->pNext) {
 		parser->nTab++;
 	}
 
@@ -205,7 +205,7 @@ void __update(parser, tab_list, changes, where, on_error)
 	 * Also allocate register space for each index that needs updating.
 	 */
 	for (num_idx = total_num_idx = 0, idx = table->pIndex;
-	     idx; idx = idx->next_vdbe, total_num_idx++) {
+	     idx; idx = idx->pNext, total_num_idx++) {
 		if (recno_will_change_p) {
 			i = 0;
 		} else {
@@ -226,7 +226,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		idx_used = (char*)&indices[num_idx];
 		areg_idx = (int*)&idx_used[total_num_idx];
 	}
-	for (num_idx = j = 0, idx = table->pIndex; idx; idx = idx->next_vdbe, j++){
+	for (num_idx = j = 0, idx = table->pIndex; idx; idx = idx->pNext, j++){
 		if (recno_will_change_p) {
 			i = 0;
 		} else {
@@ -431,14 +431,14 @@ void __update(parser, tab_list, changes, where, on_error)
 			open_all_p = 1;
 		} else {
 			open_all_p = 0;
-			for (idx = table->pIndex; idx; idx = idx->next_vdbe) {
+			for (idx = table->pIndex; idx; idx = idx->pNext) {
 				if (idx->onError == OE_Replace) {
 					open_all_p = 1;
 					break;
 				}
 			}
 		}
-		for(i = 0, idx = table->pIndex; idx; idx = idx->next_vdbe, i++) {
+		for(i = 0, idx = table->pIndex; idx; idx = idx->pNext, i++) {
 			if (open_all_p || idx_used[i]) {
 				__vdbe_add_op3(v, OP_OpenWrite, (idx_cur + i),
 					       idx->tnum, idx->iDb);
@@ -536,7 +536,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		/*
 		 * Update indices.
 		 */
-		for(i = 0, idx = table->pIndex; idx; idx = idx->next_vdbe, i++) {
+		for(i = 0, idx = table->pIndex; idx; idx = idx->pNext, i++) {
 			if (idx_used[i]) {
 				int reg_idx = areg_idx[i];
 				/* Generate index key in registers */
@@ -576,7 +576,7 @@ void __update(parser, tab_list, changes, where, on_error)
 	if (row_triggers_exist) {
 		if (!is_view_p) {
 			for(i = 0, idx = table->pIndex; idx;
-			    idx = idx->next_vdbe, i++) {
+			    idx = idx->pNext, i++) {
 				if (open_all_p || idx_used[i]) {
 					__vdbe_add_op(v, OP_Close,
 						      (idx_cur + i), 0);
@@ -604,7 +604,7 @@ void __update(parser, tab_list, changes, where, on_error)
 	 * Close all tables if there were no FOR EACH ROW triggers.
 	 */
 	if (!row_triggers_exist) {
-		for (i = 0, idx = table->pIndex; idx; idx = idx->next_vdbe, i++) {
+		for (i = 0, idx = table->pIndex; idx; idx = idx->pNext, i++) {
 			if (open_all_p || idx_used[i]) {
 				__vdbe_add_op(v, OP_Close, (idx_cur + i), 0);
 			}

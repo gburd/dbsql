@@ -66,7 +66,7 @@ __vdbe_create(DBSQL* dbp)
 	if (dbp->pVdbe) {
 		dbp->pVdbe->prev_vdbe = vm;
 	}
-	vm->next_vdbe = dbp->pVdbe;
+	vm->pNext = dbp->pVdbe;
 	vm->prev_vdbe = 0;
 	dbp->pVdbe = vm;
 	vm->magic = VDBE_MAGIC_INIT;
@@ -404,7 +404,7 @@ __vdbe_change_p2(vdbe_t* vm, int addr, int val)
  * PUBLIC: void __vdbe_change_p3 __P((vdbe_t *, int, int));
  */
 void
-__vdbe_change_p3(vdbe_t* vm, int addr, int val)
+__vdbe_change_p4(vdbe_t* vm, int addr, int val)
 {
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	if (vm && addr >= 0 && vm->nOp > addr && vm->opcodes) {
@@ -1418,7 +1418,7 @@ __vdbe_sorter_reset(vdbe_t* vm)
 {
 	while(vm->pSort) {
 		sorter_t *s = vm->pSort;
-		vm->pSort = s->next_vdbe;
+		vm->pSort = s->pNext;
 		__dbsql_free(NULL, s->zKey);
 		__dbsql_free(NULL, s->pData);
 		__dbsql_free(NULL, s);
@@ -1491,7 +1491,7 @@ void
 __vdbe_keylist_free(keylist_t* p)
 {
 	while(p) {
-		keylist_t *next = p->next_vdbe;
+		keylist_t *next = p->pNext;
 		__dbsql_free(NULL, p);
 		p = next;
 	}
@@ -1791,15 +1791,15 @@ __vdbe_delete(vdbe_t* vm)
 
 	/* Unlink from the database's VDBE list */
 	if (vm->prev_vdbe) {
-		vm->prev_vdbe->next_vdbe = vm->next_vdbe;
+		vm->prev_vdbe->pNext = vm->pNext;
 	} else {
 		DBSQL_ASSERT(vm->db->pVdbe == vm );
-		vm->db->pVdbe = vm->next_vdbe;
+		vm->db->pVdbe = vm->pNext;
 	}
-	if (vm->next_vdbe) {
-		vm->next_vdbe->prev_vdbe = vm->prev_vdbe;
+	if (vm->pNext) {
+		vm->pNext->prev_vdbe = vm->prev_vdbe;
 	}
-	vm->prev_vdbe = vm->next_vdbe = 0;
+	vm->prev_vdbe = vm->pNext = 0;
 
 	/* Free the opcodes and their P4 values */
 	if (vm->nOpAlloc == 0) {

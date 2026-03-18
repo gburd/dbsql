@@ -437,7 +437,7 @@ __push_onto_sorter(parser_t* parser, vdbe_t* v, expr_list_t* orderby_clause)
 	}
 	sort_order[orderby_clause->nExpr] = 0;
 	__vdbe_add_op(v, OP_SortMakeKey, orderby_clause->nExpr, 0);
-	__vdbe_change_p3(v, -1, sort_order, strlen(sort_order));
+	__vdbe_change_p4(v, -1, sort_order, strlen(sort_order));
 	__dbsql_free(parser->db, sort_order);
 	__vdbe_add_op(v, OP_SortPut, 0, 0);
 }
@@ -468,7 +468,7 @@ __add_key_type(vdbe_t* v, expr_list_t* elist)
 			'n' : 't';
 	}
 	type[i] = 0;
-	__vdbe_change_p3(v, -1, type, col);
+	__vdbe_change_p4(v, -1, type, col);
 	__dbsql_free(NULL, type);
 }
 
@@ -845,7 +845,7 @@ __generate_column_types(parser_t* parser, src_list_t* tables, expr_list_t* elist
 			}
 		}
 		__vdbe_add_op(v, OP_ColumnName, (i + elist->nExpr), 0);
-		__vdbe_change_p3(v, -1, type, P3_STATIC);
+		__vdbe_change_p4(v, -1, type, P3_STATIC);
 	}
 }
 
@@ -882,7 +882,7 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 		if (elist->a[i].zName) {
 			name = elist->a[i].zName;
 			__vdbe_add_op(v, OP_ColumnName, i, 0);
-			__vdbe_change_p3(v, -1, name, strlen(name));
+			__vdbe_change_p4(v, -1, name, strlen(name));
 			continue;
 		}
 		show_full_names = (parser->db->flags & DBSQL_FullColNames) !=0;
@@ -907,7 +907,7 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 			}
 			if (p->span.z && p->span.z[0] && !show_full_names) {
 				addr = __vdbe_add_op(v,OP_ColumnName, i, 0);
-				__vdbe_change_p3(v, -1, p->span.z, p->span.n);
+				__vdbe_change_p4(v, -1, p->span.z, p->span.n);
 				__vdbe_compress_space(v, addr);
 			} else if (tables->nSrc > 1 || show_full_names) {
 				name = 0;
@@ -917,21 +917,21 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 					tab = table->zName;
 				__str_append(&name, tab, ".", col, 0);
 				__vdbe_add_op(v, OP_ColumnName, i, 0);
-				__vdbe_change_p3(v, -1, name, strlen(name));
+				__vdbe_change_p4(v, -1, name, strlen(name));
 				__dbsql_free(NULL, name);
 			} else {
 				__vdbe_add_op(v, OP_ColumnName, i, 0);
-				__vdbe_change_p3(v, -1, col, 0);
+				__vdbe_change_p4(v, -1, col, 0);
 			}
 		} else if (p->span.z && p->span.z[0]) {
 			addr = __vdbe_add_op(v, OP_ColumnName, i, 0);
-			__vdbe_change_p3(v, -1, p->span.z, p->span.n);
+			__vdbe_change_p4(v, -1, p->span.z, p->span.n);
 			__vdbe_compress_space(v, addr);
 		} else {
 			DBSQL_ASSERT( p->op!=TK_COLUMN || tables==0 );
 			sprintf(namebuf, "column%d", i+1);
 			__vdbe_add_op(v, OP_ColumnName, i, 0);
-			__vdbe_change_p3(v, -1, namebuf, strlen(namebuf));
+			__vdbe_change_p4(v, -1, namebuf, strlen(namebuf));
 		}
 	}
 }
@@ -2251,7 +2251,7 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	if (col < 0) {
 		index = 0;
 	} else {
-		for (index = table->pIndex; index; index = index->next_vdbe) {
+		for (index = table->pIndex; index; index = index->pNext) {
 			DBSQL_ASSERT(index->nColumn >= 1);
 			if (index->aiColumn[0] == col)
 				break;
@@ -2295,7 +2295,7 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	parser->nMem++;
 	__vdbe_add_op(v, OP_Integer, table->iDb, regDbIdx);
 	__vdbe_add_op(v, OP_OpenRead, base, table->tnum);
-	__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+	__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 	cont = __vdbe_make_label(v);
 	if (index == 0) {
 		__vdbe_add_op(v, seek_op, base, 0);
@@ -2305,7 +2305,7 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 		parser->nMem++;
 		__vdbe_add_op(v, OP_Integer, index->iDb, regIdxDb);
 		__vdbe_add_op(v, OP_OpenRead, (base + 1), index->tnum);
-		__vdbe_change_p3(v, -1, index->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, index->zName, P3_STATIC);
 		__vdbe_add_op(v, seek_op, (base + 1), 0);
 		__vdbe_add_op(v, OP_IdxRecno, (base + 1), 0);
 		__vdbe_add_op(v, OP_Close, (base + 1), 0);
@@ -2723,7 +2723,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 			if ((func = parser->aAgg[i].pFunc) != 0 &&
 			    func->xFinalize != 0) {
 				__vdbe_add_op(v, OP_AggInit, 0, i);
-				__vdbe_change_p3(v, -1, (char*)func,
+				__vdbe_change_p4(v, -1, (char*)func,
 						 P3_POINTER);
 			}
 		}
@@ -2815,7 +2815,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 				      (e->pList ? e->pList->nExpr : 0));
 			DBSQL_ASSERT(parser->aAgg[i].pFunc != 0);
 			DBSQL_ASSERT(parser->aAgg[i].pFunc->xStep != 0);
-			__vdbe_change_p3(v, -1, (char*)parser->aAgg[i].pFunc,
+			__vdbe_change_p4(v, -1, (char*)parser->aAgg[i].pFunc,
 					 P3_POINTER);
 		}
 	}

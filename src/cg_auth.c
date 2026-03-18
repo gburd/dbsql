@@ -240,7 +240,7 @@ void __auth_context_push(parser, authctx, context)
 	auth_context_t *authctx;
 	const char *context;
 {
-	authctx->parser = parser;
+	authctx->pParse = parser;
 	if (parser) {
 		authctx->zAuthContext = parser->zAuthContext;
 		parser->zAuthContext = context;
@@ -257,9 +257,9 @@ void __auth_context_push(parser, authctx, context)
 void
 __auth_context_pop(auth_context_t* authctx)
 {
-	if (authctx->parser) {
-		authctx->parser->zAuthContext = authctx->zAuthContext;
-		authctx->parser = 0;
+	if (authctx->pParse) {
+		authctx->pParse->zAuthContext = authctx->zAuthContext;
+		authctx->pParse = 0;
 	}
 }
 

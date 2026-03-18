@@ -80,17 +80,17 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 	if (v) {
 		__vdbe_prepare_write(parser, 1, table->iDb);
 		addr = __vdbe_add_op(v, OP_FileOpen, 0, 0);
-		__vdbe_change_p3(v, addr, filename->z, filename->n);
+		__vdbe_change_p4(v, addr, filename->z, filename->n);
 		__vdbe_dequote_p3(v, addr);
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, 0, table->tnum);
-		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 		for(i = 1, index = table->pIndex; index;
-		    index=index->next_vdbe, i++) {
+		    index=index->pNext, i++) {
 			DBSQL_ASSERT(index->iDb == 1 || index->iDb == table->iDb);
 			__vdbe_add_op(v, OP_Integer, index->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, i, index->tnum);
-			__vdbe_change_p3(v, -1, index->zName, P3_STATIC);
+			__vdbe_change_p4(v, -1, index->zName, P3_STATIC);
 		}
 		if (db->flags & DBSQL_CountRows) {
                         /* Initialize the row count */
@@ -99,10 +99,10 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 		end = __vdbe_make_label(v);
 		addr = __vdbe_add_op(v, OP_FileRead, table->nCol, end);
 		if (delimiter) {
-			__vdbe_change_p3(v, addr, delimiter->z, delimiter->n);
+			__vdbe_change_p4(v, addr, delimiter->z, delimiter->n);
 			__vdbe_dequote_p3(v, addr);
 		} else {
-			__vdbe_change_p3(v, addr, "\t", 1);
+			__vdbe_change_p4(v, addr, "\t", 1);
 		}
 		if (table->iPKey >= 0) {
 			__vdbe_add_op(v, OP_FileColumn, table->iPKey, 0);
@@ -136,7 +136,7 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 		__vdbe_conclude_write(parser);
 		if (db->flags & DBSQL_CountRows) {
 			__vdbe_add_op(v, OP_ColumnName, 0, 0);
-			__vdbe_change_p3(v, -1, "rows inserted", P3_STATIC);
+			__vdbe_change_p4(v, -1, "rows inserted", P3_STATIC);
 			__vdbe_add_op(v, OP_Callback, 1, 0);
 		}
 	}

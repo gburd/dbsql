@@ -30,7 +30,7 @@ __vdbe_delete_trigger_step(trigger_step_t* ts)
 {
 	while(ts) {
 		trigger_step_t * tmp = ts;
-		ts = ts->next_vdbe;
+		ts = ts->pNext;
 
 		if (tmp->target.dyn)
 			__dbsql_free(NULL, (char *)tmp->target.z);
@@ -231,7 +231,7 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 	nt->step_list = steplist;
 	while(steplist) {
 		steplist->pTrig = nt;
-		steplist = steplist->next_vdbe;
+		steplist = steplist->pNext;
 	}
 	if (__ref_normalizer_ctx_init(&normctx, parser, nt->iDb,
 				      "trigger", &nt->nameToken) &&
@@ -267,9 +267,9 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 		__open_master_table(v, nt->iDb);
 		addr = __vdbe_add_op_list(v, ARRAY_SIZE(insert_trig),
 					  insert_trig);
-		__vdbe_change_p3(v, (addr + 2), nt->name, 0); 
-		__vdbe_change_p3(v, (addr + 3), nt->table, 0); 
-		__vdbe_change_p3(v, (addr + 5), all->z, all->n);
+		__vdbe_change_p4(v, (addr + 2), nt->name, 0); 
+		__vdbe_change_p4(v, (addr + 3), nt->table, 0); 
+		__vdbe_change_p4(v, (addr + 5), all->z, all->n);
 		if (nt->iDb == 0) {
 			__change_schema_signature(dbp, v);
 		}
@@ -284,7 +284,7 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 		table = __locate_table(parser, nt->table,
 				       dbp->aDb[nt->iTabDb].zName);
 		DBSQL_ASSERT(table != 0);
-		nt->next_vdbe = table->pTrigger;
+		nt->pNext = table->pTrigger;
 		table->pTrigger = nt;
 		nt = 0;
 	}
@@ -598,7 +598,7 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 		__open_master_table(v, trigger->iDb);
 		base = __vdbe_add_op_list(v,  ARRAY_SIZE(drop_trigger),
 					  drop_trigger);
-		__vdbe_change_p3(v, base+1, trigger->name, 0);
+		__vdbe_change_p4(v, base+1, trigger->name, 0);
 		if (trigger->iDb == 0) {
 			__change_schema_signature(dbp, v);
 		}
@@ -613,15 +613,15 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 		const char *name = trigger->name;
 		int len = strlen(name);
 		if (table->pTrigger == trigger) {
-			table->pTrigger = trigger->next_vdbe;
+			table->pTrigger = trigger->pNext;
 		} else {
 			trigger_t *cc = table->pTrigger;
 			while(cc) { 
-				if (cc->next_vdbe == trigger) {
-					cc->next_vdbe = cc->next_vdbe->pNext;
+				if (cc->pNext == trigger) {
+					cc->pNext = cc->pNext->pNext;
 					break;
 				}
-				cc = cc->next_vdbe;
+				cc = cc->pNext;
 			}
 			DBSQL_ASSERT(cc);
 		}
@@ -706,12 +706,12 @@ int __triggers_exist(parser, trigger, op, tr_tm, foreach, changes)
 			trigger_stack_t *ss;
 			ss = parser->trigStack;
 			while (ss && ss->pTrigger != trigger) {
-				ss = ss->next_vdbe;
+				ss = ss->pNext;
 			}
 			if (!ss)
 				return 1;
 		}
-		trig_cursor = trig_cursor->next_vdbe;
+		trig_cursor = trig_cursor->pNext;
 	}
 	return 0;
 }
@@ -814,7 +814,7 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 			DBSQL_ASSERT(0);
 		} 
 		parser->nTab = saveNTab;
-		ts = ts->next_vdbe;
+		ts = ts->pNext;
 	}
 	return 0;
 }
@@ -887,7 +887,7 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 				if (trig_stack->pTrigger == trigger) {
 					fire_this = 0;
 				}
-				trig_stack = trig_stack->next_vdbe;
+				trig_stack = trig_stack->pNext;
 			}
 			if (op == TK_UPDATE && trigger->pColumns &&
 			    !__check_column_overlap(trigger->pColumns,
@@ -912,7 +912,7 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 			trig_stack->newIdx = new_idx;
 			trig_stack->oldIdx = old_idx;
 			trig_stack->pTab = table;
-			trig_stack->next_vdbe = parser->trigStack;
+			trig_stack->pNext = parser->trigStack;
 			trig_stack->ignoreJump = ignore_jump;
 			parser->trigStack = trig_stack;
 			__auth_context_push(parser, &authctx, trigger->name);
@@ -924,7 +924,7 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 			when_expr = __expr_dup(trigger->pWhen);
 			if (__expr_resolve_ids(parser, &dummy_tab_list, 0,
 					       when_expr)) {
-				parser->trigStack = parser->trigStack->next_vdbe;
+				parser->trigStack = parser->trigStack->pNext;
 				__dbsql_free(dbp, trig_stack);
 				__expr_delete(when_expr);
 				return 1;
@@ -938,13 +938,13 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 			/*
 			 * Pop the entry off the trigger stack.
 			 */
-			parser->trigStack = parser->trigStack->next_vdbe;
+			parser->trigStack = parser->trigStack->pNext;
 			__auth_context_pop(&authctx);
 			__dbsql_free(dbp, trig_stack);
 
 			__vdbe_resolve_label(parser->pVdbe, end_trigger);
 		}
-		trigger = trigger->next_vdbe;
+		trigger = trigger->pNext;
 	}
 	return 0;
 }

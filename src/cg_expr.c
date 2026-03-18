@@ -2101,7 +2101,7 @@ __find_function(dbp, name, len, nargs, create)
 	first = p;
 	if (p && !create && nargs < 0) {
 		while (p && p->xFunc==0 && p->xStep == 0) {
-			p = p->next_vdbe;
+			p = p->pNext;
 		}
 		return p;
 	}
@@ -2109,7 +2109,7 @@ __find_function(dbp, name, len, nargs, create)
 	while(p && p->nArg != nargs) {
 		if (p->nArg < 0 && !create && (p->xFunc || p->xStep))
 			maybe = p;
-		p = p->next_vdbe;
+		p = p->pNext;
 	}
 	if (p && !create && p->xFunc == 0 && p->xStep == 0) {
 		return 0;
@@ -2121,7 +2121,7 @@ __find_function(dbp, name, len, nargs, create)
 	if (p == 0 && create &&
 	    __dbsql_calloc(dbp, 1, sizeof(*p), &p) != ENOMEM) {
 		p->nArg = nargs;
-		p->next_vdbe = first;
+		p->pNext = first;
 		p->dataType = first ? first->dataType : DBSQL_NUMERIC;
 		__hash_insert((hash_t*)dbp->fns, name, len, (void*)p);
 	}

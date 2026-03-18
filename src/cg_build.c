@@ -321,14 +321,14 @@ void
 __unlink_and_delete_index(DBSQL* dbp, index_t* index)
 {
 	if (index->pTable->pIndex == index) {
-		index->pTable->pIndex = index->next_vdbe;
+		index->pTable->pIndex = index->pNext;
 	} else {
 		index_t *i = index->pTable->pIndex;
-		while (i && i->next_vdbe != index) {
-			index = index->next_vdbe;
+		while (i && i->pNext != index) {
+			index = index->pNext;
 		}
-		if (i && i->next_vdbe == index) {
-			i->next_vdbe = index->next_vdbe;
+		if (i && i->pNext == index) {
+			i->pNext = index->pNext;
 		}
 	}
 	__delete_index(dbp, index);
@@ -463,7 +463,7 @@ __vdbe_delete_table(DBSQL* dbp, table_t* table)
 	 * Delete all indices associated with this table.
 	 */
 	for (index = table->pIndex; index; index = next) {
-		next = index->next_vdbe;
+		next = index->pNext;
 		DBSQL_ASSERT(index->iDb == table->iDb ||
 		       (table->iDb == 0 && index->iDb == 1));
 		__delete_index(dbp, index);
@@ -1232,7 +1232,7 @@ __ending_create_table_paren(parser_t* parser, token_t* end, select_t* select)
 		if (table->u.view.pSelect == 0) {
 			/* A regular table */
 			__vdbe_add_op(v, OP_CreateTable, 0, table->iDb);
-			__vdbe_change_p3(v, -1, (char *)&table->tnum,
+			__vdbe_change_p4(v, -1, (char *)&table->tnum,
 					 P3_POINTER);
 		} else {
 			/* A view */
@@ -1242,26 +1242,26 @@ __ending_create_table_paren(parser_t* parser, token_t* end, select_t* select)
 		__vdbe_add_op(v, OP_Pull, 1, 0);
 		__vdbe_add_op(v, OP_String, 0, 0);
 		if (table->u.view.pSelect == 0) {
-			__vdbe_change_p3(v, -1, "table", P3_STATIC);
+			__vdbe_change_p4(v, -1, "table", P3_STATIC);
 		} else {
-			__vdbe_change_p3(v, -1, "view", P3_STATIC);
+			__vdbe_change_p4(v, -1, "view", P3_STATIC);
 		}
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 		__vdbe_add_op(v, OP_Dup, 4, 0);
 		__vdbe_add_op(v, OP_String, 0, 0);
 		if (select) {
 			char *z = __gen_create_table_stmt(table);
 			n = z ? strlen(z) : 0;
-			__vdbe_change_p3(v, -1, z, n);
+			__vdbe_change_p4(v, -1, z, n);
 			__dbsql_free(dbp, z);
 		} else {
 			DBSQL_ASSERT(end != 0);
 			n = P_TO_UINT32(end->z) -
 				P_TO_UINT32(parser->sFirstToken.z) + 1;
-			__vdbe_change_p3(v, -1, parser->sFirstToken.z, n);
+			__vdbe_change_p4(v, -1, parser->sFirstToken.z, n);
 		}
 		__vdbe_add_op(v, OP_MakeRecord, 5, 0);
 		__vdbe_add_op(v, OP_PutIntKey, 0, 0);
@@ -1645,7 +1645,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 			       trigger->iDb == 1);
 			__drop_trigger_ptr(parser, trigger, 1);
 			if (parser->explain) {
-				trigger = trigger->next_vdbe;
+				trigger = trigger->pNext;
 			} else {
 				trigger = table->pTrigger;
 			}
@@ -1657,7 +1657,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 		__open_master_table(v, table->iDb);
 		base = __vdbe_add_op_list(v, ARRAY_SIZE(drop_table),
 					  drop_table);
-		__vdbe_change_p3(v, base + 1, table->zName, 0);
+		__vdbe_change_p4(v, base + 1, table->zName, 0);
 
 		/*
 		 * Drop all DBSQL_TEMP_MASTER entries that refer to the table.
@@ -1666,7 +1666,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 			__open_master_table(v, 1);
 			base = __vdbe_add_op_list(v, ARRAY_SIZE(drop_table),
 						  drop_table);
-			__vdbe_change_p3(v, base + 1, table->zName, 0);
+			__vdbe_change_p4(v, base + 1, table->zName, 0);
 		}
 
 		if (table->iDb == 0) {
@@ -1675,7 +1675,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 		__vdbe_add_op(v, OP_Close, 0, 0);
 		if (!view) {
 			__vdbe_add_op(v, OP_Destroy, table->tnum, table->iDb);
-			for (idx = table->pIndex; idx; idx = idx->next_vdbe) {
+			for (idx = table->pIndex; idx; idx = idx->pNext) {
 				__vdbe_add_op(v, OP_Destroy, idx->tnum,
 					      idx->iDb);
 			}
@@ -1732,7 +1732,7 @@ __add_idx_key_type(vdbe_t* v, index_t* idx)
 		}
 	}
 	type[n] = 0;
-	__vdbe_change_p3(v, -1, type, n);
+	__vdbe_change_p4(v, -1, type, n);
 	__dbsql_free(NULL, type);
 }
 
@@ -2010,7 +2010,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 		int n = 1;
 		index_t *loop = table->pIndex;
 		while (loop) {
-			loop = loop->next_vdbe;
+			loop = loop->pNext;
 			n++;
 		}
 		sprintf(buf,"%d)", n);
@@ -2120,15 +2120,15 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	 */
 	if (on_error != OE_Replace || table->pIndex == 0 ||
 	    table->pIndex->onError == OE_Replace) {
-		index->next_vdbe = table->pIndex;
+		index->pNext = table->pIndex;
 		table->pIndex = index;
 	} else {
 		index_t *other = table->pIndex;
-		while (other->next_vdbe && other->next_vdbe->onError != OE_Replace) {
-			other = other->next_vdbe;
+		while (other->pNext && other->pNext->onError != OE_Replace) {
+			other = other->pNext;
 		}
-		index->next_vdbe = other->next_vdbe;
-		other->next_vdbe = index;
+		index->pNext = other->pNext;
+		other->pNext = index;
 	}
 
 	if (parser->initFlag && sltable != 0) {

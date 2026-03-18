@@ -299,7 +299,7 @@ static index_t *__find_sorting_index(table, base, orderby_clause,
 	 * check for a matching index.
 	 */
 	match = 0;
-	for (idx = table->pIndex; idx; idx = idx->next_vdbe) {
+	for (idx = table->pIndex; idx; idx = idx->pNext) {
 		num_expr = orderby_clause->nExpr;
 		if (idx->nColumn < num_eq_col || idx->nColumn < num_expr)
 			continue;
@@ -650,7 +650,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		  * of the WHERE clause cannot be used in conjunction with the
 		  * IN operator to help satisfy other columns of the index.
 		  */
-		 for(idx = table->pIndex; idx; idx = idx->next_vdbe) {
+		 for(idx = table->pIndex; idx; idx = idx->pNext) {
 			 eq_mask = 0;
 			 lt_mask = 0;
 			 gt_mask = 0;
@@ -804,14 +804,14 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenRead, tab_list->a[i].iCursor,
 			      table->tnum);
-		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 		__code_verify_schema(parser, table->iDb);
 		if (where_info->a[i].pIdx != 0) {
 			__vdbe_add_op(v, OP_Integer,
 				      where_info->a[i].pIdx->iDb, 0);
 			__vdbe_add_op(v, OP_OpenRead, where_info->a[i].iCur,
 				      where_info->a[i].pIdx->tnum);
-			__vdbe_change_p3(v, -1, where_info->a[i].pIdx->zName,
+			__vdbe_change_p4(v, -1, where_info->a[i].pIdx->zName,
 					 P3_STATIC);
 		}
 	}
