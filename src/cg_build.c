@@ -321,14 +321,14 @@ void
 __unlink_and_delete_index(DBSQL* dbp, index_t* index)
 {
 	if (index->pTable->pIndex == index) {
-		index->pTable->pIndex = index->pNext;
+		index->pTable->pIndex = index->next_vdbe;
 	} else {
 		index_t *i = index->pTable->pIndex;
-		while (i && i->pNext != index) {
-			index = index->pNext;
+		while (i && i->next_vdbe != index) {
+			index = index->next_vdbe;
 		}
-		if (i && i->pNext == index) {
-			i->pNext = index->pNext;
+		if (i && i->next_vdbe == index) {
+			i->next_vdbe = index->next_vdbe;
 		}
 	}
 	__delete_index(dbp, index);
@@ -463,7 +463,7 @@ __vdbe_delete_table(DBSQL* dbp, table_t* table)
 	 * Delete all indices associated with this table.
 	 */
 	for (index = table->pIndex; index; index = next) {
-		next = index->pNext;
+		next = index->next_vdbe;
 		DBSQL_ASSERT(index->iDb == table->iDb ||
 		       (table->iDb == 0 && index->iDb == 1));
 		__delete_index(dbp, index);
@@ -1645,7 +1645,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 			       trigger->iDb == 1);
 			__drop_trigger_ptr(parser, trigger, 1);
 			if (parser->explain) {
-				trigger = trigger->pNext;
+				trigger = trigger->next_vdbe;
 			} else {
 				trigger = table->pTrigger;
 			}
@@ -1675,7 +1675,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 		__vdbe_add_op(v, OP_Close, 0, 0);
 		if (!view) {
 			__vdbe_add_op(v, OP_Destroy, table->tnum, table->iDb);
-			for (idx = table->pIndex; idx; idx = idx->pNext) {
+			for (idx = table->pIndex; idx; idx = idx->next_vdbe) {
 				__vdbe_add_op(v, OP_Destroy, idx->tnum,
 					      idx->iDb);
 			}
@@ -2010,7 +2010,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 		int n = 1;
 		index_t *loop = table->pIndex;
 		while (loop) {
-			loop = loop->pNext;
+			loop = loop->next_vdbe;
 			n++;
 		}
 		sprintf(buf,"%d)", n);
@@ -2120,15 +2120,15 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	 */
 	if (on_error != OE_Replace || table->pIndex == 0 ||
 	    table->pIndex->onError == OE_Replace) {
-		index->pNext = table->pIndex;
+		index->next_vdbe = table->pIndex;
 		table->pIndex = index;
 	} else {
 		index_t *other = table->pIndex;
-		while (other->pNext && other->pNext->onError != OE_Replace) {
-			other = other->pNext;
+		while (other->next_vdbe && other->next_vdbe->onError != OE_Replace) {
+			other = other->next_vdbe;
 		}
-		index->pNext = other->pNext;
-		other->pNext = index;
+		index->next_vdbe = other->next_vdbe;
+		other->next_vdbe = index;
 	}
 
 	if (parser->initFlag && sltable != 0) {

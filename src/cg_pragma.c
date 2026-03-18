@@ -291,7 +291,7 @@ if (strcasecmp(left_name, "index_list") == 0) {
 				      index->onError != OE_None, 0);
 			__vdbe_add_op(v, OP_Callback, 3, 0);
 			++i;
-			index = index->pNext;
+			index = index->next_vdbe;
 		}
 	}
 } else

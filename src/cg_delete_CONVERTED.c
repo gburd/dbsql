@@ -249,7 +249,7 @@ void __delete_from(parser, list, where)
 		}
 		if (!view) {
 			__vdbe_add_op(v, OP_Clear, table->tnum, table->iDb);
-			for (idx = table->pIndex; idx; idx = idx->pNext) {
+			for (idx = table->pIndex; idx; idx = idx->next_vdbe) {
 				__vdbe_add_op(v, OP_Clear, idx->tnum,
 					      idx->iDb);
 			}
@@ -352,7 +352,7 @@ void __delete_from(parser, list, where)
 			__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, cur, table->tnum);
 			for (i = 1, idx = table->pIndex; idx;
-			     i++, idx = idx->pNext) {
+			     i++, idx = idx->next_vdbe) {
 				__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
 				__vdbe_add_op(v, OP_OpenWrite, parser->nTab++,
 					      idx->tnum);
@@ -384,7 +384,7 @@ void __delete_from(parser, list, where)
 		if (row_triggers_exist) {
 			if (!view) {
 				for(i = 1, idx = table->pIndex; idx;
-				    i++, idx = idx->pNext) {
+				    i++, idx = idx->next_vdbe) {
 					__vdbe_add_op(v, OP_Close, cur + i,
 						      idx->tnum);
 				}
@@ -409,7 +409,7 @@ void __delete_from(parser, list, where)
 		 */
 		if (!row_triggers_exist) {
 			for (i = 1, idx = table->pIndex; idx;
-			     i++, idx = idx->pNext) {
+			     i++, idx = idx->next_vdbe) {
 				__vdbe_add_op(v, OP_Close, cur + i, idx->tnum);
 			}
 			__vdbe_add_op(v, OP_Close, cur, 0);
@@ -519,7 +519,7 @@ void __generate_row_index_delete(dbp, v, table, cur, idx_used)
 	int i;
 	index_t *idx;
 
-	for (i = 1, idx = table->pIndex; idx; i++, idx = idx->pNext) {
+	for (i = 1, idx = table->pIndex; idx; i++, idx = idx->next_vdbe) {
 		int j;
 		int regIdx;  /* Register to hold index key */
 

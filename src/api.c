@@ -515,7 +515,7 @@ __api_close(DBSQL* dbp)
 	for (i = __hash_first((hash_t*)dbp->fns); i; i = __hash_next(i)){
 		func_def_t *func, *next;
 		for (func = (func_def_t*)__hash_data(i); func; func = next){
-			next = func->pNext;
+			next = func->next_vdbe;
 			__dbsql_free(dbp, func);
 		}
 	}
@@ -1072,7 +1072,7 @@ __api_func_return_type(DBSQL *dbp, const char *name, int data_type)
 						 strlen(name));
 	while(p) {
 		p->dataType = data_type;
-		p = p->pNext;
+		p = p->next_vdbe;
 	}
 	return DBSQL_SUCCESS;
 }

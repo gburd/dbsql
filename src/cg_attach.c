@@ -207,7 +207,7 @@ __ref_normalizer_ctx_init(normctx, parser, dbnum, type, name)
 		return 0;
 	dbp = parser->db;
 	DBSQL_ASSERT(dbp->nDb > dbnum);
-	normctx->pParse = parser;
+	normctx->parser = parser;
 	normctx->zDb = dbp->aDb[dbnum].zName;
 	normctx->zType = type;
 	normctx->pName = name;
@@ -242,7 +242,7 @@ int __ref_normalize_src_list(normctx, src_list)
 {
 	int i;
 	const char *db;
-	DBSQL *dbp = normctx->pParse->db;
+	DBSQL *dbp = normctx->parser->db;
 
 	if (src_list == 0)
 		return 0;
@@ -254,7 +254,7 @@ int __ref_normalize_src_list(normctx, src_list)
 			char *name;
 			__dbsql_strndup(dbp, normctx->pName->z, &name,
 				     normctx->pName->n);
-			__error_msg(normctx->pParse, "%s %z cannot reference "
+			__error_msg(normctx->parser, "%s %z cannot reference "
 				    "objects in database %s", normctx->zType,
 				    name, src_list->a[i].zDatabase);
 			return 1;

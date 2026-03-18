@@ -339,21 +339,21 @@ typedef struct mem mem_t;
 typedef struct vdbe_frame vdbe_frame_t;
 struct vdbe_frame {
 	vdbe_t *v;               /* VM this frame belongs to */
-	vdbe_frame_t *pParent;   /* Parent of this frame, or NULL if main */
-	vdbe_op_t *aOp;          /* Program instructions for parent frame */
-	mem_t *aMem;             /* Array of memory cells for parent frame */
-	VdbeCursor **apCsr;      /* Array of Vdbe cursors for parent frame */
+	vdbe_frame_t *parent_frame;   /* Parent of this frame, or NULL if main */
+	vdbe_op_t *opcodes;      /* Program instructions for parent frame */
+	mem_t *registers;        /* Array of memory cells for parent frame */
+	VdbeCursor **cursors;    /* Array of Vdbe cursors for parent frame */
 	u8 *aOnce;               /* Bitmask used by OP_Once */
 	void *token;             /* Copy of sub_program_t.token */
 	i64 lastRowid;           /* Last insert rowid (db->lastRowid) */
-	aux_data_t *pAuxData;    /* Linked list of auxdata allocations */
+	aux_data_t *aux_data;    /* Linked list of auxdata allocations */
 #ifdef DBSQL_DEBUG
 	u32 iFrameMagic;         /* magic number for sanity checking */
 #endif
-	int nCursor;             /* Number of entries in apCsr */
+	int nCursor;             /* Number of entries in cursors */
 	int pc;                  /* Program Counter in parent (calling) frame */
-	int nOp;                 /* Size of aOp array */
-	int nMem;                /* Number of entries in aMem */
+	int nOp;                 /* Size of opcodes array */
+	int nMem;                /* Number of entries in registers */
 	int nChildMem;           /* Number of memory cells for child frame */
 	int nChildCsr;           /* Number of cursors for child frame */
 	i64 nChange;             /* Statement changes (Vdbe.nChange) */
@@ -449,13 +449,13 @@ struct aux_data {
  */
 struct vdbe {
 	DBSQL *db;               /* The whole database */
-	vdbe_t *pPrev, *pNext;   /* Linked list of VDBEs with the same db */
-	parser_t *pParse;        /* Parsing context used to create this Vdbe */
-	ynVar nVar;              /* Number of entries in aVar[] */
+	vdbe_t *prev_vdbe, *next_vdbe;   /* Linked list of VDBEs with the same db */
+	parser_t *parser;        /* Parsing context used to create this Vdbe */
+	ynVar nVar;              /* Number of entries in variables[] */
 	u32 magic;               /* Magic number for sanity checking */
 	int nMem;                /* Number of memory locations currently
 				  * allocated */
-	int nCursor;             /* Number of slots in apCsr[] */
+	int nCursor;             /* Number of slots in cursors[] */
 	u32 cacheCtr;            /* VdbeCursor row cache generation counter */
 	int pc;                  /* The program counter */
 	int rc;                  /* Value to return */
@@ -469,32 +469,32 @@ struct vdbe {
 				  * started */
 	i64 nStmtDefImmCons;     /* Number of def. imm constraints when stmt
 				  * started */
-	mem_t *aMem;             /* The memory locations (register array) */
-	mem_t **apArg;           /* Arguments for xUpdate and xFilter vtab
+	mem_t *registers;        /* The memory locations (register array) */
+	mem_t **arg_ptrs;        /* Arguments for xUpdate and xFilter vtab
 				  * methods */
-	VdbeCursor **apCsr;      /* One element of this array for each open
+	VdbeCursor **cursors;    /* One element of this array for each open
 				  * cursor */
-	mem_t *aVar;             /* Values for the OP_Variable opcode */
+	mem_t *variables;        /* Values for the OP_Variable opcode */
 
 	/*
 	 * When allocating a new vdbe_t object, all of the fields below
 	 * should be initialized to zero or NULL.
 	 */
 
-	vdbe_op_t *aOp;          /* Space to hold the virtual machine's
+	vdbe_op_t *opcodes;      /* Space to hold the virtual machine's
 				  * program */
 	int nOp;                 /* Number of instructions in the program */
-	int nOpAlloc;            /* Number of slots allocated for aOp[] */
-	mem_t *aColName;         /* Column names to return */
-	mem_t *pResultRow;       /* Current output row */
+	int nOpAlloc;            /* Number of slots allocated for opcodes[] */
+	mem_t *column_names;     /* Column names to return */
+	mem_t *result_row;       /* Current output row */
 	char *zErrMsg;           /* Error message written here */
-	int *aLabel;             /* Space to hold the labels */
+	int *labels;             /* Space to hold the labels */
 	int nLabel;              /* Number of labels used */
-	int nLabelAlloc;         /* Number of slots allocated in aLabel[] */
+	int nLabelAlloc;         /* Number of slots allocated in labels[] */
 	FILE *trace;             /* Write an execution trace here, if not NULL */
 	u16 nResColumn;          /* Number of columns in one row of the result
 				  * set */
-	u16 nResAlloc;           /* Column slots allocated to aColName[] */
+	u16 nResAlloc;           /* Column slots allocated to column_names[] */
 	u8 errorAction;          /* Recovery action to do in case of an error */
 	u8 prepFlags;            /* Preparation flags */
 	u8 eVdbeState;           /* One of the VDBE_*_STATE values */
@@ -509,14 +509,14 @@ struct vdbe {
 	u32 aCounter[9];         /* Counters used by stmt_status() */
 	char *zSql;              /* Text of the SQL statement that generated
 				  * this */
-	void *pFree;             /* Free this when deleting the vdbe */
-	vdbe_frame_t *pFrame;    /* Parent frame */
-	vdbe_frame_t *pDelFrame; /* List of frame objects to free on VM reset */
-	int nFrame;              /* Number of frames in pFrame list */
+	void *free_context;      /* Free this when deleting the vdbe */
+	vdbe_frame_t *parent_frame;    /* Parent frame */
+	vdbe_frame_t *frame_free_list; /* List of frame objects to free on VM reset */
+	int nFrame;              /* Number of frames in parent_frame list */
 	u32 expmask;             /* Binding to these vars invalidates VM */
-	sub_program_t *pProgram; /* Linked list of all sub-programs used by
+	sub_program_t *sub_programs; /* Linked list of all sub-programs used by
 				  * VM */
-	aux_data_t *pAuxData;    /* Linked list of auxdata allocations */
+	aux_data_t *aux_data;    /* Linked list of auxdata allocations */
 #ifdef CONFIG_TEST
 	u32 search_count;        /* The number of seek/next operations */
 #endif

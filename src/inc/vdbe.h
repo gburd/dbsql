@@ -80,7 +80,7 @@ struct vdbe_op {
     func_def_t *pFunc;         /* Used when p4type is P4_FUNCDEF */
     struct __dbsql_func *pCtx; /* Used when p4type is P4_FUNCCTX */
     coll_seq_t *pColl;         /* Used when p4type is P4_COLLSEQ */
-    Mem *pMem;                 /* Used when p4type is P4_MEM */
+    mem_t *pMem;               /* Used when p4type is P4_MEM */
     vtable_t *pVtab;           /* Used when p4type is P4_VTAB */
     key_info_t *pKeyInfo;      /* Used when p4type is P4_KEYINFO */
     u32 *ai;                   /* Used when p4type is P4_INTARRAY */
@@ -102,13 +102,13 @@ typedef struct vdbe_op VdbeOp;
  * (SQLite: struct SubProgram)
  */
 struct sub_program {
-  vdbe_op_t *aOp;              /* Array of opcodes for sub-program */
-  int nOp;                     /* Elements in aOp[] */
+  vdbe_op_t *opcodes;          /* Array of opcodes for sub-program */
+  int nOp;                     /* Elements in opcodes[] */
   int nMem;                    /* Number of memory cells required */
   int nCsr;                    /* Number of cursors required */
   u8 *aOnce;                   /* Array of OP_Once flags */
   void *token;                 /* id that may be used to detect recursion */
-  sub_program_t *pNext;        /* Next sub-program already visited */
+  sub_program_t *next_program; /* Next sub-program already visited */
 };
 
 /*

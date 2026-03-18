@@ -64,10 +64,10 @@ __vdbe_create(DBSQL* dbp)
 		return 0;
 	vm->db = dbp;
 	if (dbp->pVdbe) {
-		dbp->pVdbe->pPrev = vm;
+		dbp->pVdbe->prev_vdbe = vm;
 	}
-	vm->pNext = dbp->pVdbe;
-	vm->pPrev = 0;
+	vm->next_vdbe = dbp->pVdbe;
+	vm->prev_vdbe = 0;
 	dbp->pVdbe = vm;
 	vm->magic = VDBE_MAGIC_INIT;
 	return vm;
@@ -97,11 +97,11 @@ __grow_op_array(vdbe_t* vm)
 	int old_size = vm->nOpAlloc;
 	vm->nOpAlloc = (vm->nOpAlloc * 2) + 100;
 	if (__dbsql_realloc(NULL, (vm->nOpAlloc * sizeof(vdbe_op_t)),
-			 &vm->aOp) == ENOMEM) {
+			 &vm->opcodes) == ENOMEM) {
 		vm->nOpAlloc = old_size;
 		return ENOMEM;
 	}
-	memset(&vm->aOp[old_size], 0,
+	memset(&vm->opcodes[old_size], 0,
 	       (vm->nOpAlloc - old_size) * sizeof(vdbe_op_t));
 	return 0;
 }
@@ -145,11 +145,11 @@ __vdbe_add_op3(vdbe_t* vm, int op, int p1, int p2, int p3)
 			return 0;
 		}
 	}
-	pOp = &vm->aOp[i];
+	pOp = &vm->opcodes[i];
 	pOp->opcode = op;
 	pOp->p1 = p1;
-	if (p2 < 0 && (-1 - p2) < vm->nLabel && vm->aLabel[-1 - p2] >= 0) {
-		p2 = vm->aLabel[-1 - p2];
+	if (p2 < 0 && (-1 - p2) < vm->nLabel && vm->labels[-1 - p2] >= 0) {
+		p2 = vm->labels[-1 - p2];
 	}
 	pOp->p2 = p2;
 	pOp->p3 = p3;
@@ -158,7 +158,7 @@ __vdbe_add_op3(vdbe_t* vm, int op, int p1, int p2, int p3)
 	pOp->p5 = 0;
 #ifndef NDEBUG
 	if (dbsql_vdbe_add_op_trace)
-		__vdbe_print_op(0, i, &vm->aOp[i]);
+		__vdbe_print_op(0, i, &vm->opcodes[i]);
 #endif
 	return i;
 }
@@ -192,8 +192,8 @@ __vdbe_add_op4_int(vdbe_t* vm, int op, int p1, int p2, int p3, int p4)
 {
 	int addr = __vdbe_add_op3(vm, op, p1, p2, p3);
 	if (addr >= 0 && addr < vm->nOp) {
-		vm->aOp[addr].p4type = P4_INT32;
-		vm->aOp[addr].p4.i = p4;
+		vm->opcodes[addr].p4type = P4_INT32;
+		vm->opcodes[addr].p4.i = p4;
 	}
 	return addr;
 }
@@ -264,17 +264,17 @@ __vdbe_make_label(vdbe_t* vm)
 	if (i >= vm->nLabelAlloc) {
 		int *new;
 		vm->nLabelAlloc = (vm->nLabelAlloc * 2) + 10;
-		if (__dbsql_realloc(NULL, vm->nLabelAlloc * sizeof(vm->aLabel[0]),
-				 &vm->aLabel) == ENOMEM) {
-			__dbsql_free(NULL, vm->aLabel);
+		if (__dbsql_realloc(NULL, vm->nLabelAlloc * sizeof(vm->labels[0]),
+				 &vm->labels) == ENOMEM) {
+			__dbsql_free(NULL, vm->labels);
 		}
 	}
-	if (vm->aLabel == 0) {
+	if (vm->labels == 0) {
 		vm->nLabel = 0;
 		vm->nLabelAlloc = 0;
 		return 0;
 	}
-	vm->aLabel[i] = -1;
+	vm->labels[i] = -1;
 	return -1 - i;
 }
 
@@ -291,14 +291,14 @@ __vdbe_resolve_label(vdbe_t* vm, int x)
 {
 	int j;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
-	if (x < 0 && (-x) <= vm->nLabel && vm->aOp) {
-		if (vm->aLabel[-1 - x] == vm->nOp)
+	if (x < 0 && (-x) <= vm->nLabel && vm->opcodes) {
+		if (vm->labels[-1 - x] == vm->nOp)
 			return;
-		DBSQL_ASSERT(vm->aLabel[-1 - x] < 0);
-		vm->aLabel[-1 - x] = vm->nOp;
+		DBSQL_ASSERT(vm->labels[-1 - x] < 0);
+		vm->labels[-1 - x] = vm->nOp;
 		for (j = 0; j < vm->nOp; j++) {
-			if (vm->aOp[j].p2 == x)
-				vm->aOp[j].p2 = vm->nOp;
+			if (vm->opcodes[j].p2 == x)
+				vm->opcodes[j].p2 = vm->nOp;
 		}
 	}
 }
@@ -335,11 +335,11 @@ __vdbe_add_op_list(vm, num_op, op)
 		int old_size = vm->nOpAlloc;
 		vm->nOpAlloc = (vm->nOpAlloc * 2) + num_op + 10;
 		if (__dbsql_realloc(NULL, vm->nOpAlloc * sizeof(vdbe_op_t),
-				 &vm->aOp) == ENOMEM) {
+				 &vm->opcodes) == ENOMEM) {
 			vm->nOpAlloc = old_size;
 			return 0;
 		}
-		memset(&vm->aOp[old_size], 0,
+		memset(&vm->opcodes[old_size], 0,
 		       (vm->nOpAlloc - old_size) * sizeof(vdbe_op_t));
 	}
 	addr = vm->nOp;
@@ -347,15 +347,15 @@ __vdbe_add_op_list(vm, num_op, op)
 		int i;
 		for (i = 0; i < num_op; i++) {
 			int p2 = op[i].p2;
-			vm->aOp[i + addr] = op[i];
+			vm->opcodes[i + addr] = op[i];
 			if (p2 < 0)
-				vm->aOp[i + addr].p2 = addr + ADDR(p2);
+				vm->opcodes[i + addr].p2 = addr + ADDR(p2);
 			if (op[i].p4.p == 0) {
-				vm->aOp[i + addr].p4type = P4_NOTUSED;
+				vm->opcodes[i + addr].p4type = P4_NOTUSED;
 			}
 #ifndef NDEBUG
 			if (dbsql_vdbe_add_op_trace) {
-				__vdbe_print_op(0, i + addr, &vm->aOp[i+addr]);
+				__vdbe_print_op(0, i + addr, &vm->opcodes[i+addr]);
 			}
 #endif
 		}
@@ -374,8 +374,8 @@ void
 __vdbe_change_p1(vdbe_t* vm, int addr, int val)
 {
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
-	if (vm && addr >= 0 && vm->nOp > addr && vm->aOp) {
-		vm->aOp[addr].p1 = val;
+	if (vm && addr >= 0 && vm->nOp > addr && vm->opcodes) {
+		vm->opcodes[addr].p1 = val;
 	}
 }
 
@@ -391,8 +391,8 @@ __vdbe_change_p2(vdbe_t* vm, int addr, int val)
 {
 	DBSQL_ASSERT(val >= 0);
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
-	if (vm && addr >= 0 && vm->nOp > addr && vm->aOp) {
-		vm->aOp[addr].p2 = val;
+	if (vm && addr >= 0 && vm->nOp > addr && vm->opcodes) {
+		vm->opcodes[addr].p2 = val;
 	}
 }
 
@@ -407,8 +407,8 @@ void
 __vdbe_change_p3(vdbe_t* vm, int addr, int val)
 {
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
-	if (vm && addr >= 0 && vm->nOp > addr && vm->aOp) {
-		vm->aOp[addr].p3 = val;
+	if (vm && addr >= 0 && vm->nOp > addr && vm->opcodes) {
+		vm->opcodes[addr].p3 = val;
 	}
 }
 
@@ -439,14 +439,14 @@ __vdbe_change_p4(vdbe_t* vm, int addr, const char *p4, int p4type)
 {
 	vdbe_op_t *pOp;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
-	if (vm == 0 || vm->aOp == 0)
+	if (vm == 0 || vm->opcodes == 0)
 		return;
 	if (addr < 0 || addr >= vm->nOp) {
 		addr = vm->nOp - 1;
 		if (addr < 0)
 			return;
 	}
-	pOp = &vm->aOp[addr];
+	pOp = &vm->opcodes[addr];
 	/* Free any existing dynamic P4 value */
 	__vdbe_free_p4(pOp->p4type, pOp->p4.p);
 	pOp->p4.p = 0;
@@ -487,7 +487,7 @@ __vdbe_change_p5(vdbe_t* vm, u_int16_t p5)
 {
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	if (vm->nOp > 0) {
-		vm->aOp[vm->nOp - 1].p5 = p5;
+		vm->opcodes[vm->nOp - 1].p5 = p5;
 	}
 }
 
@@ -540,14 +540,14 @@ __vdbe_dequote_p4(vdbe_t* vm, int addr)
 {
 	vdbe_op_t *op;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
-	if (vm->aOp == 0)
+	if (vm->opcodes == 0)
 		return;
 	if (addr < 0 || addr >= vm->nOp) {
 		addr = vm->nOp - 1;
 		if (addr < 0)
 			return;
 	}
-	op = &vm->aOp[addr];
+	op = &vm->opcodes[addr];
 	if (op->p4.z == 0 || op->p4.z[0] == 0)
 		return;
 	if (op->p4type == P4_POINTER)
@@ -574,9 +574,9 @@ __vdbe_compress_space(vdbe_t* vm, int addr)
 	int i, j;
 	vdbe_op_t *op;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
-	if (vm->aOp == 0 || addr < 0 || addr >= vm->nOp)
+	if (vm->opcodes == 0 || addr < 0 || addr >= vm->nOp)
 		return;
-	op = &vm->aOp[addr];
+	op = &vm->opcodes[addr];
 	if (op->p4type == P4_POINTER) {
 		return;
 	}
@@ -618,7 +618,7 @@ __vdbe_find_op(vdbe_t* vm, int op, int p2)
 	int i;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	for (i = 0; i < vm->nOp; i++) {
-		if (vm->aOp[i].opcode == op && vm->aOp[i].p2 == p2)
+		if (vm->opcodes[i].opcode == op && vm->opcodes[i].p2 == p2)
 			return i + 1;
 	}
 	return 0;
@@ -635,7 +635,7 @@ __vdbe_get_op(vdbe_t* vm, int addr)
 {
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	DBSQL_ASSERT(addr >= 0 && addr < vm->nOp);
-	return &vm->aOp[addr];
+	return &vm->opcodes[addr];
 }
 
 /*
@@ -1170,7 +1170,7 @@ __vdbe_list(vdbe_t* vm)
 	vm->nResColumn = 8;
 
 	for (i = vm->pc; vm->rc == DBSQL_SUCCESS && i < vm->nOp; i++) {
-		vdbe_op_t *pOp = &vm->aOp[i];
+		vdbe_op_t *pOp = &vm->opcodes[i];
 
 		if (db->flags & DBSQL_Interrupt) {
 			db->flags &= ~DBSQL_Interrupt;
@@ -1185,28 +1185,28 @@ __vdbe_list(vdbe_t* vm)
 		}
 
 		/* addr */
-		pMem = &vm->aMem[0];
+		pMem = &vm->registers[0];
 		__vdbe_mem_set_int64(pMem, i);
 
 		/* opcode */
-		pMem = &vm->aMem[1];
+		pMem = &vm->registers[1];
 		__vdbe_mem_set_str(pMem, __opcode_names[pOp->opcode],
 				   -1, 0);
 
 		/* p1 */
-		pMem = &vm->aMem[2];
+		pMem = &vm->registers[2];
 		__vdbe_mem_set_int64(pMem, pOp->p1);
 
 		/* p2 */
-		pMem = &vm->aMem[3];
+		pMem = &vm->registers[3];
 		__vdbe_mem_set_int64(pMem, pOp->p2);
 
 		/* p3 */
-		pMem = &vm->aMem[4];
+		pMem = &vm->registers[4];
 		__vdbe_mem_set_int64(pMem, pOp->p3);
 
 		/* p4 */
-		pMem = &vm->aMem[5];
+		pMem = &vm->registers[5];
 		if (pOp->p4type == P4_DYNAMIC || pOp->p4type == P4_STATIC) {
 			__vdbe_mem_set_str(pMem, pOp->p4.z, -1, 0);
 		} else if (pOp->p4type == P4_INT32) {
@@ -1219,15 +1219,15 @@ __vdbe_list(vdbe_t* vm)
 		}
 
 		/* p5 */
-		pMem = &vm->aMem[6];
+		pMem = &vm->registers[6];
 		__vdbe_mem_set_int64(pMem, pOp->p5);
 
 		/* comment (empty for now) */
-		pMem = &vm->aMem[7];
+		pMem = &vm->registers[7];
 		__vdbe_mem_set_null(pMem);
 
 		vm->pc = i + 1;
-		vm->pResultRow = &vm->aMem[0];
+		vm->result_row = &vm->registers[0];
 		return DBSQL_ROW;
 	}
 	return vm->rc == DBSQL_SUCCESS ? DBSQL_DONE : DBSQL_ERROR;
@@ -1245,16 +1245,16 @@ __vdbe_set_num_cols(vdbe_t* vm, int nResColumn)
 {
 	int n;
 
-	if (vm->aColName) {
-		__release_mem_array(vm->aColName,
+	if (vm->column_names) {
+		__release_mem_array(vm->column_names,
 				    vm->nResColumn * COLNAME_N);
-		__dbsql_free(NULL, vm->aColName);
+		__dbsql_free(NULL, vm->column_names);
 	}
 	n = nResColumn * COLNAME_N;
 	vm->nResColumn = nResColumn;
-	if (__dbsql_calloc(NULL, n, sizeof(mem_t), &vm->aColName) == ENOMEM)
+	if (__dbsql_calloc(NULL, n, sizeof(mem_t), &vm->column_names) == ENOMEM)
 		return;
-	__init_mem_array(vm->aColName, n, vm->db, MEM_Null);
+	__init_mem_array(vm->column_names, n, vm->db, MEM_Null);
 }
 
 /*
@@ -1277,9 +1277,9 @@ __vdbe_set_col_name(vdbe_t* vm, int idx, int var, const char *zName,
 	mem_t *pColName;
 	DBSQL_ASSERT(idx < vm->nResColumn);
 	DBSQL_ASSERT(var < COLNAME_N);
-	if (vm->aColName == 0)
+	if (vm->column_names == 0)
 		return ENOMEM;
-	pColName = &vm->aColName[idx + var * vm->nResColumn];
+	pColName = &vm->column_names[idx + var * vm->nResColumn];
 	rc = __vdbe_mem_set_str(pColName, zName, -1, xDel);
 	return rc;
 }
@@ -1316,7 +1316,7 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 	 * Add a HALT instruction to the very end of the program.
 	 */
 	if (vm->nOp == 0 ||
-	    (vm->aOp && vm->aOp[vm->nOp - 1].opcode != OP_Halt)) {
+	    (vm->opcodes && vm->opcodes[vm->nOp - 1].opcode != OP_Halt)) {
 		__vdbe_add_op(vm, OP_Halt, 0, 0);
 	}
 
@@ -1343,18 +1343,18 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 	/*
 	 * Allocate the register array (aMem).
 	 */
-	if (vm->aMem == 0) {
+	if (vm->registers == 0) {
 		vm->nVar = nVar;
 		vm->nMem = nMem;
 		vm->nCursor = nCursor;
 
 		if (nMem > 0) {
 			if (__dbsql_calloc(NULL, nMem, sizeof(mem_t),
-					   &vm->aMem) == ENOMEM) {
+					   &vm->registers) == ENOMEM) {
 				vm->nMem = 0;
 				return;
 			}
-			__init_mem_array(vm->aMem, nMem, vm->db, MEM_Null);
+			__init_mem_array(vm->registers, nMem, vm->db, MEM_Null);
 		}
 
 		/*
@@ -1362,11 +1362,11 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 		 */
 		if (nVar > 0) {
 			if (__dbsql_calloc(NULL, nVar, sizeof(mem_t),
-					   &vm->aVar) == ENOMEM) {
+					   &vm->variables) == ENOMEM) {
 				vm->nVar = 0;
 				return;
 			}
-			__init_mem_array(vm->aVar, nVar, vm->db, MEM_Null);
+			__init_mem_array(vm->variables, nVar, vm->db, MEM_Null);
 		}
 
 		/*
@@ -1375,7 +1375,7 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 		if (nCursor > 0) {
 			if (__dbsql_calloc(NULL, nCursor,
 					   sizeof(cursor_t*),
-					   &vm->apCsr) == ENOMEM) {
+					   &vm->cursors) == ENOMEM) {
 				vm->nCursor = 0;
 				return;
 			}
@@ -1393,14 +1393,14 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 	vm->errorAction = OE_Abort;
 	vm->explain |= explain_p;
 	vm->cacheCtr = 1;
-	vm->pResultRow = 0;
+	vm->result_row = 0;
 	vm->magic = VDBE_MAGIC_RUN;
 #ifdef VDBE_PROFILE
 	{
 		int i;
 		for (i = 0; i < vm->nOp; i++) {
-			vm->aOp[i].cnt = 0;
-			vm->aOp[i].cycles = 0;
+			vm->opcodes[i].cnt = 0;
+			vm->opcodes[i].cycles = 0;
 		}
 	}
 #endif
@@ -1418,7 +1418,7 @@ __vdbe_sorter_reset(vdbe_t* vm)
 {
 	while(vm->pSort) {
 		sorter_t *s = vm->pSort;
-		vm->pSort = s->pNext;
+		vm->pSort = s->next_vdbe;
 		__dbsql_free(NULL, s->zKey);
 		__dbsql_free(NULL, s->pData);
 		__dbsql_free(NULL, s);
@@ -1446,7 +1446,7 @@ __vdbe_agg_reset(agg_t* agg)
 		agg_elem_t *elem = __hash_data(p);
 		DBSQL_ASSERT(agg->apFunc != 0);
 		for (i = 0; i < agg->nMem; i++) {
-			mem_t *mem = &elem->aMem[i];
+			mem_t *mem = &elem->registers[i];
 			if (agg->apFunc[i] && (mem->flags & MEM_AggCtx) != 0) {
 				dbsql_func_t ctx;
 				ctx.pFunc = agg->apFunc[i];
@@ -1491,7 +1491,7 @@ void
 __vdbe_keylist_free(keylist_t* p)
 {
 	while(p) {
-		keylist_t *next = p->pNext;
+		keylist_t *next = p->next_vdbe;
 		__dbsql_free(NULL, p);
 		p = next;
 	}
@@ -1550,18 +1550,18 @@ __close_all_cursors(vdbe_t* vm)
 	int i;
 
 	/* Close all open cursors */
-	if (vm->apCsr) {
+	if (vm->cursors) {
 		for (i = 0; i < vm->nCursor; i++) {
-			if (vm->apCsr[i]) {
-				__vdbe_free_cursor(vm, vm->apCsr[i]);
-				vm->apCsr[i] = 0;
+			if (vm->cursors[i]) {
+				__vdbe_free_cursor(vm, vm->cursors[i]);
+				vm->cursors[i] = 0;
 			}
 		}
 	}
 
 	/* Release all register memory */
-	if (vm->aMem) {
-		__release_mem_array(vm->aMem, vm->nMem);
+	if (vm->registers) {
+		__release_mem_array(vm->registers, vm->nMem);
 	}
 }
 
@@ -1622,7 +1622,7 @@ __cleanup(vdbe_t* vm)
 	}
 	__dbsql_free(NULL, vm->zErrMsg);
 	vm->zErrMsg = 0;
-	vm->pResultRow = 0;
+	vm->result_row = 0;
 }
 
 /*
@@ -1679,16 +1679,16 @@ __vdbe_reset(vdbe_t* vm, char* *err_msgs)
 			int i;
 			fprintf(out, "---- ");
 			for (i = 0; i < vm->nOp; i++) {
-				fprintf(out, "%02x", vm->aOp[i].opcode);
+				fprintf(out, "%02x", vm->opcodes[i].opcode);
 			}
 			fprintf(out, "\n");
 			for(i = 0; i < vm->nOp; i++) {
 				fprintf(out, "%6d %10lld %8lld ",
-					vm->aOp[i].cnt,
-					vm->aOp[i].cycles,
-					(vm->aOp[i].cnt > 0) ?
-					vm->aOp[i].cycles / vm->aOp[i].cnt :0);
-				__vdbe_print_op(out, i, &vm->aOp[i]);
+					vm->opcodes[i].cnt,
+					vm->opcodes[i].cycles,
+					(vm->opcodes[i].cnt > 0) ?
+					vm->opcodes[i].cycles / vm->opcodes[i].cnt :0);
+				__vdbe_print_op(out, i, &vm->opcodes[i]);
 			}
 			fclose(out);
 		}
@@ -1751,7 +1751,7 @@ __api_bind(p, i, val, len, copy)
 		return DBSQL_RANGE;
 	}
 	i--; /* Convert to 0-based index */
-	pVar = &vm->aVar[i];
+	pVar = &vm->variables[i];
 
 	/* Release any prior value */
 	__vdbe_mem_release(pVar);
@@ -1790,47 +1790,47 @@ __vdbe_delete(vdbe_t* vm)
 	__cleanup(vm);
 
 	/* Unlink from the database's VDBE list */
-	if (vm->pPrev) {
-		vm->pPrev->pNext = vm->pNext;
+	if (vm->prev_vdbe) {
+		vm->prev_vdbe->next_vdbe = vm->next_vdbe;
 	} else {
 		DBSQL_ASSERT(vm->db->pVdbe == vm );
-		vm->db->pVdbe = vm->pNext;
+		vm->db->pVdbe = vm->next_vdbe;
 	}
-	if (vm->pNext) {
-		vm->pNext->pPrev = vm->pPrev;
+	if (vm->next_vdbe) {
+		vm->next_vdbe->prev_vdbe = vm->prev_vdbe;
 	}
-	vm->pPrev = vm->pNext = 0;
+	vm->prev_vdbe = vm->next_vdbe = 0;
 
 	/* Free the opcodes and their P4 values */
 	if (vm->nOpAlloc == 0) {
-		vm->aOp = 0;
+		vm->opcodes = 0;
 		vm->nOp = 0;
 	}
 	for (i = 0; i < vm->nOp; i++) {
-		__vdbe_free_p4(vm->aOp[i].p4type, vm->aOp[i].p4.p);
+		__vdbe_free_p4(vm->opcodes[i].p4type, vm->opcodes[i].p4.p);
 	}
 
 	/* Free bound parameters */
-	if (vm->aVar) {
-		__release_mem_array(vm->aVar, vm->nVar);
-		__dbsql_free(NULL, vm->aVar);
+	if (vm->variables) {
+		__release_mem_array(vm->variables, vm->nVar);
+		__dbsql_free(NULL, vm->variables);
 	}
 
 	/* Free column name array */
-	if (vm->aColName) {
-		__release_mem_array(vm->aColName,
+	if (vm->column_names) {
+		__release_mem_array(vm->column_names,
 				    vm->nResColumn * COLNAME_N);
-		__dbsql_free(NULL, vm->aColName);
+		__dbsql_free(NULL, vm->column_names);
 	}
 
 	/* Free the register array */
-	__dbsql_free(NULL, vm->aMem);
+	__dbsql_free(NULL, vm->registers);
 
 	/* Free the cursor pointer array */
-	__dbsql_free(NULL, vm->apCsr);
+	__dbsql_free(NULL, vm->cursors);
 
-	__dbsql_free(NULL, vm->aOp);
-	__dbsql_free(NULL, vm->aLabel);
+	__dbsql_free(NULL, vm->opcodes);
+	__dbsql_free(NULL, vm->labels);
 	vm->magic = VDBE_MAGIC_DEAD;
 	__dbsql_free(NULL, vm);
 }

@@ -2251,7 +2251,7 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	if (col < 0) {
 		index = 0;
 	} else {
-		for (index = table->pIndex; index; index = index->pNext) {
+		for (index = table->pIndex; index; index = index->next_vdbe) {
 			DBSQL_ASSERT(index->nColumn >= 1);
 			if (index->aiColumn[0] == col)
 				break;

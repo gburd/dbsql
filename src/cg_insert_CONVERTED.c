@@ -409,10 +409,10 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	/* Allocate registers for index keys */
 	if (table->pIndex) {
 		int nIdx = 0;
-		for(idx = table->pIndex; idx; idx = idx->pNext) nIdx++;
+		for(idx = table->pIndex; idx; idx = idx->next_vdbe) nIdx++;
 		if (__dbsql_calloc(dbp, nIdx, sizeof(int), &aRegIdx) == ENOMEM)
 			goto insert_cleanup;
-		for(i = 0, idx = table->pIndex; idx; idx = idx->pNext, i++) {
+		for(i = 0, idx = table->pIndex; idx; idx = idx->next_vdbe, i++) {
 			aRegIdx[i] = parser->nMem++;
 		}
 	}
@@ -425,7 +425,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, base, table->tnum);
 		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
-		for (dx = 1, idx = table->pIndex; idx; idx = idx->pNext, dx++){
+		for (dx = 1, idx = table->pIndex; idx; idx = idx->next_vdbe, dx++){
 			__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, (dx + base), idx->tnum);
 			__vdbe_change_p3(v, -1, idx->zName, P3_STATIC);
@@ -528,7 +528,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, base, table->tnum);
 		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
-		for (dx = 1, idx = table->pIndex; idx; idx = idx->pNext, dx++){
+		for (dx = 1, idx = table->pIndex; idx; idx = idx->next_vdbe, dx++){
 			__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, (dx + base), idx->tnum);
 			__vdbe_change_p3(v, -1, idx->zName, P3_STATIC);
@@ -633,7 +633,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		if (!view_p) {
 			__vdbe_add_op(v, OP_Close, base, 0);
 			for(dx = 1, idx = table->pIndex; idx;
-			    idx = idx->pNext, dx++) {
+			    idx = idx->next_vdbe, dx++) {
 				__vdbe_add_op(v, OP_Close, (dx + base), 0);
 			}
 		}
@@ -661,7 +661,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	if (!row_triggers_p) {
 		/* Close all tables opened */
 		__vdbe_add_op(v, OP_Close, base, 0);
-		for(dx = 1, idx = table->pIndex; idx; idx = idx->pNext, dx++){
+		for(dx = 1, idx = table->pIndex; idx; idx = idx->next_vdbe, dx++){
 			__vdbe_add_op(v, OP_Close, (dx + base), 0);
 		}
 	}

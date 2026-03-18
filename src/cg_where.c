@@ -299,7 +299,7 @@ static index_t *__find_sorting_index(table, base, orderby_clause,
 	 * check for a matching index.
 	 */
 	match = 0;
-	for (idx = table->pIndex; idx; idx = idx->pNext) {
+	for (idx = table->pIndex; idx; idx = idx->next_vdbe) {
 		num_expr = orderby_clause->nExpr;
 		if (idx->nColumn < num_eq_col || idx->nColumn < num_expr)
 			continue;
@@ -498,7 +498,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		__dbsql_free(parser->db, where_info);
 		return 0;
 	}
-	where_info->pParse = parser;
+	where_info->parser = parser;
 	where_info->pTabList = tab_list;
 	where_info->peakNTab = where_info->savedNTab = parser->nTab;
 	where_info->iBreak = __vdbe_make_label(v);
@@ -650,7 +650,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		  * of the WHERE clause cannot be used in conjunction with the
 		  * IN operator to help satisfy other columns of the index.
 		  */
-		 for(idx = table->pIndex; idx; idx = idx->pNext) {
+		 for(idx = table->pIndex; idx; idx = idx->next_vdbe) {
 			 eq_mask = 0;
 			 lt_mask = 0;
 			 gt_mask = 0;
@@ -1384,7 +1384,7 @@ __where_end(where_info_t* winfo)
 	int i, addr;
 	where_level_t *level;
 	table_t *table;
-	vdbe_t *v = winfo->pParse->pVdbe;
+	vdbe_t *v = winfo->parser->pVdbe;
 	src_list_t *tab_list = winfo->pTabList;
 
 	for (i = (tab_list->nSrc - 1); i >= 0; i--) {
@@ -1424,10 +1424,10 @@ __where_end(where_info_t* winfo)
 		}
 	}
 #if 0  /* NOTE: Never reuse a cursor */
-	if( winfo->pParse->nTab==winfo->peakNTab ){
-		winfo->pParse->nTab = winfo->savedNTab;
+	if( winfo->parser->nTab==winfo->peakNTab ){
+		winfo->parser->nTab = winfo->savedNTab;
 	}
 #endif
-	__dbsql_free(winfo->pParse->db, winfo);
+	__dbsql_free(winfo->parser->db, winfo);
 	return;
 }

@@ -190,10 +190,10 @@ __agg_insert(agg_t* p, char* key, int len)
 	mem_t *mem;
 
 	if (__dbsql_calloc(NULL, 1, sizeof(agg_elem_t) + len +
-			((p->nMem - 1) * sizeof(elem->aMem[0])),
+			((p->nMem - 1) * sizeof(elem->registers[0])),
 			&elem) == ENOMEM)
 		return 1;
-	elem->zKey = (char*)&elem->aMem[p->nMem];
+	elem->zKey = (char*)&elem->registers[p->nMem];
 	memcpy(elem->zKey, key, len);
 	elem->nKey = len;
 	old = __hash_insert(&p->hash, elem->zKey, elem->nKey, elem);
@@ -202,7 +202,7 @@ __agg_insert(agg_t* p, char* key, int len)
 		__dbsql_free(NULL, old);
 		return 0;
 	}
-	for (i = 0, mem = elem->aMem; i < p->nMem; i++, mem++) {
+	for (i = 0, mem = elem->registers; i < p->nMem; i++, mem++) {
 		mem->flags = MEM_Null;
 	}
 	p->pCurrent = elem;
@@ -434,24 +434,24 @@ __sorted_merge(sorter_t* left, sorter_t* right)
 	sorter_t head;
 	sorter_t *tail;
 	tail = &head;
-	tail->pNext = 0;
+	tail->next_vdbe = 0;
 	while(left && right) {
 		int c = __str_cmp(left->zKey, right->zKey);
 		if (c <= 0) {
-			tail->pNext = left;
-			left = left->pNext;
+			tail->next_vdbe = left;
+			left = left->next_vdbe;
 		} else {
-			tail->pNext = right;
-			right = right->pNext;
+			tail->next_vdbe = right;
+			right = right->next_vdbe;
 		}
-		tail = tail->pNext;
+		tail = tail->next_vdbe;
 	}
 	if (left) {
-		tail->pNext = left;
+		tail->next_vdbe = left;
 	} else if (right) {
-		tail->pNext = right;
+		tail->next_vdbe = right;
 	}
-	return head.pNext;
+	return head.next_vdbe;
 }
 
 /*
@@ -531,9 +531,9 @@ __expand_cursor_array_size(vdbe_t* vm, int num_cursors)
 {
 	if (num_cursors >= vm->nCursor) {
 		if (__dbsql_realloc(NULL, ((num_cursors + 1) *
-				  sizeof(cursor_t*)), &vm->apCsr) == ENOMEM)
+				  sizeof(cursor_t*)), &vm->cursors) == ENOMEM)
 			return 1;
-		memset(&vm->apCsr[vm->nCursor], 0,
+		memset(&vm->cursors[vm->nCursor], 0,
 		       (sizeof(cursor_t*) * (num_cursors + 1 - vm->nCursor)));
 		vm->nCursor = num_cursors + 1;
 	}
@@ -697,7 +697,7 @@ __vdbe_exec(vdbe_t* p)
 		origPc = pc;
 		start = __os_hwtime();
 #endif
-		pOp = &p->aOp[pc];
+		pOp = &p->opcodes[pc];
 
 		/*
 		 * Only allow tracing if NDEBUG is not defined.
@@ -1098,7 +1098,7 @@ case OP_ResultRow: {
 	DBSQL_ASSERT(pOp->p1 + pOp->p2 <= p->nMem + 1);
 
 	/* Point to first result register */
-	p->pResultRow = &aMem[pOp->p1];
+	p->result_row = &aMem[pOp->p1];
 	p->cacheCtr = (p->cacheCtr + 2) | 1;
 	p->pc = (int)(pc + 1);
 	rc = DBSQL_ROW;
@@ -1267,11 +1267,11 @@ case OP_Remainder: {
 	double rA;      /* Real value of left operand */
 	double rB;      /* Real value of right operand */
 
-	pIn1 = &p->aMem[pOp->p1];
+	pIn1 = &p->registers[pOp->p1];
 	type1 = pIn1->flags;
-	pIn2 = &p->aMem[pOp->p2];
+	pIn2 = &p->registers[pOp->p2];
 	type2 = pIn2->flags;
-	pOut = &p->aMem[pOp->p3];
+	pOut = &p->registers[pOp->p3];
 
 	if ((type1 & type2 & MEM_Int) != 0) {
 int_math:
@@ -2688,9 +2688,9 @@ case OP_OpenWrite: {
 		goto no_mem;
 
 	/* Free any existing cursor at this position */
-	if (p->apCsr[iCur]) {
-		__vdbe_free_cursor(p, p->apCsr[iCur]);
-		p->apCsr[iCur] = 0;
+	if (p->cursors[iCur]) {
+		__vdbe_free_cursor(p, p->cursors[iCur]);
+		p->cursors[iCur] = 0;
 	}
 
 	/* Allocate new cursor_t */
@@ -2717,7 +2717,7 @@ case OP_OpenWrite: {
 	}
 
 	/* Store cursor in array */
-	p->apCsr[iCur] = pCur;
+	p->cursors[iCur] = pCur;
 	break;
 }
 
@@ -2755,7 +2755,7 @@ case OP_OpenTemp: {
 		goto no_mem;
 
 	/* Check if we can reuse an existing ephemeral cursor */
-	pCur = p->apCsr[iCur];
+	pCur = p->cursors[iCur];
 	if (pCur && pCur->isEphemeral && !pCur->noReuse &&
 	    nField <= pCur->nField) {
 		/* Reuse existing ephemeral cursor - just clear its content */
@@ -2766,9 +2766,9 @@ case OP_OpenTemp: {
 			goto abort_due_to_error;
 	} else {
 		/* Free any existing cursor at this position */
-		if (p->apCsr[iCur]) {
-			__vdbe_free_cursor(p, p->apCsr[iCur]);
-			p->apCsr[iCur] = 0;
+		if (p->cursors[iCur]) {
+			__vdbe_free_cursor(p, p->cursors[iCur]);
+			p->cursors[iCur] = 0;
 		}
 
 		/* Allocate new cursor_t */
@@ -2827,7 +2827,7 @@ case OP_OpenTemp: {
 		}
 
 		/* Store cursor in array */
-		p->apCsr[iCur] = pCur;
+		p->cursors[iCur] = pCur;
 	}
 
 	pCur->isOrdered = 1;  /* BTREE_UNORDERED not yet implemented */
@@ -2856,9 +2856,9 @@ case OP_OpenPseudo: {
 		goto no_mem;
 
 	/* Free any existing cursor at this position */
-	if (p->apCsr[iCur]) {
-		__vdbe_free_cursor(p, p->apCsr[iCur]);
-		p->apCsr[iCur] = 0;
+	if (p->cursors[iCur]) {
+		__vdbe_free_cursor(p, p->cursors[iCur]);
+		p->cursors[iCur] = 0;
 	}
 
 	/* Allocate new pseudo-table cursor */
@@ -2870,7 +2870,7 @@ case OP_OpenPseudo: {
 	pCur->seekResult = pOp->p2;  /* Register holding the record */
 
 	/* Store cursor in array */
-	p->apCsr[iCur] = pCur;
+	p->cursors[iCur] = pCur;
 	break;
 }
 
@@ -2882,9 +2882,9 @@ case OP_OpenPseudo: {
 case OP_Close: {
 	int iCur = pOp->p1;
 	DBSQL_ASSERT(iCur >= 0 && iCur < p->nCursor);
-	if (p->apCsr[iCur]) {
-		__vdbe_free_cursor(p, p->apCsr[iCur]);
-		p->apCsr[iCur] = 0;
+	if (p->cursors[iCur]) {
+		__vdbe_free_cursor(p, p->cursors[iCur]);
+		p->cursors[iCur] = 0;
 	}
 	break;
 }
@@ -2917,7 +2917,7 @@ case OP_MoveTo: {
 
 	DBSQL_ASSERT(pTos >= p->aStack);
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	pC = &p->apCsr[i];
+	pC = &p->cursors[i];
 	if (pC->pCursor != 0) {
 		int res, oc;
 		pC->nullRow = 0;
@@ -3014,7 +3014,7 @@ case OP_Found: {
 	cursor_t *pC;
 	DBSQL_ASSERT(pTos >= p->aStack);
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	if ((pC = &p->apCsr[i])->pCursor != 0) {
+	if ((pC = &p->cursors[i])->pCursor != 0) {
 		int res, rx;
 		__entity_as_string(pTos);
 		rx = __sm_moveto(pC->pCursor, pTos->z, pTos->n, &res);
@@ -3116,7 +3116,7 @@ case OP_SeekGT: {
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	DBSQL_ASSERT(pOp->p2 != 0);
-	pC = &p->apCsr[i];
+	pC = &p->cursors[i];
 	DBSQL_ASSERT(pC != 0);
 	pCrsr = pC->pCursor;
 	DBSQL_ASSERT(pCrsr != 0);
@@ -3131,7 +3131,7 @@ case OP_SeekGT: {
 	 * UnpackedRecord and call __sm_index_moveto(), but for the initial
 	 * implementation we require the key to be an integer.
 	 */
-	mem_t *pIn3 = &p->aMem[pOp->p3];
+	mem_t *pIn3 = &p->registers[pOp->p3];
 	DBSQL_ASSERT((pIn3->flags & (MEM_Int|MEM_Real|MEM_Str)) != 0);
 
 	/*
@@ -3226,7 +3226,7 @@ case OP_SeekRowid: {
 	i64 iKey;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	pC = &p->apCsr[i];
+	pC = &p->cursors[i];
 	DBSQL_ASSERT(pC != 0);
 	pCrsr = pC->pCursor;
 	DBSQL_ASSERT(pCrsr != 0);
@@ -3238,7 +3238,7 @@ case OP_SeekRowid: {
 	 * Get the integer rowid from register P3. If it's not an integer,
 	 * try to convert it. If conversion fails, jump to P2.
 	 */
-	mem_t *pIn3 = &p->aMem[pOp->p3];
+	mem_t *pIn3 = &p->registers[pOp->p3];
 	if ((pIn3->flags & MEM_Int) == 0) {
 		/* Try to convert to integer */
 		__entity_to_int(pIn3);
@@ -3307,7 +3307,7 @@ case OP_IsUnique: {
 	R = pTos->i;
 	pTos--;
 	DBSQL_ASSERT(i >= 0 && i <= p->nCursor);
-	if ((pCrsr = p->apCsr[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i].pCursor) != 0) {
 		int res, rc;
 		int v;         /* The record number on the P1 entry
 				  that matches K. */
@@ -3327,7 +3327,7 @@ case OP_IsUnique: {
 		 * bytes match K.  If there is no such entry, jump immediately
 		 * to P2.
 		 */
-		DBSQL_ASSERT(p->apCsr[i].deferredMoveto == 0);
+		DBSQL_ASSERT(p->cursors[i].deferredMoveto == 0);
 		rc = __sm_moveto(pCrsr, zKey, (nKey - 4), &res);
 		if (rc != DBSQL_SUCCESS)
 			goto abort_due_to_error;
@@ -3390,17 +3390,17 @@ case OP_NotExists: {
 	sm_cursor_t *pCrsr;
 	DBSQL_ASSERT(pTos >= p->aStack);
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	if ((pCrsr = p->apCsr[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i].pCursor) != 0) {
 		int res, rx, iKey;
 		DBSQL_ASSERT(pTos->flags & MEM_Int);
 		iKey = INT_TO_KEY(pTos->i);
 		rx = __sm_moveto(pCrsr, (char*)&iKey, sizeof(int), &res);
-		p->apCsr[i].lastRecno = pTos->i;
-		p->apCsr[i].recnoIsValid = res==0;
-		p->apCsr[i].nullRow = 0;
+		p->cursors[i].lastRecno = pTos->i;
+		p->cursors[i].recnoIsValid = res==0;
+		p->cursors[i].nullRow = 0;
 		if (rx != DBSQL_SUCCESS || res != 0) {
 			pc = pOp->p2 - 1;
-			p->apCsr[i].recnoIsValid = 0;
+			p->cursors[i].recnoIsValid = 0;
 		}
 	}
 	__entity_release_mem(pTos);
@@ -3426,7 +3426,7 @@ case OP_NewRecno: {
 	int v = 0;
 	cursor_t *pC;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	if ((pC = &p->apCsr[i])->pCursor == 0) {
+	if ((pC = &p->cursors[i])->pCursor == 0) {
 		v = 0;
 	} else {
 		/* !!!
@@ -3551,7 +3551,7 @@ case OP_PutStrKey: {
 	cursor_t *pC;
 	DBSQL_ASSERT(pNos >= p->aStack);
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	if (((pC = &p->apCsr[i])->pCursor != 0 || pC->pseudoTable)) {
+	if (((pC = &p->cursors[i])->pCursor != 0 || pC->pseudoTable)) {
 		char *zKey;
 		int nKey, iKey;
 		if (pOp->opcode == OP_PutStrKey) {
@@ -3621,7 +3621,7 @@ case OP_Delete: {
 	int i = pOp->p1;
 	cursor_t *pC;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	pC = &p->apCsr[i];
+	pC = &p->cursors[i];
 	if (pC->pCursor != 0) {
 		__vdbe_cursor_moveto(pC);
 		rc = __sm_delete(pC->pCursor);
@@ -3644,7 +3644,7 @@ case OP_Delete: {
 case OP_KeyAsData: {
 	int i = pOp->p1;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	p->apCsr[i].keyAsData = pOp->p2;
+	p->cursors[i].keyAsData = pOp->p2;
 	break;
 }
 
@@ -3674,7 +3674,7 @@ case OP_RowData: {
 
 	pTos++;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	pC = &p->apCsr[i];
+	pC = &p->cursors[i];
 	if (pC->nullRow) {
 		pTos->flags = MEM_Null;
 	} else if (pC->pCursor != 0) {
@@ -3748,7 +3748,7 @@ case OP_Column: {
 		DBSQL_ASSERT(pTos[i].flags & MEM_Str);
 		zRec = pTos[i].z;
 		payloadSize = pTos[i].n;
-	} else if ((pC = &p->apCsr[i])->pCursor != 0) {
+	} else if ((pC = &p->cursors[i])->pCursor != 0) {
 		__vdbe_cursor_moveto(pC);
 		zRec = 0;
 		pCrsr = pC->pCursor;
@@ -3858,7 +3858,7 @@ case OP_Rowid: {
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
 	DBSQL_ASSERT(pOp->p2 > 0 && pOp->p2 <= p->nMem);
 
-	pC = p->apCsr[pOp->p1];
+	pC = p->cursors[pOp->p1];
 	pOut = &aMem[pOp->p2];
 
 	/* Handle null row or missing cursor */
@@ -3912,15 +3912,15 @@ case OP_FullKey: {
 	int i = pOp->p1;
 	sm_cursor_t *pCrsr;
 
-	DBSQL_ASSERT(p->apCsr[i].keyAsData);
-	DBSQL_ASSERT(!p->apCsr[i].pseudoTable);
+	DBSQL_ASSERT(p->cursors[i].keyAsData);
+	DBSQL_ASSERT(!p->cursors[i].pseudoTable);
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	pTos++;
-	if ((pCrsr = p->apCsr[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i].pCursor) != 0) {
 		int amt;
 		char *z;
 
-		__vdbe_cursor_moveto(&p->apCsr[i]);
+		__vdbe_cursor_moveto(&p->cursors[i]);
 		__sm_key_size(pCrsr, &amt);
 		if (amt <= 0) {
 			rc = DBSQL_CORRUPT;
@@ -3951,8 +3951,8 @@ case OP_NullRow: {
 	int i = pOp->p1;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	p->apCsr[i].nullRow = 1;
-	p->apCsr[i].recnoIsValid = 0;
+	p->cursors[i].nullRow = 1;
+	p->cursors[i].recnoIsValid = 0;
 	break;
 }
 
@@ -3970,7 +3970,7 @@ case OP_Last: {
 	sm_cursor_t *pCrsr;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	pC = &p->apCsr[i];
+	pC = &p->cursors[i];
 	if ((pCrsr = pC->pCursor) != 0) {
 		int res;
 		rc = __sm_last(pCrsr, &res);
@@ -4009,7 +4009,7 @@ case OP_Rewind: {
 	int res;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
-	pC = p->apCsr[pOp->p1];
+	pC = p->cursors[pOp->p1];
 	res = 1;  /* Assume empty */
 
 	if (pC != 0) {
@@ -4061,7 +4061,7 @@ case OP_Prev: {
 	int res;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
-	pC = p->apCsr[pOp->p1];
+	pC = p->cursors[pOp->p1];
 
 	if (pC && pC->eCurType == CURTYPE_BTREE) {
 		pCrsr = pC->uc.pCursor;
@@ -4101,7 +4101,7 @@ case OP_Next: {
 	int res;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
-	pC = p->apCsr[pOp->p1];
+	pC = p->cursors[pOp->p1];
 
 	if (pC && pC->eCurType == CURTYPE_BTREE) {
 		pCrsr = pC->uc.pCursor;
@@ -4144,7 +4144,7 @@ case OP_IdxPut: {
 	DBSQL_ASSERT(pTos >= p->aStack);
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	DBSQL_ASSERT(pTos->flags & MEM_Str);
-	if ((pCrsr = p->apCsr[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i].pCursor) != 0) {
 		int nKey = pTos->n;
 		const char *zKey = pTos->z;
 		if (pOp->p2) {
@@ -4176,7 +4176,7 @@ case OP_IdxPut: {
 			}
 		}
 		rc = __sm_insert(pCrsr, zKey, nKey, "", 0);
-		DBSQL_ASSERT(p->apCsr[i].deferredMoveto == 0);
+		DBSQL_ASSERT(p->cursors[i].deferredMoveto == 0);
 	}
 	__entity_release_mem(pTos);
 	pTos--;
@@ -4194,13 +4194,13 @@ case OP_IdxDelete: {
 	DBSQL_ASSERT(pTos >= p->aStack);
 	DBSQL_ASSERT(pTos->flags & MEM_Str);
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	if ((pCrsr = p->apCsr[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i].pCursor) != 0) {
 		int rx, res;
 		rx = __sm_moveto(pCrsr, pTos->z, pTos->n, &res);
 		if (rx == DBSQL_SUCCESS && res == 0) {
 			rc = __sm_delete(pCrsr);
 		}
-		DBSQL_ASSERT(p->apCsr[i].deferredMoveto == 0);
+		DBSQL_ASSERT(p->cursors[i].deferredMoveto == 0);
 	}
 	__entity_release_mem(pTos);
 	pTos--;
@@ -4222,10 +4222,10 @@ case OP_IdxRecno: {
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	pTos++;
-	if ((pCrsr = p->apCsr[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i].pCursor) != 0) {
 		int v;
 		int sz;
-		DBSQL_ASSERT(p->apCsr[i].deferredMoveto == 0);
+		DBSQL_ASSERT(p->cursors[i].deferredMoveto == 0);
 		__sm_key_size(pCrsr, &sz);
 		if (sz < sizeof(u_int32_t)) {
 			pTos->flags = MEM_Null;
@@ -4275,11 +4275,11 @@ case OP_IdxGE: {
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	DBSQL_ASSERT(pTos >= p->aStack);
-	if ((pCrsr = p->apCsr[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i].pCursor) != 0) {
 		int res, rc;
 
 		__entity_as_string(pTos);
-		DBSQL_ASSERT(p->apCsr[i].deferredMoveto == 0);
+		DBSQL_ASSERT(p->cursors[i].deferredMoveto == 0);
 		rc = __sm_key_compare(pCrsr, pTos->z, pTos->n, 4, &res);
 		if (rc != DBSQL_SUCCESS) {
 			break;
@@ -4429,7 +4429,7 @@ case OP_ListWrite: {
 		pKeylist->nKey = 1000;
 		pKeylist->nRead = 0;
 		pKeylist->nUsed = 0;
-		pKeylist->pNext = p->x.pList;
+		pKeylist->next_vdbe = p->x.pList;
 		p->x.pList = pKeylist;
 	}
 	__entity_to_int(pTos);
@@ -4467,7 +4467,7 @@ case OP_ListRead: {
 		pTos->i = pKeylist->aKey[pKeylist->nRead++];
 		pTos->flags = MEM_Int;
 		if (pKeylist->nRead >= pKeylist->nUsed) {
-			p->x.pList = pKeylist->pNext;
+			p->x.pList = pKeylist->next_vdbe;
 			__dbsql_free(NULL, pKeylist);
 		}
 	} else {
@@ -4536,7 +4536,7 @@ case OP_SortPut: {
 		goto no_mem;
 	if (__dbsql_calloc(NULL, 1, sizeof(sorter_t), &pSorter) == ENOMEM)
 		goto no_mem;
-	pSorter->pNext = p->pSort;
+	pSorter->next_vdbe = p->pSort;
 	p->pSort = pSorter;
 	DBSQL_ASSERT(pTos->flags & MEM_Dyn);
 	pSorter->nKey = pTos->n;
@@ -4666,8 +4666,8 @@ case OP_Sort: {
 	}
 	while(p->pSort) {
 		pElem = p->pSort;
-		p->pSort = pElem->pNext;
-		pElem->pNext = 0;
+		p->pSort = pElem->next_vdbe;
+		pElem->next_vdbe = 0;
 		for (i = 0; i < NSORT-1; i++) {
 			if (apSorter[i] == 0) {
 				apSorter[i] = pElem;
@@ -4701,7 +4701,7 @@ case OP_SortNext: {
 	sorter_t *pSorter = p->pSort;
 	CHECK_FOR_INTERRUPT;
 	if (pSorter != 0) {
-		p->pSort = pSorter->pNext;
+		p->pSort = pSorter->next_vdbe;
 		pTos++;
 		pTos->z = pSorter->pData;
 		pTos->n = pSorter->nData;
@@ -4954,26 +4954,26 @@ case OP_MemStore: {
 		int nOld = p->nMem;
 		mem_t *oldMem;
 		p->nMem = i + 5;
-		oldMem = p->aMem;
-		if (__dbsql_realloc(NULL, p->nMem * sizeof(p->aMem[0]),
-				 &p->aMem) == ENOMEM)
+		oldMem = p->registers;
+		if (__dbsql_realloc(NULL, p->nMem * sizeof(p->registers[0]),
+				 &p->registers) == ENOMEM)
 			goto no_mem;
-		if (oldMem != p->aMem) { /* realloc moved the memory */
+		if (oldMem != p->registers) { /* realloc moved the memory */
 			int j;
 			for(j = 0; j < nOld; j++) {
-				if (p->aMem[j].flags & MEM_Short) {
-					p->aMem[j].z = p->aMem[j].zShort;
+				if (p->registers[j].flags & MEM_Short) {
+					p->registers[j].z = p->registers[j].zShort;
 				}
 			}
 		}
 		if (nOld < p->nMem) {
-			memset(&p->aMem[nOld], 0,
-			       sizeof(p->aMem[0]) * (p->nMem - nOld));
+			memset(&p->registers[nOld], 0,
+			       sizeof(p->registers[0]) * (p->nMem - nOld));
 		}
 	}
 	if (__entity_ephem_to_dyn(pTos) == 1)
 		goto no_mem;
-	pMem = &p->aMem[i];
+	pMem = &p->registers[i];
 	__entity_release_mem(pMem);
 	*pMem = *pTos;
 	if (pMem->flags & MEM_Dyn) {
@@ -5007,7 +5007,7 @@ case OP_MemLoad: {
 	int i = pOp->p1;
 	DBSQL_ASSERT(i >= 0 && i < p->nMem);
 	pTos++;
-	memcpy(pTos, &p->aMem[i], sizeof(pTos[0]) - NBFS);;
+	memcpy(pTos, &p->registers[i], sizeof(pTos[0]) - NBFS);;
 	if (pTos->flags & MEM_Str) {
 		pTos->flags |= MEM_Ephem;
 		pTos->flags &= ~(MEM_Dyn | MEM_Static | MEM_Short);
@@ -5028,7 +5028,7 @@ case OP_MemIncr: {
 	int i = pOp->p1;
 	mem_t *pMem;
 	DBSQL_ASSERT(i >= 0 && i < p->nMem);
-	pMem = &p->aMem[i];
+	pMem = &p->registers[i];
 	DBSQL_ASSERT(pMem->flags == MEM_Int);
 	pMem->i++;
 	if (pOp->p2 > 0 && pMem->i > 0) {
@@ -5097,7 +5097,7 @@ case OP_AggFunc: {
 	i = pTos->i;
 	DBSQL_ASSERT(i >= 0 && i < p->agg.nMem);
 	ctx.pFunc = (func_def_t*)pOp->p3;
-	pMem = &p->agg.pCurrent->aMem[i];
+	pMem = &p->agg.pCurrent->registers[i];
 	ctx.s.z = pMem->zShort;  /* Space used for small aggregate contexts */
 	ctx.pAgg = pMem->z;
 	ctx.cnt = ++pMem->i;
@@ -5163,7 +5163,7 @@ case OP_AggSet: {
 	DBSQL_ASSERT(i >= 0 && i < p->agg.nMem);
 	if (__entity_ephem_to_dyn(pTos) == 1)
 		goto no_mem;
-	pMem = &pFocus->aMem[i];
+	pMem = &pFocus->registers[i];
 	__entity_release_mem(pMem);
 	*pMem = *pTos;
 	if (pMem->flags & MEM_Dyn) {
@@ -5190,7 +5190,7 @@ case OP_AggGet: {
 		goto no_mem;
 	DBSQL_ASSERT(i >= 0 && i < p->agg.nMem);
 	pTos++;
-	pMem = &pFocus->aMem[i];
+	pMem = &pFocus->registers[i];
 	*pTos = *pMem;
 	if (pTos->flags & MEM_Str) {
 		pTos->flags &= ~(MEM_Dyn|MEM_Static|MEM_Short);
@@ -5225,7 +5225,7 @@ case OP_AggNext: {
 		dbsql_func_t ctx;
 		mem_t *aMem;
 		p->agg.pCurrent = __hash_data(p->agg.pSearch);
-		aMem = p->agg.pCurrent->aMem;
+		aMem = p->agg.pCurrent->registers;
 		for(i = 0; i < p->agg.nMem; i++){
 			int freeCtx;
 			if (p->agg.apFunc[i] == 0)
@@ -5286,7 +5286,7 @@ case OP_AggStep: {
 
 	/* P3 is the accumulator register */
 	DBSQL_ASSERT(pOp->p3 > 0 && pOp->p3 <= p->nMem);
-	pMem = &p->aMem[pOp->p3 - 1];
+	pMem = &p->registers[pOp->p3 - 1];
 
 	/* P2 is the first argument register */
 	DBSQL_ASSERT(n == 0 || (pOp->p2 > 0 && pOp->p2 + n <= p->nMem));
@@ -5336,7 +5336,7 @@ case OP_AggFinal: {
 	func_def_t *pFunc;
 
 	DBSQL_ASSERT(pOp->p1 > 0 && pOp->p1 <= p->nMem);
-	pMem = &p->aMem[pOp->p1 - 1];
+	pMem = &p->registers[pOp->p1 - 1];
 
 	/* pMem should be an aggregate accumulator */
 	DBSQL_ASSERT((pMem->flags & (MEM_Agg | MEM_Null)) != 0);
@@ -5383,7 +5383,7 @@ case OP_AggValue: {
 	func_def_t *pFunc;
 
 	DBSQL_ASSERT(pOp->p3 > 0 && pOp->p3 <= p->nMem);
-	pOut = &p->aMem[pOp->p3 - 1];
+	pOut = &p->registers[pOp->p3 - 1];
 
 	/* Get function from P4 */
 	pFunc = (func_def_t*)pOp->p4.pFunc;
@@ -5392,7 +5392,7 @@ case OP_AggValue: {
 	/* For now, use P1 as accumulator source (window function context).
 	 * In full implementation, this would read from window frame state. */
 	if (pOp->p1 > 0 && pOp->p1 <= p->nMem) {
-		pMem = &p->aMem[pOp->p1 - 1];
+		pMem = &p->registers[pOp->p1 - 1];
 	} else {
 		/* No accumulator specified, return NULL */
 		pOut->flags = MEM_Null;
@@ -5434,7 +5434,7 @@ case OP_SorterOpen: {
 	if (__dbsql_calloc(NULL, 1, sizeof(cursor_t), &pCx) == ENOMEM)
 		goto no_mem;
 
-	p->apCsr[pOp->p1] = pCx;
+	p->cursors[pOp->p1] = pCx;
 	p->nCursor = (pOp->p1 >= p->nCursor) ? (pOp->p1 + 1) : p->nCursor;
 
 	/* Initialize as sorter cursor */
@@ -5468,12 +5468,12 @@ case OP_SorterInsert: {
 	mem_t *pIn2;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
-	pC = p->apCsr[pOp->p1];
+	pC = p->cursors[pOp->p1];
 	DBSQL_ASSERT(pC != NULL);
 	DBSQL_ASSERT(pC->eCurType == CURTYPE_SORTER);
 
 	DBSQL_ASSERT(pOp->p2 > 0 && pOp->p2 <= p->nMem);
-	pIn2 = &p->aMem[pOp->p2 - 1];
+	pIn2 = &p->registers[pOp->p2 - 1];
 	DBSQL_ASSERT(pIn2->flags & MEM_Blob);
 
 	/* In a full implementation, this would call:
@@ -5501,7 +5501,7 @@ case OP_SorterSort: {
 	cursor_t *pC;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
-	pC = p->apCsr[pOp->p1];
+	pC = p->cursors[pOp->p1];
 	DBSQL_ASSERT(pC != NULL);
 	DBSQL_ASSERT(pC->eCurType == CURTYPE_SORTER);
 
@@ -5546,12 +5546,12 @@ case OP_SorterData: {
 	mem_t *pOut;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
-	pC = p->apCsr[pOp->p1];
+	pC = p->cursors[pOp->p1];
 	DBSQL_ASSERT(pC != NULL);
 	DBSQL_ASSERT(pC->eCurType == CURTYPE_SORTER);
 
 	DBSQL_ASSERT(pOp->p2 > 0 && pOp->p2 <= p->nMem);
-	pOut = &p->aMem[pOp->p2 - 1];
+	pOut = &p->registers[pOp->p2 - 1];
 
 	/* In a full implementation, this would call:
 	 * rc = __vdbe_sorter_rowkey(pC, pOut);
@@ -5563,8 +5563,8 @@ case OP_SorterData: {
 	pOut->z = NULL;
 
 	/* Invalidate column cache for cursor P3 */
-	if (pOp->p3 > 0 && pOp->p3 < p->nCursor && p->apCsr[pOp->p3]) {
-		p->apCsr[pOp->p3]->cacheStatus = CACHE_STALE;
+	if (pOp->p3 > 0 && pOp->p3 < p->nCursor && p->cursors[pOp->p3]) {
+		p->cursors[pOp->p3]->cacheStatus = CACHE_STALE;
 	}
 
 	break;
@@ -5582,7 +5582,7 @@ case OP_SorterNext: {
 	cursor_t *pC;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
-	pC = p->apCsr[pOp->p1];
+	pC = p->cursors[pOp->p1];
 	DBSQL_ASSERT(pC != NULL);
 	DBSQL_ASSERT(pC->eCurType == CURTYPE_SORTER);
 
@@ -5620,11 +5620,11 @@ case OP_Sequence: {
 	mem_t *pOut;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
-	pC = p->apCsr[pOp->p1];
+	pC = p->cursors[pOp->p1];
 	DBSQL_ASSERT(pC != NULL);
 
 	DBSQL_ASSERT(pOp->p2 > 0 && pOp->p2 <= p->nMem);
-	pOut = &p->aMem[pOp->p2 - 1];
+	pOut = &p->registers[pOp->p2 - 1];
 
 	/* Get and increment sequence counter */
 	pOut->flags = MEM_Int;
@@ -5655,7 +5655,7 @@ case OP_InitCoroutine: {
 	DBSQL_ASSERT(pOp->p2 >= 0 && pOp->p2 < p->nOp);
 	DBSQL_ASSERT(pOp->p3 >= 0 && pOp->p3 < p->nOp);
 
-	pOut = &p->aMem[pOp->p1 - 1];
+	pOut = &p->registers[pOp->p1 - 1];
 
 	/* Store the coroutine entry point (P3) in register P1.
 	 * Note: we store P3-1 because pc will be incremented before
@@ -5822,7 +5822,7 @@ default: {
 	    pOp->cnt++;
 #if 0
 	    fprintf(stdout, "%10lld ", elapse);
-	    __vdbe_print_op(stdout, origPc, &p->aOp[origPc]);
+	    __vdbe_print_op(stdout, origPc, &p->opcodes[origPc]);
 #endif
     }
 #endif

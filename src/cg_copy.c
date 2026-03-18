@@ -86,7 +86,7 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 		__vdbe_add_op(v, OP_OpenWrite, 0, table->tnum);
 		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
 		for(i = 1, index = table->pIndex; index;
-		    index=index->pNext, i++) {
+		    index=index->next_vdbe, i++) {
 			DBSQL_ASSERT(index->iDb == 1 || index->iDb == table->iDb);
 			__vdbe_add_op(v, OP_Integer, index->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, i, index->tnum);

@@ -2165,7 +2165,7 @@ struct walker {
  * ================================================================
  */
 struct db_fixer {
-	parser_t *pParse;        /* The parsing context.  Error messages
+	parser_t *parser;        /* The parsing context.  Error messages
 				    written here */
 	walker_t w;              /* Walker object for tree traversal */
 	schema_t *pSchema;       /* Fix items to this schema */
