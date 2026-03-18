@@ -189,6 +189,30 @@ __find_table(dbp, name, database)
 }
 
 /*
+ * __schema_to_index --
+ *	Find the database index for a given schema.
+ *	Returns the index in db->aDb[] array that corresponds to the schema,
+ *	or -1 if not found.
+ *
+ * PUBLIC: int __schema_to_index __P((DBSQL *, schema_t *));
+ */
+int
+__schema_to_index(dbp, schema)
+	DBSQL *dbp;
+	schema_t *schema;
+{
+	int i;
+	if (schema == 0)
+		return -1;
+	for (i = 0; i < dbp->nDb; i++) {
+		if (dbp->aDb[i].pSchema == schema) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+/*
  * __locate_table --
  *	Locate the in-memory structure that describes
  *	a particular database table given the name
@@ -467,7 +491,7 @@ __vdbe_delete_table(DBSQL* dbp, table_t* table)
 	}
 	__dbsql_free(dbp, table->zName);
 	__dbsql_free(dbp, table->aCol);
-	__select_delete(table->pSelect);
+	__select_delete(table->u.view.pSelect);
 	__dbsql_free(dbp, table);
 }
 
@@ -1205,10 +1229,10 @@ __ending_create_table_paren(parser_t* parser, token_t* end, select_t* select)
 		v = __parser_get_vdbe(parser);
 		if (v == 0)
 			return;
-		if (table->pSelect == 0) {
+		if (table->u.view.pSelect == 0) {
 			/* A regular table */
 			__vdbe_add_op(v, OP_CreateTable, 0, table->iDb);
-			__vdbe_change_p3(v, -1, (char *)&table->tnum,
+			__vdbe_change_p4(v, -1, (char *)&table->tnum,
 					 P3_POINTER);
 		} else {
 			/* A view */
@@ -1217,27 +1241,27 @@ __ending_create_table_paren(parser_t* parser, token_t* end, select_t* select)
 		table->tnum = 0;
 		__vdbe_add_op(v, OP_Pull, 1, 0);
 		__vdbe_add_op(v, OP_String, 0, 0);
-		if (table->pSelect == 0) {
-			__vdbe_change_p3(v, -1, "table", P3_STATIC);
+		if (table->u.view.pSelect == 0) {
+			__vdbe_change_p4(v, -1, "table", P3_STATIC);
 		} else {
-			__vdbe_change_p3(v, -1, "view", P3_STATIC);
+			__vdbe_change_p4(v, -1, "view", P3_STATIC);
 		}
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 		__vdbe_add_op(v, OP_Dup, 4, 0);
 		__vdbe_add_op(v, OP_String, 0, 0);
 		if (select) {
 			char *z = __gen_create_table_stmt(table);
 			n = z ? strlen(z) : 0;
-			__vdbe_change_p3(v, -1, z, n);
+			__vdbe_change_p4(v, -1, z, n);
 			__dbsql_free(dbp, z);
 		} else {
 			DBSQL_ASSERT(end != 0);
 			n = P_TO_UINT32(end->z) -
 				P_TO_UINT32(parser->sFirstToken.z) + 1;
-			__vdbe_change_p3(v, -1, parser->sFirstToken.z, n);
+			__vdbe_change_p4(v, -1, parser->sFirstToken.z, n);
 		}
 		__vdbe_add_op(v, OP_MakeRecord, 5, 0);
 		__vdbe_add_op(v, OP_PutIntKey, 0, 0);
@@ -1325,7 +1349,7 @@ void __create_view(parser, begin, name, select, temp)
 	 * allocated rather than point to the input string - which means that
 	 * they will persist after the current dbsql_exec() call returns.
 	 */
-	table->pSelect = __select_dup(select);
+	table->u.view.pSelect = __select_dup(select);
 	__select_delete(select);
 	if (!parser->initFlag) {
 		__view_get_column_names(parser, table);
@@ -1404,8 +1428,8 @@ __view_get_column_names(parser_t* parser, table_t* table)
 	 * If we get this far, it means we need to compute the table names.
 	 */
 	/* If nCol == 0, then 'table' must be a VIEW */
-	DBSQL_ASSERT(table->pSelect);
-	sel = table->pSelect;
+	DBSQL_ASSERT(table->u.view.pSelect);
+	sel = table->u.view.pSelect;
 
 	/*
 	 * Note that the call to __select_result_set() will expand any
@@ -1454,7 +1478,7 @@ static void
 __view_reset_column_names(table_t* table)
 {
 	int i;
-	if (table == 0 || table->pSelect==0 ) return;
+	if (table == 0 || table->u.view.pSelect==0 ) return;
 	if (table->nCol == 0)
 		return;
 	for (i = 0; i < table->nCol; i++) {
@@ -1482,7 +1506,7 @@ __view_reset_all(DBSQL* dbp, int idx)
 	for (i = __hash_first(&dbp->aDb[idx].tblHash); i;
 	     i = __hash_next(i)) {
 		table_t *t = __hash_data(i);
-		if (t->pSelect ) {
+		if (t->u.view.pSelect ) {
 			__view_reset_column_names(t);
 		}
 	}
@@ -1577,14 +1601,14 @@ __drop_table(parser_t* parser, token_t* name, int view)
 		parser->nErr++;
 		return;
 	}
-	if (view && table->pSelect == 0) {
+	if (view && table->u.view.pSelect == 0) {
 		__str_append(&parser->zErrMsg,
 			     "use DROP TABLE to delete table ", table->zName,
 			     (char*)0);
 		parser->nErr++;
 		return;
 	}
-	if (!view && table->pSelect) {
+	if (!view && table->u.view.pSelect) {
 		__str_append(&parser->zErrMsg,
 			     "use DROP VIEW to delete view ", table->zName,
 			     (char*)0);
@@ -1633,7 +1657,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 		__open_master_table(v, table->iDb);
 		base = __vdbe_add_op_list(v, ARRAY_SIZE(drop_table),
 					  drop_table);
-		__vdbe_change_p3(v, base + 1, table->zName, 0);
+		__vdbe_change_p4(v, base + 1, table->zName, 0);
 
 		/*
 		 * Drop all DBSQL_TEMP_MASTER entries that refer to the table.
@@ -1642,7 +1666,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 			__open_master_table(v, 1);
 			base = __vdbe_add_op_list(v, ARRAY_SIZE(drop_table),
 						  drop_table);
-			__vdbe_change_p3(v, base + 1, table->zName, 0);
+			__vdbe_change_p4(v, base + 1, table->zName, 0);
 		}
 
 		if (table->iDb == 0) {
@@ -1708,7 +1732,7 @@ __add_idx_key_type(vdbe_t* v, index_t* idx)
 		}
 	}
 	type[n] = 0;
-	__vdbe_change_p3(v, -1, type, n);
+	__vdbe_change_p4(v, -1, type, n);
 	__dbsql_free(NULL, type);
 }
 
@@ -1832,8 +1856,8 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
 		}
 	}
 	fkey->isDeferred = 0;
-	fkey->deleteConf = flags & 0xff;
-	fkey->updateConf = (flags >> 8 ) & 0xff;
+	FK_ACTION_DELETE(fkey) = flags & 0xff;
+	FK_ACTION_UPDATE(fkey) = (flags >> 8 ) & 0xff;
 	fkey->insertConf = (flags >> 16 ) & 0xff;
 
 	/*
@@ -1942,7 +1966,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 		parser->nErr++;
 		goto exit_create_index;
 	}
-	if (table->pSelect) {
+	if (table->u.view.pSelect) {
 		__str_append(&parser->zErrMsg, "views may not be indexed",
 			     (char*)0);
 		parser->nErr++;
@@ -2147,13 +2171,13 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 		}
 		__vdbe_add_op(v, OP_NewRecno, 0, 0);
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1, "index", P3_STATIC);
+		__vdbe_change_p4(v, -1, "index", P3_STATIC);
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1, index->zName, strlen(index->zName));
+		__vdbe_change_p4(v, -1, index->zName, strlen(index->zName));
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 		addr = __vdbe_add_op(v, OP_CreateIndex, 0, temp);
-		__vdbe_change_p3(v, addr, (char*)&index->tnum, P3_POINTER);
+		__vdbe_change_p4(v, addr, (char*)&index->tnum, P3_POINTER);
 		index->tnum = 0;
 		if (sltable) {
 			__vdbe_add_op(v, OP_Dup, 0, 0);
@@ -2163,14 +2187,14 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 		addr = __vdbe_add_op(v, OP_String, 0, 0);
 		if (start && end ){
 			n = P_TO_UINT32(end->z) - P_TO_UINT32(start->z) + 1;
-			__vdbe_change_p3(v, addr, start->z, n);
+			__vdbe_change_p4(v, addr, start->z, n);
 		}
 		__vdbe_add_op(v, OP_MakeRecord, 5, 0);
 		__vdbe_add_op(v, OP_PutIntKey, 0, 0);
 		if (sltable) {
 			__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 			__vdbe_add_op(v, OP_OpenRead, 2, table->tnum);
-			__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+			__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 			lbl2 = __vdbe_make_label(v);
 			__vdbe_add_op(v, OP_Rewind, 2, lbl2);
 			lbl1 = __vdbe_add_op(v, OP_Recno, 2, 0);
@@ -2186,7 +2210,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 			__add_idx_key_type(v, index);
 			__vdbe_add_op(v, OP_IdxPut, 1,
 				      index->onError != OE_None);
-			__vdbe_change_p3(v, -1,
+			__vdbe_change_p4(v, -1,
 					 "indexed columns are not unique",
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Next, 2, lbl1);
@@ -2233,27 +2257,31 @@ __drop_index(parser_t* parser, src_list_t* name)
 		__error_msg(parser, "no such index: %S", name, 0);
 		goto exit_drop_index;
 	}
-	if (index->autoIndex) {
+	if (index->idxType != DBSQL_IDXTYPE_APPDEF) {
 		__error_msg(parser, "index associated with UNIQUE "
 			    "or PRIMARY KEY constraint cannot be dropped", 0);
 		goto exit_drop_index;
 	}
-	if (index->iDb > 1) {
-		__error_msg(parser, "cannot alter schema of attached "
-			    "databases", 0);
-		goto exit_drop_index;
+	{
+		int iDb = __schema_to_index(dbp, index->pSchema);
+		if (iDb > 1) {
+			__error_msg(parser, "cannot alter schema of attached "
+				    "databases", 0);
+			goto exit_drop_index;
+		}
 	}
 #ifndef DBSQL_NO_AUTH
 	{
 		int code = DBSQL_DROP_INDEX;
 		table_t *table = index->pTable;
-		const char *db_name = dbp->aDb[index->iDb].zName;
-		const char *table_name = SCHEMA_TABLE(index->iDb);
+		int iDb = __schema_to_index(dbp, index->pSchema);
+		const char *db_name = dbp->aDb[iDb].zName;
+		const char *table_name = SCHEMA_TABLE(iDb);
 		if (__auth_check(parser, DBSQL_DELETE, table_name, 0,
 				 db_name)) {
 			goto exit_drop_index;
 		}
-		if (index->iDb)
+		if (iDb)
 			code = DBSQL_DROP_TEMP_INDEX;
 		if (__auth_check(parser, code, index->zName, table->zName,
 				 db_name)) {
@@ -2279,17 +2307,18 @@ __drop_index(parser_t* parser, src_list_t* name)
 			{ OP_Delete,     0, 0,       0}, /* 8 */
 		};
 		int base;
+		int iDb = __schema_to_index(dbp, index->pSchema);
 
-		__vdbe_prepare_write(parser, 0, index->iDb);
-		__open_master_table(v, index->iDb);
+		__vdbe_prepare_write(parser, 0, iDb);
+		__open_master_table(v, iDb);
 		base = __vdbe_add_op_list(v, ARRAY_SIZE(drop_index),
 					  drop_index);
-		__vdbe_change_p3(v, base + 1, index->zName, 0);
-		if (index->iDb == 0) {
+		__vdbe_change_p4(v, base + 1, index->zName, 0);
+		if (iDb == 0) {
 			__change_schema_signature(dbp, v);
 		}
 		__vdbe_add_op(v, OP_Close, 0, 0);
-		__vdbe_add_op(v, OP_Destroy, index->tnum, index->iDb);
+		__vdbe_add_op(v, OP_Destroy, index->tnum, iDb);
 		__vdbe_conclude_write(parser);
 	}
 
@@ -2316,16 +2345,16 @@ __drop_index(parser_t* parser, src_list_t* name)
 id_list_t *
 __id_list_append(id_list_t* list, token_t* token)
 {
+	int nAlloc;
 	if (list == 0) {
-		if (__dbsql_calloc(NULL, 1, sizeof(id_list_t), &list) ==ENOMEM)
+		nAlloc = 5;
+		if (__dbsql_calloc(NULL, 1, SZ_IDLIST(nAlloc), &list) ==ENOMEM)
 			return 0;
-		list->nAlloc = 0;
-	}
-	if (list->nId >= list->nAlloc) {
-		struct id_list_item *a;
-		list->nAlloc = (list->nAlloc * 2) + 5;
-		if (__dbsql_realloc(NULL, list->nAlloc * sizeof(list->a[0]),
-				 &list->a) == ENOMEM) {
+	} else {
+		/* Grow the list if needed */
+		nAlloc = (list->nId * 2) + 5;
+		if (__dbsql_realloc(NULL, SZ_IDLIST(nAlloc),
+				 &list) == ENOMEM) {
 			__id_list_delete(list);
 			return 0;
 		}
@@ -2509,7 +2538,7 @@ __src_list_delete(src_list_t* list)
 		__dbsql_free(NULL, list->a[i].zDatabase);
 		__dbsql_free(NULL, list->a[i].zName);
 		__dbsql_free(NULL, list->a[i].zAlias);
-		if (list->a[i].pTab && list->a[i].pTab->isTransient) {
+		if (list->a[i].pTab && (list->a[i].pTab->tabFlags & TF_Ephemeral)) {
 			__vdbe_delete_table(0, list->a[i].pTab);
 		}
 		__select_delete(list->a[i].pSelect);

@@ -388,11 +388,11 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		base = parser->nTab;
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, base, table->tnum);
-		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 		for (dx = 1, idx = table->pIndex; idx; idx = idx->pNext, dx++){
 			__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, (dx + base), idx->tnum);
-			__vdbe_change_p3(v, -1, idx->zName, P3_STATIC);
+			__vdbe_change_p4(v, -1, idx->zName, P3_STATIC);
 		}
 		parser->nTab += dx;
 	}
@@ -455,7 +455,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			}
 			if (column && j >= column->nId) {
 				__vdbe_add_op(v, OP_String, 0, 0);
-				__vdbe_change_p3(v, -1, table->aCol[i].zDflt,
+				__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
 						 P3_STATIC);
 			} else if (use_temp_table) {
 				__vdbe_add_op(v, OP_Column, src_tab, j); 
@@ -485,11 +485,11 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		base = parser->nTab;
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, base, table->tnum);
-		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 		for (dx = 1, idx = table->pIndex; idx; idx = idx->pNext, dx++){
 			__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, (dx + base), idx->tnum);
-			__vdbe_change_p3(v, -1, idx->zName, P3_STATIC);
+			__vdbe_change_p4(v, -1, idx->zName, P3_STATIC);
 		}
 		parser->nTab += dx;
 	}
@@ -552,7 +552,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			}
 			if (column && j >= column->nId) {
 				__vdbe_add_op(v, OP_String, 0, 0);
-				__vdbe_change_p3(v, -1, table->aCol[i].zDflt,
+				__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
 						 P3_STATIC);
 			} else if (use_temp_table) {
 				__vdbe_add_op(v, OP_Column, src_tab, j); 
@@ -627,7 +627,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	 */
 	if (dbp->flags & DBSQL_CountRows) {
 		__vdbe_add_op(v, OP_ColumnName, 0, 0);
-		__vdbe_change_p3(v, -1, "rows inserted", P3_STATIC);
+		__vdbe_change_p4(v, -1, "rows inserted", P3_STATIC);
 		__vdbe_add_op(v, OP_MemLoad, cnt_mem, 0);
 		__vdbe_add_op(v, OP_Callback, 1, 0);
 	}
@@ -801,7 +801,7 @@ __generate_constraint_checks(parser, table, base, used_indicies,
 			__str_append(&msg, table->zName, ".",
 				     table->aCol[i].zName,
 				     " may not be NULL", (char*)0);
-			__vdbe_change_p3(v, -1, msg, P3_DYNAMIC);
+			__vdbe_change_p4(v, -1, msg, P3_DYNAMIC);
 			break;
 		case OE_Ignore:
 			__vdbe_add_op(v, OP_Pop, (num_col + 1 + two_recnos_p),
@@ -810,7 +810,7 @@ __generate_constraint_checks(parser, table, base, used_indicies,
 			break;
 		case OE_Replace:
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p3(v, -1, table->aCol[i].zDflt,
+			__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Push, (num_col - i), 0);
 			break;
@@ -854,7 +854,7 @@ __generate_constraint_checks(parser, table, base, used_indicies,
 		case OE_Abort: /* FALLTHROUGH */
 		case OE_Fail:
 			__vdbe_add_op(v, OP_Halt, DBSQL_CONSTRAINT, on_error);
-			__vdbe_change_p3(v, -1, "PRIMARY KEY must be unique",
+			__vdbe_change_p4(v, -1, "PRIMARY KEY must be unique",
 					 P3_STATIC);
 			break;
 		case OE_Replace:
@@ -973,7 +973,7 @@ __generate_constraint_checks(parser, table, base, used_indicies,
 				      " are not unique" : " is not unique"));
 			__vdbe_add_op(v, OP_Halt, DBSQL_CONSTRAINT, on_error);
 			__dbsql_strdup(parser->db, err_msg, &dup_msg);
-			__vdbe_change_p3(v, -1, dup_msg, P3_DYNAMIC);
+			__vdbe_change_p4(v, -1, dup_msg, P3_DYNAMIC);
 			break;
 		case OE_Ignore:
 			DBSQL_ASSERT(seen_replace_p == 0);

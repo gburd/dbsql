@@ -267,9 +267,9 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 		__open_master_table(v, nt->iDb);
 		addr = __vdbe_add_op_list(v, ARRAY_SIZE(insert_trig),
 					  insert_trig);
-		__vdbe_change_p3(v, (addr + 2), nt->name, 0); 
-		__vdbe_change_p3(v, (addr + 3), nt->table, 0); 
-		__vdbe_change_p3(v, (addr + 5), all->z, all->n);
+		__vdbe_change_p4(v, (addr + 2), nt->name, 0); 
+		__vdbe_change_p4(v, (addr + 3), nt->table, 0); 
+		__vdbe_change_p4(v, (addr + 5), all->z, all->n);
 		if (nt->iDb == 0) {
 			__change_schema_signature(dbp, v);
 		}
@@ -598,7 +598,7 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 		__open_master_table(v, trigger->iDb);
 		base = __vdbe_add_op_list(v,  ARRAY_SIZE(drop_trigger),
 					  drop_trigger);
-		__vdbe_change_p3(v, base+1, trigger->name, 0);
+		__vdbe_change_p4(v, base+1, trigger->name, 0);
 		if (trigger->iDb == 0) {
 			__change_schema_signature(dbp, v);
 		}

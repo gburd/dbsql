@@ -63,7 +63,7 @@ __is_table_read_only(parser_t* parser, table_t* table, int views_ok)
 			    table->zName);
 		return 1;
 	}
-	if (!views_ok && table->pSelect) {
+	if (!views_ok && table->u.view.pSelect) {
 		__error_msg(parser, "cannot modify %s because it is a view",
 			    table->zName);
 		return 1;
@@ -119,12 +119,12 @@ void __delete_from(parser, list, where)
 	table = __src_list_lookup(parser, list);
 	if (table == 0)
 		goto delete_from_cleanup;
-	before_triggers = __triggers_exist(parser, table->pTrigger, 
+	before_triggers = __triggers_exist(parser, table->pTrigger,
 					   TK_DELETE, TK_BEFORE, TK_ROW, 0);
-	after_triggers = __triggers_exist(parser, table->pTrigger, 
+	after_triggers = __triggers_exist(parser, table->pTrigger,
 					  TK_DELETE, TK_AFTER, TK_ROW, 0);
 	row_triggers_exist = (before_triggers || after_triggers);
-	view = (table->pSelect != 0);
+	view = (table->u.view.pSelect != 0);
 	if (__is_table_read_only(parser, table, before_triggers)) {
 		goto delete_from_cleanup;
 	}
@@ -183,7 +183,7 @@ void __delete_from(parser, list, where)
 	 * a temporary table.
 	 */
 	if (view) {
-		select_t *vsel = __select_dup(table->pSelect);
+		select_t *vsel = __select_dup(table->u.view.pSelect);
 		__select(parser, vsel, SRT_TempTable, cur, 0, 0, 0);
 		__select_delete(vsel);
 	}
@@ -284,7 +284,7 @@ void __delete_from(parser, list, where)
 					      table->tnum);
 			}
 			__vdbe_add_op(v, OP_MoveTo, cur, 0);
-			__vdbe_add_op(v, OP_Recno, cur, 0);
+			__vdbe_add_op(v, OP_Rowid, cur, 0);
 			__vdbe_add_op(v, OP_RowData, cur, 0);
 			__vdbe_add_op(v, OP_PutIntKey, old_idx, 0);
 			if (!view) {
@@ -378,7 +378,7 @@ void __delete_from(parser, list, where)
 	*/
 	if (dbp->flags & DBSQL_CountRows) {
 		__vdbe_add_op(v, OP_ColumnName, 0, 0);
-		__vdbe_change_p3(v, -1, "rows deleted", P3_STATIC);
+		__vdbe_change_p4(v, -1, "rows deleted", P4_STATIC);
 		__vdbe_add_op(v, OP_Callback, 1, 0);
 	}
 
@@ -473,7 +473,7 @@ void __generate_row_index_delete(dbp, v, table, cur, idx_used)
 		int j;
 		if (idx_used != 0 && idx_used[i-1] == 0)
 			continue;
-		__vdbe_add_op(v, OP_Recno, cur, 0);
+		__vdbe_add_op(v, OP_Rowid, cur, 0);
 		for (j = 0; j < idx->nColumn; j++) {
 			int n = idx->aiColumn[j];
 			if (n == table->iPKey) {

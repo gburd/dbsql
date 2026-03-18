@@ -213,17 +213,17 @@ if (strcasecmp(left_name, "table_info") == 0) {
 		for (i = 0; i < table->nCol; i++) {
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p3(v, -1, table->aCol[i].zName,
+			__vdbe_change_p4(v, -1, table->aCol[i].zName,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p3(v, -1, 
+			__vdbe_change_p4(v, -1, 
 					 table->aCol[i].zType ?
 					   table->aCol[i].zType :
 					   "numeric", P3_STATIC);
 			__vdbe_add_op(v, OP_Integer,
 			      table->aCol[i].notNull, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p3(v, -1, table->aCol[i].zDflt,
+			__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Integer,
 				      table->aCol[i].isPrimKey, 0);
@@ -254,7 +254,7 @@ if (strcasecmp(left_name, "index_info") == 0) {
 			__vdbe_add_op(v, OP_Integer, cnum, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
 			DBSQL_ASSERT(table->nCol > cnum);
-			__vdbe_change_p3(v, -1,
+			__vdbe_change_p4(v, -1,
 					 table->aCol[cnum].zName,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Callback, 3, 0);
@@ -285,7 +285,7 @@ if (strcasecmp(left_name, "index_list") == 0) {
 		while(index) {
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p3(v, -1, index->zName,
+			__vdbe_change_p4(v, -1, index->zName,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Integer,
 				      index->onError != OE_None, 0);
@@ -324,14 +324,14 @@ if (strcasecmp(left_name, "foreign_key_list") == 0) {
 				__vdbe_add_op(v, OP_Integer, i, 0);
 				__vdbe_add_op(v, OP_Integer, j, 0);
 				__vdbe_add_op(v, OP_String, 0, 0);
-				__vdbe_change_p3(v, -1, fk->zTo,
+				__vdbe_change_p4(v, -1, fk->zTo,
 						 P3_STATIC);
 				__vdbe_add_op(v, OP_String, 0, 0);
-				__vdbe_change_p3(v, -1,
+				__vdbe_change_p4(v, -1,
 				  table->aCol[fk->aCol[j].iFrom].zName,
 				  P3_STATIC);
 				__vdbe_add_op(v, OP_String, 0, 0);
-				__vdbe_change_p3(v, -1,
+				__vdbe_change_p4(v, -1,
 				  fk->aCol[j].zCol, P3_STATIC);
 				__vdbe_add_op(v, OP_Callback, 5, 0);
 			}
@@ -359,9 +359,9 @@ if (strcasecmp(left_name, "database_list") == 0) {
 		DBSQL_ASSERT(dbp->aDb[i].zName != 0);
 		__vdbe_add_op(v, OP_Integer, i, 0);
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1, dbp->aDb[i].zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, dbp->aDb[i].zName, P3_STATIC);
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1,
+		__vdbe_change_p4(v, -1,
 			 __sm_get_database_name(dbp->aDb[i].pBt), P3_STATIC);
 		__vdbe_add_op(v, OP_Callback, 3, 0);
 	}

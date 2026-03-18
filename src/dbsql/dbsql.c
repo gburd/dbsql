@@ -580,6 +580,7 @@ open_db(p)
 			fprintf(g.errfp, "%s\n", dbsql_strerror(rc));
 			exit(1);
 		}
+		g.dbp = p->db;
 		g.dbenv = p->db->get_dbenv(p->db);
 		p->db->set_errfile(p->db, g.errfp);
 		p->db->set_errpfx(p->db, g.progname);

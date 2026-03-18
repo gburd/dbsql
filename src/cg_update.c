@@ -58,6 +58,8 @@ void __update(parser, tab_list, changes, where, on_error)
 	int num_idx;          /* Number of indices that need updating */
 	int total_num_idx;    /* Total number of indices */
 	int cur;              /* VDBE Cursor number of table */
+	int data_cur;         /* Main table cursor */
+	int idx_cur;          /* First index cursor */
 	DBSQL *dbp;           /* The database structure */
 	index_t **indices = 0;/* An array of indices that need updating too */
 	char *idx_used = 0;   /* idx_used[i]==1 if the i-th index is used */
@@ -65,6 +67,7 @@ void __update(parser, tab_list, changes, where, on_error)
 				 an expression for the i-th column of the
 				 table. xref[i]==-1 if the i-th column is not
 				 changed. */
+	int *areg_idx = 0;    /* Register allocation for each index */
 	int recno_will_change_p;/* True if the record number is being changed*/
 	expr_t *recno;        /* Expression defining the new record number */
 	int open_all_p;       /* True if all indices need to be opened */
@@ -75,8 +78,16 @@ void __update(parser, tab_list, changes, where, on_error)
 	int after_triggers;   /* True if there are any AFTER triggers */
 	int row_triggers_exist = 0;/* True if any row triggers exist */
 
-	int new_idx      = -1;/* index of trigger "new" temp table */
-	int old_idx      = -1;/* index of trigger "old" temp table */
+	/* Register allocations for register-based VDBE */
+	int reg_row_count = 0;   /* Row counter register */
+	int reg_old_rowid = 0;   /* Old rowid register */
+	int reg_new_rowid = 0;   /* New rowid register */
+	int reg_old = 0;         /* First register for old column values */
+	int reg_new = 0;         /* First register for new column values */
+	int reg_rowset = 0;      /* RowSet for multi-pass updates */
+	int new_idx = 0;         /* Cursor for NEW pseudo-table */
+	int old_idx = 0;         /* Cursor for OLD pseudo-table */
+
 	select_t *view;
 
 	auth.pParse = 0;
@@ -98,7 +109,7 @@ void __update(parser, tab_list, changes, where, on_error)
 					  TK_UPDATE, TK_AFTER, TK_ROW,
 					  changes);
 	row_triggers_exist = before_triggers || after_triggers;
-	is_view_p = (table->pSelect != 0);
+	is_view_p = (table->u.view.pSelect != 0);
 	if (__is_table_read_only(parser, table, before_triggers)) {
 		goto update_cleanup;
 	}
@@ -123,12 +134,15 @@ void __update(parser, tab_list, changes, where, on_error)
 	}
 
 	/*
-	 * Allocate a cursors for the main database table and for all indices.
+	 * Allocate cursors for the main database table and for all indices.
 	 * The index cursors might not be used, but if they are used they
-	 * need to occur right after the database cursor.  So go ahead and
+	 * need to occur right after the database cursor. So go ahead and
 	 * allocate enough space, just in case.
 	 */
-	tab_list->a[0].iCursor = cur = parser->nTab++;
+	cur = parser->nTab++;
+	data_cur = cur;
+	idx_cur = parser->nTab;
+	tab_list->a[0].iCursor = data_cur;
 	for (idx = table->pIndex; idx; idx = idx->pNext) {
 		parser->nTab++;
 	}
@@ -151,7 +165,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		}
 		for (j = 0; j < table->nCol; j++) {
 			if (strcasecmp(table->aCol[j].zName,
-						  changes->a[i].zName) == 0) {
+						  changes->a[i].zEName) == 0) {
 				if (j == table->iPKey) {
 					recno_will_change_p = 1;
 					recno = changes->a[i].pExpr;
@@ -161,12 +175,12 @@ void __update(parser, tab_list, changes, where, on_error)
 			}
 		}
 		if (j >= table->nCol) {
-			if (__is_row_id(changes->a[i].zName)) {
+			if (__is_row_id(changes->a[i].zEName)) {
 				recno_will_change_p = 1;
 				recno = changes->a[i].pExpr;
 			} else {
 				__error_msg(parser, "no such column: %s",
-					    changes->a[i].zName);
+					    changes->a[i].zEName);
 				goto update_cleanup;
 			}
 		}
@@ -184,9 +198,11 @@ void __update(parser, tab_list, changes, where, on_error)
 
 	/*
 	 * Allocate memory for the array indices[] and fill it with pointers
-	 * to every index that needs to be updated.  Indices only need
+	 * to every index that needs to be updated. Indices only need
 	 * updating if their key includes one of the columns named in changes
 	 * or if the record number of the original table entry is changing.
+	 *
+	 * Also allocate register space for each index that needs updating.
 	 */
 	for (num_idx = total_num_idx = 0, idx = table->pIndex;
 	     idx; idx = idx->pNext, total_num_idx++) {
@@ -201,11 +217,14 @@ void __update(parser, tab_list, changes, where, on_error)
 		if (i < idx->nColumn)
 			num_idx++;
 	}
-	if (total_num_idx > 0) { /* TODO, is this the right amt to alloc? */
-		if (__dbsql_calloc(dbp, num_idx + total_num_idx,
+	if (total_num_idx > 0) {
+		/* Allocate space for indices array, idx_used flags, and register array */
+		if (__dbsql_calloc(dbp, num_idx + total_num_idx +
+				   (total_num_idx + 1) * sizeof(int),
 				sizeof(index_t *), &indices) == ENOMEM)
 			goto update_cleanup;
 		idx_used = (char*)&indices[num_idx];
+		areg_idx = (int*)&idx_used[total_num_idx];
 	}
 	for (num_idx = j = 0, idx = table->pIndex; idx; idx = idx->pNext, j++){
 		if (recno_will_change_p) {
@@ -219,10 +238,17 @@ void __update(parser, tab_list, changes, where, on_error)
 		if (i < idx->nColumn) {
 			indices[num_idx++] = idx;
 			idx_used[j] = 1;
+			/* Allocate registers for this index key */
+			areg_idx[j] = parser->nMem + 1;
+			parser->nMem += idx->nColumn + 1;
 		} else {
 			idx_used[j] = 0;
+			areg_idx[j] = 0;
 		}
 	}
+	/* Register for the main table record */
+	areg_idx[total_num_idx] = parser->nMem + 1;
+	parser->nMem++;
 
 	/*
 	 * Resolve the column names in all the expressions in the
@@ -253,11 +279,35 @@ void __update(parser, tab_list, changes, where, on_error)
 	__vdbe_prepare_write(parser, 1, table->iDb);
 
 	/*
+	 * Allocate registers for storing old and new values.
+	 * For register-based VDBE, we need:
+	 *   - reg_old_rowid and reg_new_rowid for rowid values
+	 *   - reg_old for old column values (if triggers or foreign keys)
+	 *   - reg_new for new column values
+	 */
+	reg_old_rowid = parser->nMem + 1;
+	reg_new_rowid = reg_old_rowid;
+	parser->nMem++;
+
+	if (recno_will_change_p || row_triggers_exist) {
+		reg_new_rowid = parser->nMem + 1;
+		parser->nMem++;
+	}
+
+	if (row_triggers_exist) {
+		reg_old = parser->nMem + 1;
+		parser->nMem += table->nCol;
+	}
+
+	reg_new = parser->nMem + 1;
+	parser->nMem += table->nCol;
+
+	/*
 	 * If we are trying to update a view, construct that view into
 	 * a temporary table.
 	 */
 	if (is_view_p) {
-		view = __select_dup(table->pSelect);
+		view = __select_dup(table->u.view.pSelect);
 		__select(parser, view, SRT_TempTable, cur, 0, 0, 0);
 		__select_delete(view);
 	}
@@ -283,86 +333,100 @@ void __update(parser, tab_list, changes, where, on_error)
 	 * Initialize the count of updated rows.
 	 */
 	if (dbp->flags & DBSQL_CountRows && !parser->trigStack) {
-		__vdbe_add_op(v, OP_Integer, 0, 0);
+		if (reg_row_count == 0) {
+			reg_row_count = parser->nMem + 1;
+			parser->nMem++;
+		}
+		__vdbe_add_op3(v, OP_Integer, 0, reg_row_count, 0);
 	}
 
 	if (row_triggers_exist) {
 		/*
-		 * Create pseudo-tables for NEW and OLD
-		 */
-		__vdbe_add_op(v, OP_OpenPseudo, old_idx, 0);
-		__vdbe_add_op(v, OP_OpenPseudo, new_idx, 0);
-
-		/* 
+		 * For triggers, we need to read old values into registers.
 		 * The top of the update loop for when there are triggers.
 		 */
 		__vdbe_add_op(v, OP_ListRewind, 0, 0);
 		addr = __vdbe_add_op(v, OP_ListRead, 0, 0);
-		__vdbe_add_op(v, OP_Dup, 0, 0);
 
 		/*
 		 * Open a cursor and make it point to the record that is
 		 * being updated.
 		 */
-		__vdbe_add_op(v, OP_Dup, 0, 0);
 		if(!is_view_p) {
-			__vdbe_add_op(v, OP_Integer, table->iDb, 0);
-			__vdbe_add_op(v, OP_OpenRead, cur, table->tnum);
+			__vdbe_add_op3(v, OP_OpenRead, data_cur, table->tnum,
+				       table->iDb);
 		}
-		__vdbe_add_op(v, OP_MoveTo, cur, 0);
+		__vdbe_add_op3(v, OP_NotExists, data_cur, addr, reg_old_rowid);
 
 		/*
-		 * Generate the OLD table.
+		 * Read the old rowid from the list into register.
 		 */
-		__vdbe_add_op(v, OP_Recno, cur, 0);
-		__vdbe_add_op(v, OP_RowData, cur, 0);
-		__vdbe_add_op(v, OP_PutIntKey, old_idx, 0);
+		__vdbe_add_op3(v, OP_Rowid, data_cur, reg_old_rowid, 0);
 
 		/*
-		 * Generate the NEW table.
+		 * Read OLD column values into registers for triggers.
 		 */
-		if (recno_will_change_p) {
-			__expr_code(parser, recno);
-		} else {
-			__vdbe_add_op(v, OP_Recno, cur, 0);
-		}
 		for(i = 0; i < table->nCol; i++) {
 			if (i == table->iPKey) {
-				__vdbe_add_op(v, OP_String, 0, 0);
+				__vdbe_add_op3(v, OP_Integer, 0, reg_old + i, 0);
+			} else {
+				__vdbe_add_op3(v, OP_Column, data_cur, i, reg_old + i);
+			}
+		}
+
+		/*
+		 * Compute NEW values into registers.
+		 */
+		if (recno_will_change_p) {
+			int expr_reg;
+			__expr_code(parser, recno);
+			/* Result is at top of register stack */
+			expr_reg = parser->nMem;
+			__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new_rowid, 0);
+		} else {
+			__vdbe_add_op3(v, OP_Dup, reg_old_rowid, reg_new_rowid, 0);
+		}
+
+		for(i = 0; i < table->nCol; i++) {
+			if (i == table->iPKey) {
+				__vdbe_add_op3(v, OP_Integer, 0, reg_new + i, 0);
 				continue;
 			}
 			j = xref[i];
 			if (j < 0) {
-				__vdbe_add_op(v, OP_Column, cur, i);
+				__vdbe_add_op3(v, OP_Dup, reg_old + i, reg_new + i, 0);
 			}else{
+				int expr_reg;
 				__expr_code(parser, changes->a[j].pExpr);
+				/* Result is at top of register stack */
+				expr_reg = parser->nMem;
+				__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new + i, 0);
 			}
 		}
-		__vdbe_add_op(v, OP_MakeRecord, table->nCol, 0);
-		__vdbe_add_op(v, OP_PutIntKey, new_idx, 0);
+
 		if (!is_view_p) {
-			__vdbe_add_op(v, OP_Close, cur, 0);
+			__vdbe_add_op(v, OP_Close, data_cur, 0);
 		}
 
 		/*
 		 * Fire the BEFORE and INSTEAD OF triggers.
+		 * Pass reg_old and reg_new as the OLD and NEW pseudo-table base registers.
 		 */
 		if (__code_row_trigger(parser, TK_UPDATE, changes,
-				       TK_BEFORE, table, new_idx, old_idx,
+				       TK_BEFORE, table, reg_new, reg_old,
 				       on_error, addr)) {
 			goto update_cleanup;
 		}
 	}
 
 	if (!is_view_p) {
-		/* 
-		* Open every index that needs updating.  Note that if any
-		* index could potentially invoke a REPLACE conflict resolution 
+		/*
+		* Open every index that needs updating. Note that if any
+		* index could potentially invoke a REPLACE conflict resolution
 		* action, then we need to open all indices because we might
 		* need to be deleting some records.
 		*/
-		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
-		__vdbe_add_op(v, OP_OpenWrite, cur, table->tnum);
+		__vdbe_add_op3(v, OP_OpenWrite, data_cur, table->tnum, table->iDb);
 		if (on_error == OE_Replace) {
 			open_all_p = 1;
 		} else {
@@ -376,89 +440,138 @@ void __update(parser, tab_list, changes, where, on_error)
 		}
 		for(i = 0, idx = table->pIndex; idx; idx = idx->pNext, i++) {
 			if (open_all_p || idx_used[i]) {
-				__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
-				__vdbe_add_op(v, OP_OpenWrite, (cur + i + 1),
-					      idx->tnum);
-				DBSQL_ASSERT(parser->nTab > (cur + i + 1));
+				__vdbe_add_op3(v, OP_OpenWrite, (idx_cur + i),
+					       idx->tnum, idx->iDb);
+				DBSQL_ASSERT(parser->nTab > (idx_cur + i));
 			}
 		}
 
 		/*
-		 * Loop over every record that needs updating.  We have to load
+		 * Loop over every record that needs updating. We have to load
 		 * the old data for each record to be updated because some
 		 * columns might not change and we will need to copy the old
 		 * value. Also, the old data is needed to delete the old index
-		 * entires.  So make the cursor point at the old record.
+		 * entries. So make the cursor point at the old record.
 		 */
 		if (!row_triggers_exist) {
 			__vdbe_add_op(v, OP_ListRewind, 0, 0);
 			addr = __vdbe_add_op(v, OP_ListRead, 0, 0);
-			__vdbe_add_op(v, OP_Dup, 0, 0);
 		}
-		__vdbe_add_op(v, OP_NotExists, cur, addr);
+		__vdbe_add_op3(v, OP_NotExists, data_cur, addr, reg_old_rowid);
 
 		/*
-		 * If the record number will change, push the record number
-		 * as it will be after the update. (The old record number is
-		 * currently on top of the stack.)
+		 * Read the old rowid.
+		 */
+		__vdbe_add_op3(v, OP_Rowid, data_cur, reg_old_rowid, 0);
+
+		/*
+		 * If the record number will change, compute the new rowid.
 		 */
 		if (recno_will_change_p) {
+			int expr_reg;
 			__expr_code(parser, recno);
-			__vdbe_add_op(v, OP_MustBeInt, 0, 0);
+			expr_reg = parser->nMem;
+			__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new_rowid, 0);
+			__vdbe_add_op(v, OP_MustBeInt, reg_new_rowid, 0);
+		} else {
+			__vdbe_add_op3(v, OP_Dup, reg_old_rowid, reg_new_rowid, 0);
 		}
 
 		/*
-		 * Compute new data for this record.  
+		 * Compute new data for this record into registers.
 		 */
 		for (i = 0; i < table->nCol; i++) {
 			if (i == table->iPKey) {
-				__vdbe_add_op(v, OP_String, 0, 0);
+				__vdbe_add_op3(v, OP_Integer, 0, reg_new + i, 0);
 				continue;
 			}
 			j = xref[i];
 			if (j < 0) {
-				__vdbe_add_op(v, OP_Column, cur, i);
+				__vdbe_add_op3(v, OP_Column, data_cur, i, reg_new + i);
 			} else {
+				int expr_reg;
 				__expr_code(parser, changes->a[j].pExpr);
+				expr_reg = parser->nMem;
+				__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new + i, 0);
 			}
 		}
 
 		/*
 		 * Do constraint checks.
+		 * Updated signature: (parser, table, base_cursor, idx_used,
+		 *                     recno_change, is_update, on_error, addr)
 		 */
-		__generate_constraint_checks(parser, table, cur, idx_used,
+		__generate_constraint_checks(parser, table, data_cur, idx_used,
 					     recno_will_change_p, 1, on_error,
 					     addr);
 
 		/*
 		 * Delete the old indices for the current record.
+		 * Updated signature: (dbp, v, table, cursor, idx_used)
 		 */
-		__generate_row_index_delete(dbp, v, table, cur, idx_used);
+		__generate_row_index_delete(dbp, v, table, data_cur, idx_used);
 
 		/*
 		 * If changing the record number, delete the old record.
 		 */
 		if (recno_will_change_p) {
-			__vdbe_add_op(v, OP_Delete, cur, 0);
+			__vdbe_add_op(v, OP_Delete, data_cur, 0);
 		}
 
 		/*
 		 * Create the new index entries and the new record.
+		 * The record is now in registers reg_new through reg_new+nCol-1.
+		 * Use OP_MakeRecord to pack it, then OP_PutIntKey to write it.
 		 */
-		__complete_insertion(parser, table, cur, idx_used,
-				     recno_will_change_p, 1, -1);
+		__vdbe_add_op3(v, OP_MakeRecord, reg_new, table->nCol,
+			       areg_idx[total_num_idx]);
+		if (recno_will_change_p) {
+			__vdbe_add_op3(v, OP_PutIntKey, data_cur,
+				       areg_idx[total_num_idx], reg_new_rowid);
+		} else {
+			__vdbe_add_op3(v, OP_PutIntKey, data_cur,
+				       areg_idx[total_num_idx], reg_old_rowid);
+		}
+
+		/*
+		 * Update indices.
+		 */
+		for(i = 0, idx = table->pIndex; idx; idx = idx->pNext, i++) {
+			if (idx_used[i]) {
+				int reg_idx = areg_idx[i];
+				/* Generate index key in registers */
+				for (j = 0; j < idx->nColumn; j++) {
+					int col = idx->aiColumn[j];
+					if (col < 0) {
+						/* Rowid column */
+						__vdbe_add_op3(v, OP_Dup,
+							       recno_will_change_p ?
+							       reg_new_rowid : reg_old_rowid,
+							       reg_idx + j, 0);
+					} else {
+						__vdbe_add_op3(v, OP_Dup,
+							       reg_new + col,
+							       reg_idx + j, 0);
+					}
+				}
+				__vdbe_add_op3(v, OP_MakeRecord, reg_idx,
+					       idx->nColumn, reg_idx + idx->nColumn);
+				__vdbe_add_op3(v, OP_IdxPut, idx_cur + i,
+					       reg_idx + idx->nColumn, 0);
+			}
+		}
 	}
 
 	/*
 	 * Increment the row counter.
 	 */
-	if (dbp->flags & DBSQL_CountRows && !parser->trigStack) {
-		__vdbe_add_op(v, OP_AddImm, 1, 0);
+	if (reg_row_count) {
+		__vdbe_add_op3(v, OP_AddImm, reg_row_count, 1, 0);
 	}
 
 	/*
 	 * If there are triggers, close all the cursors after each iteration
-	 * through the loop.  The fire the after triggers.
+	 * through the loop. Then fire the after triggers.
 	 */
 	if (row_triggers_exist) {
 		if (!is_view_p) {
@@ -466,14 +579,14 @@ void __update(parser, tab_list, changes, where, on_error)
 			    idx = idx->pNext, i++) {
 				if (open_all_p || idx_used[i]) {
 					__vdbe_add_op(v, OP_Close,
-						      (cur + i + 1), 0);
+						      (idx_cur + i), 0);
 				}
 			}
-			__vdbe_add_op(v, OP_Close, cur, 0);
+			__vdbe_add_op(v, OP_Close, data_cur, 0);
 			parser->nTab = cur;
 		}
 		if (__code_row_trigger(parser, TK_UPDATE, changes,
-				       TK_AFTER, table, new_idx, old_idx,
+				       TK_AFTER, table, reg_new, reg_old,
 				       on_error, addr)) {
 			goto update_cleanup;
 		}
@@ -493,14 +606,11 @@ void __update(parser, tab_list, changes, where, on_error)
 	if (!row_triggers_exist) {
 		for (i = 0, idx = table->pIndex; idx; idx = idx->pNext, i++) {
 			if (open_all_p || idx_used[i]) {
-				__vdbe_add_op(v, OP_Close, (cur + i + 1), 0);
+				__vdbe_add_op(v, OP_Close, (idx_cur + i), 0);
 			}
 		}
-		__vdbe_add_op(v, OP_Close, cur, 0);
+		__vdbe_add_op(v, OP_Close, data_cur, 0);
 		parser->nTab = cur;
-	} else {
-		__vdbe_add_op(v, OP_Close, new_idx, 0);
-		__vdbe_add_op(v, OP_Close, old_idx, 0);
 	}
 
 	__vdbe_conclude_write(parser);
@@ -508,10 +618,10 @@ void __update(parser, tab_list, changes, where, on_error)
 	/*
 	 * Return the number of rows that were changed.
 	 */
-	if (dbp->flags & DBSQL_CountRows && !parser->trigStack) {
+	if (reg_row_count) {
 		__vdbe_add_op(v, OP_ColumnName, 0, 0);
-		__vdbe_change_p3(v, -1, "rows updated", P3_STATIC);
-		__vdbe_add_op(v, OP_Callback, 1, 0);
+		__vdbe_change_p4(v, -1, "rows updated", P4_STATIC);
+		__vdbe_add_op3(v, OP_Callback, 1, reg_row_count, 0);
 	}
 
   update_cleanup:
