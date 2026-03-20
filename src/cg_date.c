@@ -1002,6 +1002,226 @@ __strftime_sql_func(context, argc, argv)
 	}
 }
 
+/*
+ * __unixepoch_sql_func --
+ *	   unixepoch( TIMESTRING, MOD, MOD, ...)
+ *
+ *	Return the number of seconds since the unix epoch of
+ *	1970-01-01 00:00:00 GMT.
+ *	(SQLite 3.52.0: unixepochFunc)
+ *
+ * STATIC: static void __unixepoch_sql_func __P((dbsql_func_t *, int,
+ * STATIC:             const char **));
+ */
+static void
+__unixepoch_sql_func(context, argc, argv)
+	dbsql_func_t *context;
+	int argc;
+	const char **argv;
+{
+	datetime_t dt;
+	if (__is_date(argc, argv, &dt) == 0) {
+		__compute_jd(&dt);
+		dbsql_set_result_int(context,
+		    (int)((dt.rJD - 2440587.5) * 86400.0 + 0.5));
+	}
+}
+
+/*
+ * __current_time_sql_func --
+ *	   current_time
+ *
+ *	Returns the same value as time('now').
+ *	(SQLite 3.52.0: ctimeFunc)
+ *
+ * STATIC: static void __current_time_sql_func __P((dbsql_func_t *,
+ * STATIC:             int, const char **));
+ */
+static void
+__current_time_sql_func(context, argc, argv)
+	dbsql_func_t *context;
+	int argc;
+	const char **argv;
+{
+	__time_sql_func(context, 0, 0);
+}
+
+/*
+ * __current_date_sql_func --
+ *	   current_date
+ *
+ *	Returns the same value as date('now').
+ *	(SQLite 3.52.0: cdateFunc)
+ *
+ * STATIC: static void __current_date_sql_func __P((dbsql_func_t *,
+ * STATIC:             int, const char **));
+ */
+static void
+__current_date_sql_func(context, argc, argv)
+	dbsql_func_t *context;
+	int argc;
+	const char **argv;
+{
+	__date_sql_func(context, 0, 0);
+}
+
+/*
+ * __current_timestamp_sql_func --
+ *	   current_timestamp
+ *
+ *	Returns the same value as datetime('now').
+ *	(SQLite 3.52.0: ctimestampFunc)
+ *
+ * STATIC: static void __current_timestamp_sql_func __P((dbsql_func_t *,
+ * STATIC:             int, const char **));
+ */
+static void
+__current_timestamp_sql_func(context, argc, argv)
+	dbsql_func_t *context;
+	int argc;
+	const char **argv;
+{
+	__datetime_sql_func(context, 0, 0);
+}
+
+/*
+ * __timediff_sql_func --
+ *	   timediff( DATE1, DATE2 )
+ *
+ *	Return the amount of time that must be added to DATE2 in order
+ *	to convert it into DATE1.  The time difference format is:
+ *
+ *	   +YYYY-MM-DD HH:MM:SS.SSS
+ *
+ *	The initial "+" becomes "-" if DATE1 occurs before DATE2.
+ *	(SQLite 3.52.0: timediffFunc)
+ *
+ * STATIC: static void __timediff_sql_func __P((dbsql_func_t *, int,
+ * STATIC:             const char **));
+ */
+static void
+__timediff_sql_func(context, argc, argv)
+	dbsql_func_t *context;
+	int argc;
+	const char **argv;
+{
+	datetime_t d1, d2;
+	char sign;
+	int yr, mo;
+	char buf[64];
+
+	DBSQL_ASSERT(argc == 2);
+	if (argv[0] == 0 || argv[1] == 0)
+		return;
+	if (__is_date(1, &argv[0], &d1))
+		return;
+	if (__is_date(1, &argv[1], &d2))
+		return;
+
+	__compute_jd(&d1);
+	__compute_jd(&d2);
+	__compute_ymd_hms(&d1);
+	__compute_ymd_hms(&d2);
+
+	if (d1.rJD >= d2.rJD) {
+		double diff;
+		sign = '+';
+		yr = d1.Y - d2.Y;
+		mo = d1.M - d2.M;
+		if (mo < 0) {
+			yr--;
+			mo += 12;
+		}
+		/* Compute remaining days/hours/min/sec from JD diff */
+		{
+			datetime_t adj = d2;
+			adj.Y = d1.Y;
+			adj.M = d1.M;
+			adj.validJD = 0;
+			__compute_jd(&adj);
+			/* Adjust if we overshot */
+			while (adj.rJD > d1.rJD) {
+				mo--;
+				if (mo < 0) {
+					mo = 11;
+					yr--;
+				}
+				adj.M--;
+				if (adj.M < 1) {
+					adj.M = 12;
+					adj.Y--;
+				}
+				adj.validJD = 0;
+				__compute_jd(&adj);
+			}
+			diff = d1.rJD - adj.rJD;
+		}
+		{
+			int days, hours, mins;
+			double secs;
+			days = (int)diff;
+			diff -= days;
+			diff *= 24.0;
+			hours = (int)diff;
+			diff -= hours;
+			diff *= 60.0;
+			mins = (int)diff;
+			diff -= mins;
+			secs = diff * 60.0;
+			sprintf(buf,
+			    "%c%04d-%02d-%02d %02d:%02d:%06.3f",
+			    sign, yr, mo, days, hours, mins, secs);
+		}
+	} else {
+		double diff;
+		sign = '-';
+		yr = d2.Y - d1.Y;
+		mo = d2.M - d1.M;
+		if (mo < 0) {
+			yr--;
+			mo += 12;
+		}
+		{
+			datetime_t adj = d2;
+			adj.Y = d1.Y;
+			adj.M = d1.M;
+			adj.validJD = 0;
+			__compute_jd(&adj);
+			while (adj.rJD < d1.rJD) {
+				mo--;
+				if (mo < 0) {
+					mo = 11;
+					yr--;
+				}
+				adj.M++;
+				if (adj.M > 12) {
+					adj.M = 1;
+					adj.Y++;
+				}
+				adj.validJD = 0;
+				__compute_jd(&adj);
+			}
+			diff = adj.rJD - d1.rJD;
+		}
+		{
+			int days, hours, mins;
+			double secs;
+			days = (int)diff;
+			diff -= days;
+			diff *= 24.0;
+			hours = (int)diff;
+			diff -= hours;
+			diff *= 60.0;
+			mins = (int)diff;
+			diff -= mins;
+			secs = diff * 60.0;
+			sprintf(buf,
+			    "%c%04d-%02d-%02d %02d:%02d:%06.3f",
+			    sign, yr, mo, days, hours, mins, secs);
+		}
+	}
+	dbsql_set_result_string(context, buf, -1);
+}
 
 #endif
 
@@ -1023,11 +1243,26 @@ __register_datetime_funcs(DBSQL* dbp)
 		void (*func)(dbsql_func_t*, int, const char**);
 	} funcs[] = {
 #ifndef DBSQL_OMIT_DATETIME_FUNCS
-		{ "julianday", -1, DBSQL_NUMERIC, __julianday_sql_func   },
-		{ "date",      -1, DBSQL_TEXT,    __date_sql_func        },
-		{ "time",      -1, DBSQL_TEXT,    __time_sql_func        },
-		{ "datetime",  -1, DBSQL_TEXT,    __datetime_sql_func    },
-		{ "strftime",  -1, DBSQL_TEXT,    __strftime_sql_func    },
+		{ "julianday", -1, DBSQL_NUMERIC,
+		    __julianday_sql_func   },
+		{ "unixepoch", -1, DBSQL_NUMERIC,
+		    __unixepoch_sql_func   },
+		{ "date",      -1, DBSQL_TEXT,
+		    __date_sql_func        },
+		{ "time",      -1, DBSQL_TEXT,
+		    __time_sql_func        },
+		{ "datetime",  -1, DBSQL_TEXT,
+		    __datetime_sql_func    },
+		{ "strftime",  -1, DBSQL_TEXT,
+		    __strftime_sql_func    },
+		{ "timediff",   2, DBSQL_TEXT,
+		    __timediff_sql_func    },
+		{ "current_time",      0, DBSQL_TEXT,
+		    __current_time_sql_func      },
+		{ "current_date",      0, DBSQL_TEXT,
+		    __current_date_sql_func      },
+		{ "current_timestamp", 0, DBSQL_TEXT,
+		    __current_timestamp_sql_func },
 #endif
 	};
 	int i;

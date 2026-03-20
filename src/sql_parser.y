@@ -474,8 +474,8 @@ limit_opt(A) ::= LIMIT signed(X) COMMA signed(Y).
 
 /////////////////////////// The DELETE statement /////////////////////////////
 //
-cmd ::= DELETE FROM nm(X) dbnm(D) where_opt(Y). {
-   __delete_from(pParse, __src_list_append(0,&X,&D), Y);
+cmd ::= DELETE FROM nm(X) dbnm(D) where_opt(Y) returning_opt(R). {
+   __delete_from(pParse, __src_list_append(0,&X,&D), Y, R);
 }
 
 %type where_opt {expr_t*}
@@ -484,13 +484,19 @@ cmd ::= DELETE FROM nm(X) dbnm(D) where_opt(Y). {
 where_opt(A) ::= .                    {A = 0;}
 where_opt(A) ::= WHERE expr(X).       {A = X;}
 
+%type returning_opt {expr_list_t*}
+%destructor returning_opt {__expr_list_delete($$);}
+
+returning_opt(A) ::= .                           {A = 0;}
+returning_opt(A) ::= RETURNING selcollist(X).    {A = X;}
+
 %type setlist {expr_list_t*}
 %destructor setlist {__expr_list_delete($$);}
 
 ////////////////////////// The UPDATE command ////////////////////////////////
 //
-cmd ::= UPDATE orconf(R) nm(X) dbnm(D) SET setlist(Y) where_opt(Z).
-    {__update(pParse,__src_list_append(0,&X,&D),Y,Z,R);}
+cmd ::= UPDATE orconf(R) nm(X) dbnm(D) SET setlist(Y) where_opt(Z) returning_opt(T).
+    {__update(pParse,__src_list_append(0,&X,&D),Y,Z,R,T);}
 
 setlist(A) ::= setlist(Z) COMMA nm(X) EQ expr(Y).
     {A = __expr_list_append(Z,Y,&X);}
@@ -498,11 +504,11 @@ setlist(A) ::= nm(X) EQ expr(Y).   {A = __expr_list_append(0,Y,&X);}
 
 ////////////////////////// The INSERT command /////////////////////////////////
 //
-cmd ::= insert_cmd(R) INTO nm(X) dbnm(D) inscollist_opt(F) 
-        VALUES LP itemlist(Y) RP.
-            {__insert(pParse, __src_list_append(0,&X,&D), Y, 0, F, R);}
-cmd ::= insert_cmd(R) INTO nm(X) dbnm(D) inscollist_opt(F) select(S).
-            {__insert(pParse, __src_list_append(0,&X,&D), 0, S, F, R);}
+cmd ::= insert_cmd(R) INTO nm(X) dbnm(D) inscollist_opt(F)
+        VALUES LP itemlist(Y) RP returning_opt(T).
+            {__insert(pParse, __src_list_append(0,&X,&D), Y, 0, F, R, T);}
+cmd ::= insert_cmd(R) INTO nm(X) dbnm(D) inscollist_opt(F) select(S) returning_opt(T).
+            {__insert(pParse, __src_list_append(0,&X,&D), 0, S, F, R, T);}
 
 %type insert_cmd {int}
 insert_cmd(A) ::= INSERT orconf(R).   {A = R;}

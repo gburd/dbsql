@@ -7,12 +7,12 @@
 #
 
 [ -d build_unix ] && {
-	echo 'You cannot build in the top-level directory.'
-	exit 1
+    echo 'You cannot build in the top-level directory.'
+    exit 1
 }
 [ -d aclocal ] && {
-	echo 'You cannot build in the dist directory.'
-	exit 1
+    echo 'You cannot build in the dist directory.'
+    exit 1
 }
 args=""
 #args="--disable-shared $args"
@@ -40,7 +40,8 @@ CFLAGS="${NIX_CFLAGS_COMPILE} -O0 -g -DDEBUG"
 LDLAGS="${NIX_LDFLAGS} /home/gburd/src/libdb/build_unix/.libs"
 #args="--with-berkeleydb=$(pkg-config --variable=prefix db) $args"
 #args="--with-berkeleydb=/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30 $args"
-args="--with-berkeleydb=/home/gburd/opt $args"
+#args="--with-berkeleydb=/home/gburd/opt $args"
+args="--with-berkeleydb=/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30 $args"
 args="--with-tcl=$(pkg-config --variable=libdir tcl) $args"
 
 echo "env $cppflags $ldflags $libs ../dist/configure $args"

@@ -1,0 +1,391 @@
+# 2026 March 20
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# This file implements regression tests for DBSQL library.  The
+# focus of this file is testing the RETURNING clause introduced in
+# SQLite 3.35.0 and implemented in DBSQL during modernization.
+#
+# RETURNING allows INSERT, UPDATE, and DELETE statements to return
+# result rows showing the data that was modified.
+#
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+
+# Test 1: INSERT RETURNING - Single Row
+#
+do_test returning-1.1 {
+  execsql {
+    CREATE TABLE t1(id INTEGER PRIMARY KEY, name TEXT, value INT);
+    INSERT INTO t1(name, value) VALUES('Alice', 100) RETURNING id, name, value;
+  }
+} {1 Alice 100}
+
+do_test returning-1.2 {
+  execsql {
+    INSERT INTO t1(name, value) VALUES('Bob', 200) RETURNING id;
+  }
+} {2}
+
+do_test returning-1.3 {
+  execsql {
+    INSERT INTO t1(name, value) VALUES('Charlie', 300) RETURNING name;
+  }
+} {Charlie}
+
+do_test returning-1.4 {
+  execsql {
+    INSERT INTO t1(name, value) VALUES('David', 400) RETURNING value;
+  }
+} {400}
+
+# Test 2: INSERT RETURNING - Multiple Rows
+#
+do_test returning-2.1 {
+  execsql {
+    DELETE FROM t1;
+    INSERT INTO t1(name, value)
+    VALUES('Alice', 100),('Bob', 200),('Charlie', 300)
+    RETURNING id, name;
+  }
+} {1 Alice 2 Bob 3 Charlie}
+
+do_test returning-2.2 {
+  execsql {
+    DELETE FROM t1;
+    INSERT INTO t1(name, value)
+    VALUES('X', 1),('Y', 2),('Z', 3)
+    RETURNING *;
+  }
+} {1 X 1 2 Y 2 3 Z 3}
+
+# Test 3: INSERT RETURNING with DEFAULT values
+#
+do_test returning-3.1 {
+  execsql {
+    DROP TABLE IF EXISTS t2;
+    CREATE TABLE t2(
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      created DEFAULT 'now',
+      counter DEFAULT 0
+    );
+    INSERT INTO t2(name) VALUES('Test') RETURNING id, name, created, counter;
+  }
+} {1 Test now 0}
+
+# Test 4: UPDATE RETURNING - Single Row
+#
+do_test returning-4.1 {
+  execsql {
+    DELETE FROM t1;
+    INSERT INTO t1(name, value) VALUES('Alice', 100);
+    UPDATE t1 SET value = 150 WHERE name = 'Alice' RETURNING id, name, value;
+  }
+} {1 Alice 150}
+
+do_test returning-4.2 {
+  execsql {
+    UPDATE t1 SET value = value + 50 WHERE id = 1 RETURNING value;
+  }
+} {200}
+
+# Test 5: UPDATE RETURNING - Multiple Rows
+#
+do_test returning-5.1 {
+  execsql {
+    DELETE FROM t1;
+    INSERT INTO t1(name, value) VALUES('A', 10),('B', 20),('C', 30);
+    UPDATE t1 SET value = value * 2 RETURNING name, value;
+  }
+} {A 20 B 40 C 60}
+
+do_test returning-5.2 {
+  execsql {
+    UPDATE t1 SET value = value + 1 WHERE value > 30 RETURNING id, value;
+  }
+} {2 41 3 61}
+
+# Test 6: UPDATE RETURNING - No Matches
+#
+do_test returning-6.1 {
+  execsql {
+    UPDATE t1 SET value = 999 WHERE id = 999 RETURNING *;
+  }
+} {}
+
+# Test 7: DELETE RETURNING - Single Row
+#
+do_test returning-7.1 {
+  execsql {
+    DELETE FROM t1 WHERE id = 1 RETURNING id, name, value;
+  }
+} {1 A 20}
+
+do_test returning-7.2 {
+  execsql {
+    SELECT * FROM t1 ORDER BY id;
+  }
+} {2 B 41 3 C 61}
+
+# Test 8: DELETE RETURNING - Multiple Rows
+#
+do_test returning-8.1 {
+  execsql {
+    DELETE FROM t1 WHERE value > 40 RETURNING name;
+  }
+} {B C}
+
+do_test returning-8.2 {
+  execsql {
+    SELECT COUNT(*) FROM t1;
+  }
+} {0}
+
+# Test 9: DELETE RETURNING - All Rows
+#
+do_test returning-9.1 {
+  execsql {
+    INSERT INTO t1(name, value) VALUES('X', 1),('Y', 2),('Z', 3);
+    DELETE FROM t1 RETURNING *;
+  }
+} {1 X 1 2 Y 2 3 Z 3}
+
+# Test 10: RETURNING with Expressions
+#
+do_test returning-10.1 {
+  execsql {
+    INSERT INTO t1(name, value) VALUES('Test', 50)
+    RETURNING id * 2 AS double_id, upper(name) AS upper_name, value + 10;
+  }
+} {2 TEST 60}
+
+do_test returning-10.2 {
+  execsql {
+    UPDATE t1 SET value = 100
+    RETURNING id, name, value * 2, value / 2;
+  }
+} {1 Test 200 50}
+
+do_test returning-10.3 {
+  execsql {
+    DELETE FROM t1
+    RETURNING id || '-' || name AS composite;
+  }
+} {1-Test}
+
+# Test 11: RETURNING with Function Calls
+#
+do_test returning-11.1 {
+  execsql {
+    INSERT INTO t1(name, value) VALUES('lowercase', 42)
+    RETURNING upper(name), abs(value - 100);
+  }
+} {LOWERCASE 58}
+
+do_test returning-11.2 {
+  execsql {
+    UPDATE t1 SET value = -50
+    RETURNING name, abs(value), length(name);
+  }
+} {lowercase 50 9}
+
+# Test 12: RETURNING with Column Aliases
+#
+do_test returning-12.1 {
+  execsql {
+    DELETE FROM t1;
+    INSERT INTO t1(name, value) VALUES('Alias', 99)
+    RETURNING id AS row_id, name AS full_name, value AS amount;
+  }
+} {1 Alias 99}
+
+# Test 13: RETURNING * (All Columns)
+#
+do_test returning-13.1 {
+  execsql {
+    DELETE FROM t1;
+    INSERT INTO t1(name, value) VALUES('Star', 777) RETURNING *;
+  }
+} {1 Star 777}
+
+do_test returning-13.2 {
+  execsql {
+    UPDATE t1 SET value = 888 RETURNING *;
+  }
+} {1 Star 888}
+
+do_test returning-13.3 {
+  execsql {
+    DELETE FROM t1 RETURNING *;
+  }
+} {1 Star 888}
+
+# Test 14: RETURNING with NULL Values
+#
+do_test returning-14.1 {
+  execsql {
+    DROP TABLE IF EXISTS t3;
+    CREATE TABLE t3(a INT, b TEXT, c REAL);
+    INSERT INTO t3(a) VALUES(1) RETURNING a, b, c;
+  }
+} {1 {} {}}
+
+do_test returning-14.2 {
+  execsql {
+    UPDATE t3 SET b = NULL, c = NULL RETURNING *;
+  }
+} {1 {} {}}
+
+# Test 15: RETURNING with JOIN (Should Fail)
+#
+do_test returning-15.1 {
+  catchsql {
+    DROP TABLE IF EXISTS t4;
+    CREATE TABLE t4(x INT);
+    UPDATE t1 SET value = (SELECT x FROM t4 LIMIT 1) RETURNING *;
+  }
+} {1 {no such table: t1}}
+
+# Test 16: RETURNING Order Matches Insert Order
+#
+do_test returning-16.1 {
+  execsql {
+    DROP TABLE IF EXISTS t5;
+    CREATE TABLE t5(a INT, b INT, c INT);
+    INSERT INTO t5(a, b, c) VALUES(1, 2, 3),(4, 5, 6),(7, 8, 9)
+    RETURNING c, b, a;
+  }
+} {3 2 1 6 5 4 9 8 7}
+
+# Test 17: RETURNING with Constraints
+#
+do_test returning-17.1 {
+  execsql {
+    DROP TABLE IF EXISTS t6;
+    CREATE TABLE t6(id INT PRIMARY KEY, val INT UNIQUE);
+    INSERT INTO t6(id, val) VALUES(1, 100) RETURNING *;
+  }
+} {1 100}
+
+do_test returning-17.2 {
+  catchsql {
+    INSERT INTO t6(id, val) VALUES(1, 200) RETURNING *;
+  }
+} {1 {PRIMARY KEY must be unique}}
+
+do_test returning-17.3 {
+  catchsql {
+    INSERT INTO t6(id, val) VALUES(2, 100) RETURNING *;
+  }
+} {1 {column val is not unique}}
+
+# Test 18: RETURNING After Constraint Violation
+#
+do_test returning-18.1 {
+  execsql {
+    SELECT * FROM t6;
+  }
+} {1 100}
+
+# Test 19: RETURNING with Transaction Rollback
+#
+do_test returning-19.1 {
+  execsql {
+    DROP TABLE IF EXISTS t7;
+    CREATE TABLE t7(x INT);
+    BEGIN;
+    INSERT INTO t7(x) VALUES(1) RETURNING x;
+  }
+} {1}
+
+do_test returning-19.2 {
+  execsql {
+    ROLLBACK;
+    SELECT COUNT(*) FROM t7;
+  }
+} {0}
+
+# Test 20: RETURNING with Transaction Commit
+#
+do_test returning-20.1 {
+  execsql {
+    BEGIN;
+    INSERT INTO t7(x) VALUES(2) RETURNING x;
+  }
+} {2}
+
+do_test returning-20.2 {
+  execsql {
+    COMMIT;
+    SELECT * FROM t7;
+  }
+} {2}
+
+# Test 21: Multiple RETURNING in Same Statement (Should Use Last)
+#
+do_test returning-21.1 {
+  execsql {
+    DELETE FROM t7;
+    INSERT INTO t7(x) VALUES(10),(20),(30) RETURNING x;
+  }
+} {10 20 30}
+
+# Test 22: RETURNING with Complex WHERE
+#
+do_test returning-22.1 {
+  execsql {
+    UPDATE t7 SET x = x * 2 WHERE x >= 20 RETURNING x;
+  }
+} {40 60}
+
+# Test 23: RETURNING Result Column Count
+#
+do_test returning-23.1 {
+  set result [execsql {
+    DELETE FROM t7;
+    INSERT INTO t7(x) VALUES(99) RETURNING x, x*2, x*3;
+  }]
+  llength $result
+} {3}
+
+do_test returning-23.2 {
+  set result [execsql {
+    UPDATE t7 SET x = 1 RETURNING x;
+  }]
+  llength $result
+} {1}
+
+# Test 24: RETURNING with Empty String
+#
+do_test returning-24.1 {
+  execsql {
+    DROP TABLE IF EXISTS t8;
+    CREATE TABLE t8(s TEXT);
+    INSERT INTO t8(s) VALUES('') RETURNING s;
+  }
+} {{}}
+
+# Test 25: RETURNING Performance (Large Batch)
+#
+do_test returning-25.1 {
+  execsql {
+    DROP TABLE IF EXISTS t9;
+    CREATE TABLE t9(n INT);
+    BEGIN;
+  }
+  for {set i 1} {$i <= 100} {incr i} {
+    execsql "INSERT INTO t9(n) VALUES($i) RETURNING n;"
+  }
+  execsql {COMMIT;}
+  execsql {SELECT COUNT(*) FROM t9;}
+} {100}
+
+finish_test

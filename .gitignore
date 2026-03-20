@@ -11,3 +11,13 @@ dist/config.log
 src/py/setup.py
 test/scr050/Makefile
 result-bin
+
+# Agent-generated files
+agent/
+
+# Backup and patch files
+*.backup
+*.bak
+*.patch
+*.sed
+*.orig

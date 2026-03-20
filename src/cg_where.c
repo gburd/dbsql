@@ -801,19 +801,19 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 */
 	for (i = 0; i < tab_list->nSrc; i++) {
 		table = tab_list->a[i].pTab;
-		if (table->isTransient || table->pSelect )
+		if ((table->tabFlags & TF_Ephemeral) || table->pSelect )
 			continue;
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenRead, tab_list->a[i].iCursor,
 			      table->tnum);
-		__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 		__code_verify_schema(parser, table->iDb);
 		if (where_info->a[i].pIdx != 0) {
 			__vdbe_add_op(v, OP_Integer,
 				      where_info->a[i].pIdx->iDb, 0);
 			__vdbe_add_op(v, OP_OpenRead, where_info->a[i].iCur,
 				      where_info->a[i].pIdx->tnum);
-			__vdbe_change_p3(v, -1, where_info->a[i].pIdx->zName,
+			__vdbe_change_p4(v, -1, where_info->a[i].pIdx->zName,
 					 P3_STATIC);
 		}
 	}
@@ -1048,7 +1048,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			level->p1 = cur;
 			level->p2 = start;
 			if (test_op != OP_Noop) {
-				__vdbe_add_op(v, OP_Recno, cur, 0);
+				__vdbe_add_op(v, OP_Rowid, cur, 0);
 				__vdbe_add_op(v, OP_MemLoad, level->iMem, 0);
 				__vdbe_add_op(v, test_op, 0, brk);
 			}
@@ -1367,7 +1367,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	}
 	where_info->iContinue = cont;
 	if (push_key_p && !have_key_p) {
-		__vdbe_add_op(v, OP_Recno, tab_list->a[0].iCursor, 0);
+		__vdbe_add_op(v, OP_Rowid, tab_list->a[0].iCursor, 0);
 	}
 	__free_mask_set(&mask_set);
 	return where_info;
@@ -1417,7 +1417,7 @@ __where_end(where_info_t* winfo)
 	for (i = 0; i < tab_list->nSrc; i++) {
 		table = tab_list->a[i].pTab;
 		DBSQL_ASSERT(table != 0);
-		if (table->isTransient || table->pSelect)
+		if ((table->tabFlags & TF_Ephemeral) || table->pSelect)
 			continue;
 		level = &winfo->a[i];
 		__vdbe_add_op(v, OP_Close, tab_list->a[i].iCursor, 0);

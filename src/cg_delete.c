@@ -65,7 +65,7 @@ __is_table_read_only(parser_t* parser, table_t* table, int views_ok)
 			    table->zName);
 		return 1;
 	}
-	if (!views_ok && table->pSelect) {
+	if (!views_ok && table->u.view.pSelect) {
 		__error_msg(parser, "cannot modify %s because it is a view",
 			    table->zName);
 		return 1;
@@ -77,16 +77,19 @@ __is_table_read_only(parser_t* parser, table_t* table, int views_ok)
  * __delete_from --
  *	Process a DELETE FROM statement.
  *
- * PUBLIC: void __delete_from __P((parser_t *, src_list_t *, expr_t *));
+ * PUBLIC: void __delete_from __P((parser_t *, src_list_t *, expr_t *,
+ * PUBLIC:      expr_list_t *));
  *
  * parser			The parser context
  * list				The table from which we should delete things
  * where			The WHERE clause.  May be null.
+ * returning		RETURNING clause expression list (NULL if none)
  */
-void __delete_from(parser, list, where)
+void __delete_from(parser, list, where, returning)
 	parser_t *parser;
 	src_list_t *list;
 	expr_t *where;
+	expr_list_t *returning;
 {
 	vdbe_t *v;          /* The virtual database engine */
 	table_t *table;     /* The table from which records will be deleted */
@@ -121,12 +124,12 @@ void __delete_from(parser, list, where)
 	table = __src_list_lookup(parser, list);
 	if (table == 0)
 		goto delete_from_cleanup;
-	before_triggers = __triggers_exist(parser, table->pTrigger, 
+	before_triggers = __triggers_exist(parser, table->pTrigger,
 					   TK_DELETE, TK_BEFORE, TK_ROW, 0);
-	after_triggers = __triggers_exist(parser, table->pTrigger, 
+	after_triggers = __triggers_exist(parser, table->pTrigger,
 					  TK_DELETE, TK_AFTER, TK_ROW, 0);
 	row_triggers_exist = (before_triggers || after_triggers);
-	view = (table->pSelect != 0);
+	view = (table->u.view.pSelect != 0);
 	if (__is_table_read_only(parser, table, before_triggers)) {
 		goto delete_from_cleanup;
 	}
@@ -185,7 +188,7 @@ void __delete_from(parser, list, where)
 	 * a temporary table.
 	 */
 	if (view) {
-		select_t *vsel = __select_dup(table->pSelect);
+		select_t *vsel = __select_dup(table->u.view.pSelect);
 		__select(parser, vsel, SRT_TempTable, cur, 0, 0, 0);
 		__select_delete(vsel);
 	}
@@ -286,7 +289,7 @@ void __delete_from(parser, list, where)
 					      table->tnum);
 			}
 			__vdbe_add_op(v, OP_MoveTo, cur, 0);
-			__vdbe_add_op(v, OP_Recno, cur, 0);
+			__vdbe_add_op(v, OP_Rowid, cur, 0);
 			__vdbe_add_op(v, OP_RowData, cur, 0);
 			__vdbe_add_op(v, OP_PutIntKey, old_idx, 0);
 			if (!view) {
@@ -324,6 +327,43 @@ void __delete_from(parser, list, where)
 			 */
 			if (!row_triggers_exist) { 
 				addr = __vdbe_add_op(v, OP_ListRead, 0, end);
+			}
+
+			/*
+			 * Generate RETURNING clause if present.
+			 * For DELETE, we must read OLD values BEFORE deleting.
+			 */
+			if (returning) {
+				int i;
+				int ret_reg;
+
+				ret_reg = __get_temp_range(parser, returning->nExpr);
+
+				/* Set result column count and names (only once) */
+				if (addr == __vdbe_current_addr(v) - 1) {
+					__vdbe_set_num_cols(v, returning->nExpr);
+					for (i = 0; i < returning->nExpr; i++) {
+						char *col_name = returning->a[i].zEName;
+						if (col_name == NULL) {
+							col_name = returning->a[i].zName;
+						}
+						if (col_name) {
+							__vdbe_set_col_name(v, i, COLNAME_NAME,
+									    col_name, DBSQL_TRANSIENT);
+						}
+					}
+				}
+
+				/* Read OLD values before delete.
+				 * The cursor is positioned at the row to delete. */
+				for (i = 0; i < returning->nExpr; i++) {
+					__expr_code_target(parser, returning->a[i].pExpr,
+							   ret_reg + i);
+				}
+
+				/* Output the result row with OLD values */
+				__vdbe_add_op(v, OP_ResultRow, ret_reg, returning->nExpr);
+				__release_temp_range(parser, ret_reg, returning->nExpr);
 			}
 
 			/*
@@ -377,17 +417,18 @@ void __delete_from(parser, list, where)
 
 	/*
 	* Return the number of rows that were deleted.
+	* SQLite 3.x: Use OP_ResultRow instead of obsolete OP_Callback
 	*/
 	if (dbp->flags & DBSQL_CountRows) {
-		__vdbe_add_op(v, OP_ColumnName, 0, 0);
-		__vdbe_change_p3(v, -1, "rows deleted", P3_STATIC);
-		__vdbe_add_op(v, OP_Callback, 1, 0);
+		__vdbe_add_op(v, OP_ResultRow, 1, 1);
 	}
 
   delete_from_cleanup:
 	__auth_context_pop(&context);
 	__src_list_delete(list);
 	__expr_delete(where);
+	if (returning)
+		__expr_list_delete(returning);
 	return;
 }
 
@@ -475,7 +516,7 @@ void __generate_row_index_delete(dbp, v, table, cur, idx_used)
 		int j;
 		if (idx_used != 0 && idx_used[i-1] == 0)
 			continue;
-		__vdbe_add_op(v, OP_Recno, cur, 0);
+		__vdbe_add_op(v, OP_Rowid, cur, 0);
 		for (j = 0; j < idx->nColumn; j++) {
 			int n = idx->aiColumn[j];
 			if (n == table->iPKey) {

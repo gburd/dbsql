@@ -200,36 +200,26 @@ if (strcasecmp(left_name, "table_info") == 0) {
 	table_t *table;
 	table = __find_table(dbp, right_name, 0);
 	if (table) {
-		static vdbe_op_t table_info_preface[] = {
-			{ OP_ColumnName,  0, 0,       "cid"},
-			{ OP_ColumnName,  1, 0,       "name"},
-			{ OP_ColumnName,  2, 0,       "type"},
-			{ OP_ColumnName,  3, 0,       "notnull"},
-			{ OP_ColumnName,  4, 0,       "dflt_value"},
-			{ OP_ColumnName,  5, 0,       "pk"},
-		};
 		int i;
-		__vdbe_add_op_list(v, ARRAY_SIZE(table_info_preface),
-				   table_info_preface);
 		__view_get_column_names(parser, table);
 		for (i = 0; i < table->nCol; i++) {
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p3(v, -1, table->aCol[i].zName,
+			__vdbe_change_p4(v, -1, table->aCol[i].zName,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p3(v, -1, 
+			__vdbe_change_p4(v, -1, 
 					 table->aCol[i].zType ?
 					   table->aCol[i].zType :
 					   "numeric", P3_STATIC);
 			__vdbe_add_op(v, OP_Integer,
 			      table->aCol[i].notNull, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p3(v, -1, table->aCol[i].zDflt,
+			__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Integer,
 				      table->aCol[i].isPrimKey, 0);
-			__vdbe_add_op(v, OP_Callback, 6, 0);
+			__vdbe_add_op(v, OP_ResultRow, 6, 0);
 		}
 	}
 } else
@@ -241,25 +231,18 @@ if (strcasecmp(left_name, "index_info") == 0) {
 	table_t *table;
 	index = __find_index(dbp, right_name, 0);
 	if (index) {
-		static vdbe_op_t table_info_preface[] = {
-			{ OP_ColumnName,  0, 0,       "seqno"},
-			{ OP_ColumnName,  1, 0,       "cid"},
-			{ OP_ColumnName,  2, 0,       "name"},
-		};
 		int i;
 		table = index->pTable;
-		__vdbe_add_op_list(v, ARRAY_SIZE(table_info_preface),
-				   table_info_preface);
 		for (i = 0; i < index->nColumn; i++) {
 			int cnum = index->aiColumn[i];
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_Integer, cnum, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
 			DBSQL_ASSERT(table->nCol > cnum);
-			__vdbe_change_p3(v, -1,
+			__vdbe_change_p4(v, -1,
 					 table->aCol[cnum].zName,
 					 P3_STATIC);
-			__vdbe_add_op(v, OP_Callback, 3, 0);
+			__vdbe_add_op(v, OP_ResultRow, 3, 0);
 		}
 	}
 } else
@@ -275,23 +258,15 @@ if (strcasecmp(left_name, "index_list") == 0) {
 		index = table->pIndex;
 	}
 	if (table && index) {
-		int i = 0; 
-		static vdbe_op_t index_list_preface[] = {
-			{ OP_ColumnName,  0, 0,       "seq"},
-			{ OP_ColumnName,  1, 0,       "name"},
-			{ OP_ColumnName,  2, 0,       "unique"},
-		};
-
-		__vdbe_add_op_list(v, ARRAY_SIZE(index_list_preface),
-				   index_list_preface);
+		int i = 0;
 		while(index) {
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p3(v, -1, index->zName,
+			__vdbe_change_p4(v, -1, index->zName,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Integer,
 				      index->onError != OE_None, 0);
-			__vdbe_add_op(v, OP_Callback, 3, 0);
+			__vdbe_add_op(v, OP_ResultRow, 3, 0);
 			++i;
 			index = index->pNext;
 		}
@@ -309,33 +284,23 @@ if (strcasecmp(left_name, "foreign_key_list") == 0) {
 		fk = table->pFKey;
 	}
 	if (table && fk) {
-		int i = 0; 
-		static vdbe_op_t index_list_preface[] = {
-			{ OP_ColumnName,  0, 0,       "id"},
-			{ OP_ColumnName,  1, 0,       "seq"},
-			{ OP_ColumnName,  2, 0,       "table"},
-			{ OP_ColumnName,  3, 0,       "from"},
-			{ OP_ColumnName,  4, 0,       "to"},
-		};
-
-		__vdbe_add_op_list(v, ARRAY_SIZE(index_list_preface),
-				   index_list_preface);
+		int i = 0;
 		while(fk) {
 			int j;
 			for (j = 0; j < fk->nCol; j++) {
 				__vdbe_add_op(v, OP_Integer, i, 0);
 				__vdbe_add_op(v, OP_Integer, j, 0);
 				__vdbe_add_op(v, OP_String, 0, 0);
-				__vdbe_change_p3(v, -1, fk->zTo,
+				__vdbe_change_p4(v, -1, fk->zTo,
 						 P3_STATIC);
 				__vdbe_add_op(v, OP_String, 0, 0);
-				__vdbe_change_p3(v, -1,
+				__vdbe_change_p4(v, -1,
 				  table->aCol[fk->aCol[j].iFrom].zName,
 				  P3_STATIC);
 				__vdbe_add_op(v, OP_String, 0, 0);
-				__vdbe_change_p3(v, -1,
+				__vdbe_change_p4(v, -1,
 				  fk->aCol[j].zCol, P3_STATIC);
-				__vdbe_add_op(v, OP_Callback, 5, 0);
+				__vdbe_add_op(v, OP_ResultRow, 5, 0);
 			}
 			++i;
 			fk = fk->pNextFrom;
@@ -347,25 +312,17 @@ if (strcasecmp(left_name, "foreign_key_list") == 0) {
  */
 if (strcasecmp(left_name, "database_list") == 0) {
 	int i;
-	static vdbe_op_t index_list_preface[] = {
-		{ OP_ColumnName,  0, 0,       "seq"},
-		{ OP_ColumnName,  1, 0,       "name"},
-		{ OP_ColumnName,  2, 0,       "file"},
-	};
-
-	__vdbe_add_op_list(v, ARRAY_SIZE(index_list_preface),
-			   index_list_preface);
 	for (i = 0; i < dbp->nDb; i++) {
 		if (dbp->aDb[i].pBt == 0)
 			continue;
 		DBSQL_ASSERT(dbp->aDb[i].zName != 0);
 		__vdbe_add_op(v, OP_Integer, i, 0);
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1, dbp->aDb[i].zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, dbp->aDb[i].zName, P3_STATIC);
 		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_change_p3(v, -1,
+		__vdbe_change_p4(v, -1,
 			 __sm_get_database_name(dbp->aDb[i].pBt), P3_STATIC);
-		__vdbe_add_op(v, OP_Callback, 3, 0);
+		__vdbe_add_op(v, OP_ResultRow, 3, 0);
 	}
 } else
 #ifndef NDEBUG

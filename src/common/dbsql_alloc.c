@@ -20,7 +20,7 @@
 
 #include "dbsql.h"
 #include "dbsql_config.h"
-#include "db_int.h"
+#include "inc/db_int.h"
 
 #include <string.h>
 

@@ -34,8 +34,7 @@ __vdbe_delete_trigger_step(trigger_step_t* ts)
 		trigger_step_t * tmp = ts;
 		ts = ts->pNext;
 
-		if (tmp->target.dyn)
-			__dbsql_free(NULL, (char *)tmp->target.z);
+		__src_list_delete(tmp->pSrc);
 		__expr_delete(tmp->pWhere);
 		__expr_list_delete(tmp->pExprList);
 		__select_delete(tmp->pSelect);
@@ -183,18 +182,15 @@ __begin_trigger(parser, trigger, tr_tm, op, columns, tab_name, foreach,
 	__dbsql_calloc(dbp, 1, sizeof(trigger_t), &nt);
 	if (nt == 0)
 		goto trigger_cleanup;
-	nt->name = name;
+	nt->zName = name;
 	name = 0;
 	if (__dbsql_strdup(dbp, tab_name->a[0].zName, &nt->table) == ENOMEM)
 		goto trigger_cleanup;
 	nt->iDb = db_idx;
-	nt->iTabDb = table->iDb;
 	nt->op = op;
 	nt->tr_tm = tr_tm;
 	nt->pWhen = __expr_dup(when_clause);
 	nt->pColumns = __id_list_dup(columns);
-	nt->foreach = foreach;
-	__token_copy(&nt->nameToken,trigger);
 	DBSQL_ASSERT( parser->pNewTrigger==0 );
 	parser->pNewTrigger = nt;
 
@@ -235,10 +231,16 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 		steplist->pTrig = nt;
 		steplist = steplist->pNext;
 	}
-	if (__ref_normalizer_ctx_init(&normctx, parser, nt->iDb,
-				      "trigger", &nt->nameToken) &&
-	    __ref_normalize_trigger_step(&normctx, nt->step_list)) {
-		goto triggerfinish_cleanup;
+	{
+		token_t nameToken;
+		nameToken.z = nt->zName;
+		nameToken.n = nt->zName ? strlen(nt->zName) : 0;
+		nameToken.dyn = 0;
+		if (__ref_normalizer_ctx_init(&normctx, parser, nt->iDb,
+					      "trigger", &nameToken) &&
+		    __ref_normalize_trigger_step(&normctx, nt->step_list)) {
+			goto triggerfinish_cleanup;
+		}
 	}
 
 	/*
@@ -248,7 +250,7 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 	if (!parser->initFlag) {
 		static vdbe_op_t insert_trig[] = {
 		{ OP_NewRecno,   0, 0,  0          },
-		{ OP_String,     0, 0,  "trigger"  },
+		{ OP_String,     0, 0,  0          },  /* 1: "trigger" */
 		{ OP_String,     0, 0,  0          },  /* 2: trigger name */
 		{ OP_String,     0, 0,  0          },  /* 3: table name */
 		{ OP_Integer,    0, 0,  0          },
@@ -269,9 +271,10 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 		__open_master_table(v, nt->iDb);
 		addr = __vdbe_add_op_list(v, ARRAY_SIZE(insert_trig),
 					  insert_trig);
-		__vdbe_change_p3(v, (addr + 2), nt->name, 0); 
-		__vdbe_change_p3(v, (addr + 3), nt->table, 0); 
-		__vdbe_change_p3(v, (addr + 5), all->z, all->n);
+		__vdbe_change_p4(v, (addr + 1), "trigger", 0);
+		__vdbe_change_p4(v, (addr + 2), nt->zName, 0);
+		__vdbe_change_p4(v, (addr + 3), nt->table, 0);
+		__vdbe_change_p4(v, (addr + 5), all->z, all->n);
 		if (nt->iDb == 0) {
 			__change_schema_signature(dbp, v);
 		}
@@ -281,10 +284,10 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 
 	if (!parser->explain) {
 		table_t *table;
-		__hash_insert(&dbp->aDb[nt->iDb].trigHash, 
-			      nt->name, (strlen(nt->name) + 1), nt);
+		__hash_insert(&dbp->aDb[nt->iDb].trigHash,
+			      nt->zName, (strlen(nt->zName) + 1), nt);
 		table = __locate_table(parser, nt->table,
-				       dbp->aDb[nt->iTabDb].zName);
+				       dbp->aDb[nt->iDb].zName);
 		DBSQL_ASSERT(table != 0);
 		nt->pNext = table->pTrigger;
 		table->pTrigger = nt;
@@ -314,9 +317,10 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 static void
 __persist_trigger_step(trigger_step_t* ts)
 {
-	if (ts->target.z) {
-		__dbsql_strndup(NULL, ts->target.z, &ts->target.z, ts->target.n);
-		ts->target.dyn = 1;
+	if (ts->pSrc) {
+		src_list_t *new = __src_list_dup(ts->pSrc);
+		__src_list_delete(ts->pSrc);
+		ts->pSrc = new;
 	}
 	if (ts->pSelect) {
 		select_t *new = __select_dup(ts->pSelect);
@@ -398,7 +402,7 @@ __trigger_insert_step(token_t* tab_name, id_list_t* column, expr_list_t* elist, 
 
 	ts->op = TK_INSERT;
 	ts->pSelect = select;
-	ts->target  = *tab_name;
+	ts->pSrc = __src_list_append(NULL, tab_name, NULL);
 	ts->pIdList = column;
 	ts->pExprList = elist;
 	ts->orconf = orconf;
@@ -431,7 +435,7 @@ __trigger_update_step(token_t* tab_name, expr_list_t* elist, expr_t* where_claus
 		return 0;
 
 	ts->op = TK_UPDATE;
-	ts->target  = *tab_name;
+	ts->pSrc = __src_list_append(NULL, tab_name, NULL);
 	ts->pExprList = elist;
 	ts->pWhere = where_clause;
 	ts->orconf = orconf;
@@ -457,7 +461,7 @@ __trigger_delete_step(token_t* tab_name, expr_t* where_clause)
 		return 0;
 
 	ts->op = TK_DELETE;
-	ts->target  = *tab_name;
+	ts->pSrc = __src_list_append(NULL, tab_name, NULL);
 	ts->pWhere = where_clause;
 	ts->orconf = OE_Default;
 	__persist_trigger_step(ts);
@@ -477,12 +481,10 @@ __vdbe_delete_trigger(trigger_t* trigger)
 	if (trigger == 0)
 		return;
 	__vdbe_delete_trigger_step(trigger->step_list);
-	__dbsql_free(NULL, trigger->name);
+	__dbsql_free(NULL, trigger->zName);
 	__dbsql_free(NULL, trigger->table);
 	__expr_delete(trigger->pWhen);
 	__id_list_delete(trigger->pColumns);
-	if (trigger->nameToken.dyn)
-		__dbsql_free(NULL, (char*)trigger->nameToken.z);
 	__dbsql_free(NULL, trigger);
 }
 
@@ -561,7 +563,7 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 		return;
 	}
 	table = __find_table(dbp, trigger->table,
-			     dbp->aDb[trigger->iTabDb].zName);
+			     dbp->aDb[trigger->iDb].zName);
 	DBSQL_ASSERT(table);
 	DBSQL_ASSERT(table->iDb == trigger->iDb || trigger->iDb == 1);
 #ifndef DBSQL_NO_AUTH
@@ -571,7 +573,7 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 		const char *tab = SCHEMA_TABLE(trigger->iDb);
 		if (trigger->iDb)
 			code = DBSQL_DROP_TEMP_TRIGGER;
-		if (__auth_check(parser, code, trigger->name,
+		if (__auth_check(parser, code, trigger->zName,
 				 table->zName, db) ||
 		    __auth_check(parser, DBSQL_DELETE, tab, 0, db)) {
 			return;
@@ -589,7 +591,7 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 			{ OP_String,     0, 0,        0}, /* 1 */
 			{ OP_Column,     0, 1,        0},
 			{ OP_Ne,         0, ADDR(8),  0},
-			{ OP_String,     0, 0,        "trigger"},
+			{ OP_String,     0, 0,        0}, /* 4: "trigger" */
 			{ OP_Column,     0, 0,        0},
 			{ OP_Ne,         0, ADDR(8),  0},
 			{ OP_Delete,     0, 0,        0},
@@ -600,7 +602,8 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 		__open_master_table(v, trigger->iDb);
 		base = __vdbe_add_op_list(v,  ARRAY_SIZE(drop_trigger),
 					  drop_trigger);
-		__vdbe_change_p3(v, base+1, trigger->name, 0);
+		__vdbe_change_p4(v, base+1, trigger->zName, 0);
+		__vdbe_change_p4(v, base+4, "trigger", 0);
 		if (trigger->iDb == 0) {
 			__change_schema_signature(dbp, v);
 		}
@@ -612,7 +615,7 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 	 * If this is not an "explain", then delete the trigger structure.
 	 */
 	if (!parser->explain) {
-		const char *name = trigger->name;
+		const char *name = trigger->zName;
 		int len = strlen(name);
 		if (table->pTrigger == trigger) {
 			table->pTrigger = trigger->pNext;
@@ -701,9 +704,8 @@ int __triggers_exist(parser, trigger, op, tr_tm, foreach, changes)
 	}
 	trig_cursor = trigger;
 	while (trig_cursor) {
-		if (trig_cursor->op == op && 
-		    trig_cursor->tr_tm == tr_tm && 
-		    trig_cursor->foreach == foreach &&
+		if (trig_cursor->op == op &&
+		    trig_cursor->tr_tm == tr_tm &&
 		    __check_column_overlap(trig_cursor->pColumns, changes)) {
 			trigger_stack_t *ss;
 			ss = parser->trigStack;
@@ -739,19 +741,10 @@ static src_list_t *targetSrcList(parser, step)
 	parser_t *parser;
 	trigger_step_t *step;
 {
-	token_t db;           /* Dummy database name token */
-	int db_idx;           /* Index of the database to use */
 	src_list_t *src;      /* SrcList to be returned */
 
-	db_idx = step->pTrig->iDb;
-	if (db_idx == 0 || db_idx >= 2) {
-		DBSQL_ASSERT(db_idx < parser->db->nDb);
-		db.z = parser->db->aDb[db_idx].zName;
-		db.n = strlen(db.z);
-		src = __src_list_append(0, &db, &step->target);
-	} else {
-		src = __src_list_append(0, &step->target, 0);
-	}
+	/* step->pSrc already contains the target table as a src_list_t* */
+	src = __src_list_dup(step->pSrc);
 	return src;
 }
 
@@ -790,8 +783,8 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 			src = targetSrcList(parser, ts);
 			__vdbe_add_op(parser->pVdbe, OP_ListPush, 0, 0);
 			__update(parser, src,
-				 __expr_list_dup(ts->pExprList), 
-				 __expr_dup(ts->pWhere), orconf);
+				 __expr_list_dup(ts->pExprList),
+				 __expr_dup(ts->pWhere), orconf, NULL);
 			__vdbe_add_op(parser->pVdbe, OP_ListPop, 0, 0);
 			break;
 		}
@@ -799,16 +792,16 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 			src_list_t *src;
 			src = targetSrcList(parser, ts);
 			__insert(parser, src,
-				 __expr_list_dup(ts->pExprList), 
-				 __select_dup(ts->pSelect), 
-				 __id_list_dup(ts->pIdList), orconf);
+				 __expr_list_dup(ts->pExprList),
+				 __select_dup(ts->pSelect),
+				 __id_list_dup(ts->pIdList), orconf, NULL);
 			break;
 		}
 		case TK_DELETE: {
 			src_list_t *src;
 			__vdbe_add_op(parser->pVdbe, OP_ListPush, 0, 0);
 			src = targetSrcList(parser, ts);
-			__delete_from(parser, src, __expr_dup(ts->pWhere));
+			__delete_from(parser, src, __expr_dup(ts->pWhere), NULL);
 			__vdbe_add_op(parser->pVdbe, OP_ListPop, 0, 0);
 			break;
 		}
@@ -881,8 +874,7 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 		/*
 		 * Determine whether we should code this trigger.
 		 */
-		if (trigger->op == op && trigger->tr_tm == tr_tm && 
-		    trigger->foreach == TK_ROW) {
+		if (trigger->op == op && trigger->tr_tm == tr_tm) {
 			fire_this = 1;
 			trig_stack = parser->trigStack;
 			while(trig_stack) {
@@ -917,7 +909,7 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 			trig_stack->pNext = parser->trigStack;
 			trig_stack->ignoreJump = ignore_jump;
 			parser->trigStack = trig_stack;
-			__auth_context_push(parser, &authctx, trigger->name);
+			__auth_context_push(parser, &authctx, trigger->zName);
 
 			/*
 			 * Code the WHEN clause.

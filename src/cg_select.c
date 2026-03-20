@@ -439,7 +439,7 @@ __push_onto_sorter(parser_t* parser, vdbe_t* v, expr_list_t* orderby_clause)
 	}
 	sort_order[orderby_clause->nExpr] = 0;
 	__vdbe_add_op(v, OP_SortMakeKey, orderby_clause->nExpr, 0);
-	__vdbe_change_p3(v, -1, sort_order, strlen(sort_order));
+	__vdbe_change_p4(v, -1, sort_order, strlen(sort_order));
 	__dbsql_free(parser->db, sort_order);
 	__vdbe_add_op(v, OP_SortPut, 0, 0);
 }
@@ -470,7 +470,7 @@ __add_key_type(vdbe_t* v, expr_list_t* elist)
 			'n' : 't';
 	}
 	type[i] = 0;
-	__vdbe_change_p3(v, -1, type, col);
+	__vdbe_change_p4(v, -1, type, col);
 	__dbsql_free(NULL, type);
 }
 
@@ -518,6 +518,8 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 {
 	int i, addr, addr1, addr2;
 	vdbe_t *v = parser->pVdbe;
+	int regResult;      /* Start of memory holding current results */
+	int nResultCol;     /* Number of result columns */
 
 	if (v == 0)
 		return 0;
@@ -540,16 +542,32 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 	}
 
 	/*
-	 * Pull the requested columns.
+	 * Determine number of result columns and allocate registers.
+	 * In register-based VDBE, we store results in consecutive registers
+	 * starting at regResult, rather than pushing onto the stack.
+	 */
+	if (num_cols > 0) {
+		nResultCol = num_cols;
+	} else {
+		nResultCol = elist->nExpr;
+	}
+
+	/* Allocate registers for result columns */
+	regResult = parser->nMem + 1;
+	parser->nMem += nResultCol;
+
+	/*
+	 * Pull the requested columns into registers.
 	 */
 	if (num_cols > 0) {
 		for (i = 0; i < num_cols; i++) {
 			__vdbe_add_op(v, OP_Column, src_table, i);
+			__vdbe_add_op(v, OP_Copy, -1, regResult + i);
+			__vdbe_add_op(v, OP_Pop, 1, 0);
 		}
 	} else {
-		num_cols = elist->nExpr;
 		for (i = 0; i < elist->nExpr; i++) {
-			__expr_code(parser, elist->a[i].pExpr);
+			__expr_code_target(parser, elist->a[i].pExpr, regResult + i);
 		}
 	}
 
@@ -579,7 +597,7 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 		 * temporary table param.
 		 */
 	case SRT_Union:
-		__vdbe_add_op(v, OP_MakeRecord, num_cols,
+		__vdbe_add_op(v, OP_MakeRecord, nResultCol,
 			      NULL_ALWAYS_DISTINCT);
 		__vdbe_add_op(v, OP_String, 0, 0);
 		__vdbe_add_op(v, OP_PutStrKey, param, 0);
@@ -589,7 +607,7 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 		 */
 	case SRT_Table: /* FALLTHROUGH */
 	case SRT_TempTable:
-		__vdbe_add_op(v, OP_MakeRecord, num_cols, 0);
+		__vdbe_add_op(v, OP_MakeRecord, nResultCol, 0);
 		if (orderby_clause) {
 			__push_onto_sorter(parser, v, orderby_clause);
 		} else {
@@ -605,7 +623,7 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 		 * the temporary table param.
 		 */
 	case SRT_Except:
-		addr = __vdbe_add_op(v, OP_MakeRecord, num_cols,
+		addr = __vdbe_add_op(v, OP_MakeRecord, nResultCol,
 				     NULL_ALWAYS_DISTINCT);
 		__vdbe_add_op(v, OP_NotFound, param, (addr + 3));
 		__vdbe_add_op(v, OP_Delete, param, 0);
@@ -618,9 +636,8 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 		 */
 	case SRT_Set:
 		addr1 = __vdbe_current_addr(v);
-		DBSQL_ASSERT(num_cols == 1);
-		__vdbe_add_op(v, OP_NotNull, -1, (addr1 + 3));
-		__vdbe_add_op(v, OP_Pop, 1, 0);
+		DBSQL_ASSERT(nResultCol == 1);
+		__vdbe_add_op(v, OP_NotNull, regResult, (addr1 + 2));
 		addr2 = __vdbe_add_op(v, OP_Goto, 0, 0);
 		if (orderby_clause) {
 			__push_onto_sorter(parser, v, orderby_clause);
@@ -637,26 +654,29 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 		 * break out of the scan loop.
 		 */
 	case SRT_Mem:
-		DBSQL_ASSERT(num_cols == 1);
+		DBSQL_ASSERT(nResultCol == 1);
 		if (orderby_clause) {
 			__push_onto_sorter(parser, v, orderby_clause);
 		} else {
-			__vdbe_add_op(v, OP_MemStore, param, 1);
+			/* Store result from register into memory cell */
+			__vdbe_add_op(v, OP_Copy, regResult, param);
 			__vdbe_add_op(v, OP_Goto, 0, brk);
 		}
 		break;
 
 	/*
-	 * Send the data to the callback function.
+	 * Send the data to the callback function via OP_ResultRow.
+	 * This is the register-based replacement for OP_Callback.
 	 */
 	case SRT_Callback: /* FALLTHROUGH */
 	case SRT_Sorter:
 		if (orderby_clause) {
-			__vdbe_add_op(v, OP_SortMakeRec, num_cols, 0);
+			__vdbe_add_op(v, OP_SortMakeRec, nResultCol, 0);
 			__push_onto_sorter(parser, v, orderby_clause);
 		} else {
 			DBSQL_ASSERT(dest == SRT_Callback);
-			__vdbe_add_op(v, OP_Callback, num_cols, 0);
+			/* Phase 2: Use OP_ResultRow with register range */
+			__vdbe_add_op(v, OP_ResultRow, regResult, nResultCol);
 		}
 		break;
 
@@ -667,9 +687,10 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 		 */
 	case SRT_Subroutine:
 		if (orderby_clause) {
-			__vdbe_add_op(v, OP_MakeRecord, num_cols, 0);
+			__vdbe_add_op(v, OP_MakeRecord, nResultCol, 0);
 			__push_onto_sorter(parser, v, orderby_clause);
 		} else {
+			/* Results already in registers, call subroutine */
 			__vdbe_add_op(v, OP_Gosub, 0, param);
 		}
 		break;
@@ -682,7 +703,7 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 		 */
 	default:
 		DBSQL_ASSERT(dest == SRT_Discard);
-		__vdbe_add_op(v, OP_Pop, num_cols, 0);
+		/* No need to pop in register-based model - registers are reused */
 		break;
 	}
 	return 0;
@@ -723,6 +744,7 @@ __generate_sort_tail(select_t* select, vdbe_t* v, int num_cols, int dest, int pa
 	}
 	switch(dest) {
 	case SRT_Callback:
+		/* Phase 2: Use OP_SortCallback which internally uses registers */
 		__vdbe_add_op(v, OP_SortCallback, num_cols, 0);
 		break;
 	case SRT_Table: /* FALLTHROUGH */
@@ -824,8 +846,6 @@ __generate_column_types(parser_t* parser, src_list_t* tables, expr_list_t* elist
 				type = "NUMERIC";
 			}
 		}
-		__vdbe_add_op(v, OP_ColumnName, (i + elist->nExpr), 0);
-		__vdbe_change_p3(v, -1, type, P3_STATIC);
 	}
 }
 
@@ -861,8 +881,6 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 			continue;
 		if (elist->a[i].zName) {
 			name = elist->a[i].zName;
-			__vdbe_add_op(v, OP_ColumnName, i, 0);
-			__vdbe_change_p3(v, -1, name, strlen(name));
 			continue;
 		}
 		show_full_names = (parser->db->flags & DBSQL_FullColNames) !=0;
@@ -886,8 +904,6 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 				type = table->aCol[icol].zType;
 			}
 			if (p->span.z && p->span.z[0] && !show_full_names) {
-				addr = __vdbe_add_op(v,OP_ColumnName, i, 0);
-				__vdbe_change_p3(v, -1, p->span.z, p->span.n);
 				__vdbe_compress_space(v, addr);
 			} else if (tables->nSrc > 1 || show_full_names) {
 				name = 0;
@@ -896,22 +912,14 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 				if (show_full_names || tab == 0)
 					tab = table->zName;
 				__str_append(&name, tab, ".", col, 0);
-				__vdbe_add_op(v, OP_ColumnName, i, 0);
-				__vdbe_change_p3(v, -1, name, strlen(name));
 				__dbsql_free(NULL, name);
 			} else {
-				__vdbe_add_op(v, OP_ColumnName, i, 0);
-				__vdbe_change_p3(v, -1, col, 0);
 			}
 		} else if (p->span.z && p->span.z[0]) {
-			addr = __vdbe_add_op(v, OP_ColumnName, i, 0);
-			__vdbe_change_p3(v, -1, p->span.z, p->span.n);
 			__vdbe_compress_space(v, addr);
 		} else {
 			DBSQL_ASSERT( p->op!=TK_COLUMN || tables==0 );
 			sprintf(namebuf, "column%d", i+1);
-			__vdbe_add_op(v, OP_ColumnName, i, 0);
-			__vdbe_change_p3(v, -1, namebuf, strlen(namebuf));
 		}
 	}
 }
@@ -1452,10 +1460,13 @@ __multi_select_sort_order(select_t* select, expr_list_t* orderby_clause)
 static void
 __compute_limit_registers(parser_t* parser, select_t* select)
 {
-	int mem;
+	int reg;
 	vdbe_t *v;
 
 	/*
+	 * Phase 2: LIMIT/OFFSET now use registers with OP_Integer
+	 * to store countdown values, rather than OP_MemStore.
+	 *
 	 * If the comparison is select->nLimit>0 then "LIMIT 0" shows
 	 * all rows.  It is the same as no limit. If the comparision is
 	 * select->nLimit>=0 then "LIMIT 0" show no rows at all.
@@ -1465,22 +1476,22 @@ __compute_limit_registers(parser_t* parser, select_t* select)
 	 * no rows.
 	 */
 	if (select->nLimit >= 0) {
-		mem = parser->nMem++;
+		reg = parser->nMem++;
 		v = __parser_get_vdbe(parser);
 		if (v == 0)
 			return;
-		__vdbe_add_op(v, OP_Integer, (-select->nLimit), 0);
-		__vdbe_add_op(v, OP_MemStore, mem, 1);
-		select->iLimit = mem;
+		/* Store negative limit for countdown in register */
+		__vdbe_add_op(v, OP_Integer, (-select->nLimit), reg);
+		select->iLimit = reg;
 	}
 	if (select->nOffset > 0) {
-		mem = parser->nMem++;
+		reg = parser->nMem++;
 		v = __parser_get_vdbe(parser);
 		if (v == 0)
 			return;
-		__vdbe_add_op(v, OP_Integer, (- select->nOffset), 0);
-		__vdbe_add_op(v, OP_MemStore, mem, 1);
-		select->iOffset = mem;
+		/* Store negative offset for countdown in register */
+		__vdbe_add_op(v, OP_Integer, (- select->nOffset), reg);
+		select->iOffset = reg;
 	}
 }
 
@@ -2266,16 +2277,23 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	__code_verify_schema(parser, table->iDb);
 	base = select->pSrc->a[0].iCursor;
 	__compute_limit_registers(parser, select);
-	__vdbe_add_op(v, OP_Integer, table->iDb, 0);
+
+	/* Allocate register for database index */
+	int regDbIdx = parser->nMem + 1;
+	parser->nMem++;
+	__vdbe_add_op(v, OP_Integer, table->iDb, regDbIdx);
 	__vdbe_add_op(v, OP_OpenRead, base, table->tnum);
-	__vdbe_change_p3(v, -1, table->zName, P3_STATIC);
+	__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 	cont = __vdbe_make_label(v);
 	if (index == 0) {
 		__vdbe_add_op(v, seek_op, base, 0);
 	} else {
-		__vdbe_add_op(v, OP_Integer, index->iDb, 0);
+		/* Allocate register for index database number */
+		int regIdxDb = parser->nMem + 1;
+		parser->nMem++;
+		__vdbe_add_op(v, OP_Integer, index->iDb, regIdxDb);
 		__vdbe_add_op(v, OP_OpenRead, (base + 1), index->tnum);
-		__vdbe_change_p3(v, -1, index->zName, P3_STATIC);
+		__vdbe_change_p4(v, -1, index->zName, P3_STATIC);
 		__vdbe_add_op(v, seek_op, (base + 1), 0);
 		__vdbe_add_op(v, OP_IdxRecno, (base + 1), 0);
 		__vdbe_add_op(v, OP_Close, (base + 1), 0);
@@ -2693,7 +2711,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 			if ((func = parser->aAgg[i].pFunc) != 0 &&
 			    func->xFinalize != 0) {
 				__vdbe_add_op(v, OP_AggInit, 0, i);
-				__vdbe_change_p3(v, -1, (char*)func,
+				__vdbe_change_p4(v, -1, (char*)func,
 						 P3_POINTER);
 			}
 		}
@@ -2745,9 +2763,14 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 		 * aggregate processing.  
 		 */
 		if (groupby_clause) {
+			/* Allocate registers for GROUP BY expressions */
+			int regGroupBy = parser->nMem + 1;
+			parser->nMem += groupby_clause->nExpr;
+
 			for (i = 0; i < groupby_clause->nExpr; i++) {
-				__expr_code(parser,
-					    groupby_clause->a[i].pExpr);
+				__expr_code_target(parser,
+						   groupby_clause->a[i].pExpr,
+						   regGroupBy + i);
 			}
 			__vdbe_add_op(v, OP_MakeKey, groupby_clause->nExpr, 0);
 			__add_key_type(v, groupby_clause);
@@ -2772,12 +2795,15 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 						    e->pList->a[j].pExpr);
 				}
 			}
-			__vdbe_add_op(v, OP_Integer, i, 0);
+			/* Allocate register for aggregate index */
+			int regAggIdx = parser->nMem + 1;
+			parser->nMem++;
+			__vdbe_add_op(v, OP_Integer, i, regAggIdx);
 			__vdbe_add_op(v, OP_AggFunc, 0,
 				      (e->pList ? e->pList->nExpr : 0));
 			DBSQL_ASSERT(parser->aAgg[i].pFunc != 0);
 			DBSQL_ASSERT(parser->aAgg[i].pFunc->xStep != 0);
-			__vdbe_change_p3(v, -1, (char*)parser->aAgg[i].pFunc,
+			__vdbe_change_p4(v, -1, (char*)parser->aAgg[i].pFunc,
 					 P3_POINTER);
 		}
 	}
