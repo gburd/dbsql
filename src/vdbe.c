@@ -724,6 +724,21 @@ __vdbe_exec(vdbe_t* p)
 	/* Get register array from VDBE (register-based architecture) */
 	aMem = p->registers;
 
+	/* Temporary compatibility variables for unconverted stack-based opcodes */
+	mem_t *pTos = NULL;      /* Top of stack (legacy - to be removed) */
+	mem_t *pIn1 = NULL;      /* Input register 1 (legacy - to be removed) */
+
+	/*
+	 * Stack compatibility: For legacy stack-based opcodes that haven't been
+	 * fully converted to register-based model, initialize pTos to point to
+	 * the last register. This allows opcodes like OP_MakeRecord to use
+	 * pTos[1-N] to access registers.
+	 * TODO: Remove once all opcodes are converted to pure register-based.
+	 */
+	if (p->nMem > 0) {
+		pTos = &aMem[p->nMem - 1];
+	}
+
 	/* Note: popStack logic removed - not needed in register-based VDBE */
 
 	for(pc = p->pc; rc == DBSQL_SUCCESS; pc++) {

@@ -1341,6 +1341,19 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 	if (nCursor == 0 && nMem > 0) nMem++;  /* Space for aMem[0] */
 
 	/*
+	 * Fix for DDL statements: Ensure minimum register allocation.
+	 * DDL operations like CREATE TABLE use legacy stack-based opcodes
+	 * (OP_MakeRecord with 5 fields) that haven't been fully converted to
+	 * register-based model. They need at least 10 registers to work:
+	 * - MakeRecord(5) needs pTos[1-5] = registers [pTos-4..pTos]
+	 * - If pTos = aMem[n_memory-1], we need n_memory >= 5
+	 * - Allocate 10 for safety margin and future opcodes
+	 */
+	if (nMem < 10) {
+		nMem = 10;  /* Minimum for legacy stack-based opcodes */
+	}
+
+	/*
 	 * Allocate the register array (aMem).
 	 */
 	if (vm->registers == 0) {
