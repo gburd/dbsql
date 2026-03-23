@@ -1133,7 +1133,8 @@ __vdbe_print_op(FILE* out, int pc, vdbe_op_t* op)
 {
 	char *p4str;
 	char ptr[50];
-	if (op->p4type == P4_POINTER) {
+	if (op->p4type < 0 && op->p4type != P4_DYNAMIC && op->p4type != P4_STATIC) {
+		/* Pointer types: P4_TABLE, P4_FUNCDEF, etc. */
 		sprintf(ptr, "ptr(%p)", op->p4.p);
 		p4str = ptr;
 	} else if (op->p4type == P4_INT32) {
@@ -1680,10 +1681,14 @@ __vdbe_finalize(vdbe_t* vm, char* *err_msgs)
 	db = vm->db;
 	rc = __vdbe_reset(vm, err_msgs);
 	__vdbe_delete(vm);
-	if (db->want_to_close && db->pVdbe == 0) {
 	/* TODO: Legacy field want_to_close removed in SQLite 3.52.0
 	 * Database close handling is now done explicitly by the caller.
+	 * The following code was removed:
+	 *   if (db->want_to_close && db->pVdbe == 0) {
+	 *       db->close(db);
+	 *   }
 	 */
+	return rc;
 }
 
 /*
