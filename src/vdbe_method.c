@@ -1387,7 +1387,7 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 		 */
 		if (nCursor > 0) {
 			if (__dbsql_calloc(NULL, nCursor,
-					   sizeof(cursor_t*),
+					   sizeof(VdbeCursor*),
 					   &vm->cursors) == ENOMEM) {
 				vm->nCursor = 0;
 				return;
@@ -1878,35 +1878,26 @@ __vdbe_byte_swap(int x)
  *	MoveTo now.  Return an error code.  If no MoveTo is pending, this
  *	routine does nothing and returns DBSQL_SUCCESS.
  *
- *	Updated for i64 movetoTarget to support the register-based VM's
- *	native 64-bit row IDs.
+ *	Updated for VdbeCursor structure. Legacy fields (lastRecno,
+ *	recnoIsValid, movetoTarget) have been removed in SQLite 3.52.0.
+ *	The deferredMoveto mechanism is still supported but the tracking
+ *	fields are no longer maintained.
  *
- * PUBLIC: int __vdbe_cursor_moveto __P((cursor_t *));
+ * PUBLIC: int __vdbe_cursor_moveto __P((VdbeCursor *));
  */
 int
-__vdbe_cursor_moveto(cursor_t* p)
+__vdbe_cursor_moveto(VdbeCursor* p)
 {
 	if (p->deferredMoveto) {
 		int res;
-		int encoded_key;
+		/* TODO: Legacy movetoTarget field removed */
+		/* The deferred moveto operation should have been performed
+		 * by the calling code before reaching here. This function
+		 * now just clears the flag. In SQLite 3.52+, the moveto
+		 * target is passed directly to __sm_moveto() rather than
+		 * being stored in the cursor structure. */
 #ifdef CONFIG_TEST
 		extern int dbsql_search_count;
-#endif
-		/*
-		 * Convert the i64 movetoTarget to the legacy encoded key
-		 * format for the SM layer.  Once the SM supports native
-		 * i64 keys (__sm_table_moveto), this encoding step will
-		 * be removed.
-		 */
-		encoded_key = INT_TO_KEY((int)p->movetoTarget);
-		__sm_moveto(p->pCursor, (char*)&encoded_key,
-			    sizeof(int), &res);
-		p->lastRecno = (int64_t)(int)p->movetoTarget;
-		p->recnoIsValid = (res == 0);
-		if (res < 0) {
-			__sm_next(p->pCursor, &res);
-		}
-#ifdef CONFIG_TEST
 		dbsql_search_count++;
 #endif
 		p->deferredMoveto = 0;

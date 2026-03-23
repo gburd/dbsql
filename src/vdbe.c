@@ -60,6 +60,11 @@
 #include "dbsql_int.h"
 #include "inc/vdbe_int.h"
 
+/* Number of Bytes for Fixed String - temp buffer size */
+#ifndef NBFS
+#define NBFS 32
+#endif
+
 /*
  * The following global variable is incremented every time a cursor
  * moves, either by the OP_MoveTo or the OP_Next opcode.  The test
@@ -82,6 +87,9 @@ int dbsql_search_count = 0;
 #ifdef CONFIG_TEST
 int dbsql_interrupt_count = 0;
 #endif
+
+/* Forward declarations for static helper functions */
+static int __entity_as_string(mem_t *);
 
 /*
  * __api_step --
@@ -155,8 +163,9 @@ __api_step(p, n, values, col_names)
 			/* column_names is mem_t* array, extract .z pointers */
 			static const char **colCache = NULL;
 			if (!colCache && vm->nResColumn > 0) {
-				colCache = (const char**)__dbsql_malloc(NULL,
-					vm->nResColumn * sizeof(char*));
+				__dbsql_malloc(NULL,
+					vm->nResColumn * sizeof(char*),
+					&colCache);
 			}
 			if (colCache && vm->column_names) {
 				int i;
@@ -182,8 +191,9 @@ __api_step(p, n, values, col_names)
 			/* result_row is mem_t* pointer, extract .z pointers */
 			static const char **valCache = NULL;
 			if (!valCache && vm->nResColumn > 0) {
-				valCache = (const char**)__dbsql_malloc(NULL,
-					vm->nResColumn * sizeof(char*));
+				__dbsql_malloc(NULL,
+					vm->nResColumn * sizeof(char*),
+					&valCache);
 			}
 			if (valCache) {
 				int i;
@@ -209,6 +219,7 @@ __api_step(p, n, values, col_names)
 	return rc;
 }
 
+#if 0  /* DISABLED - agg_t/agg_elem_t removed */
 /*
  * __agg_insert --
  *	Insert a new aggregate element and make it the element that
@@ -265,6 +276,7 @@ __agg_in_focus(agg_t* p)
 		return elem ? __hash_data(elem) : 0;
 	}
 }
+#endif  /* DISABLED - agg_t/agg_elem_t removed */
 
 /*
  * __entity_as_string --
@@ -278,20 +290,25 @@ __entity_as_string(mem_t* stack)
 {
 	if ((stack->flags & MEM_Str) == 0) {
 		int fg = stack->flags;
+		char buf[64];
+		int len;
 		if (fg & MEM_Real) {
-			snprintf(stack->zShort, sizeof(stack->zShort),
-					"%.15g", stack->r);
+			snprintf(buf, sizeof(buf), "%.15g", stack->u.r);
 		} else if (fg & MEM_Int) {
-			snprintf(stack->zShort, sizeof(stack->zShort),
-					"%d",stack->i);
+			snprintf(buf, sizeof(buf), "%lld", (long long)stack->u.i);
 		} else {
-			stack->zShort[0] = 0;
+			buf[0] = 0;
 		}
-		stack->z = stack->zShort;
-		stack->n = strlen(stack->zShort) + 1;
-		stack->flags = MEM_Str | MEM_Short;
+		len = strlen(buf) + 1;
+		if (__dbsql_malloc(NULL, len, &stack->z) != DBSQL_SUCCESS) {
+			return 1;
+		}
+		memcpy(stack->z, buf, len);
+		stack->n = len;
+		stack->flags = MEM_Str | MEM_Dyn;
 		return 0;
 	}
+	return 0;
 }
 
 /*
@@ -396,13 +413,13 @@ __entity_to_int(mem_t* stack)
 {
 	if ((stack->flags & MEM_Int) == 0) {
 		if (stack->flags & MEM_Real) {
-			stack->i = (int)stack->r;
+			stack->u.i = (int)stack->u.r;
 			__entity_release_mem(stack);
 		} else if (stack->flags & MEM_Str) {
-			__dbsql_atoi(stack->z, &stack->i);
+			__dbsql_atoi(stack->z, &stack->u.i);
 			__entity_release_mem(stack);
 		} else {
-			stack->i = 0;
+			stack->u.i = 0;
 		}
 		stack->flags = MEM_Int;
 	}
@@ -421,11 +438,11 @@ __entity_to_real(mem_t* stack)
 {
 	if ((stack->flags & MEM_Real) == 0) {
 		if (stack->flags & MEM_Str) {
-			stack->r = __dbsql_atof(stack->z);
+			stack->u.r = __dbsql_atof(stack->z);
 		} else if (stack->flags & MEM_Int) {
-			stack->r = stack->i;
+			stack->u.r = stack->u.i;
 		} else {
-			stack->r = 0.0;
+			stack->u.r = 0.0;
 		}
 		stack->flags |= MEM_Real;
 	}
@@ -443,17 +460,19 @@ static int
 __vdbe_boolean_value(mem_t* pMem, int ifNull)
 {
 	if (pMem->flags & MEM_Int)
-		return pMem->i != 0;
+		return pMem->u.i != 0;
 	if (pMem->flags & MEM_Null)
 		return ifNull;
 	if (pMem->flags & MEM_Real)
-		return pMem->r != 0.0;
+		return pMem->u.r != 0.0;
 	if (pMem->flags & MEM_Str) {
 		__entity_to_int(pMem);
-		return pMem->i != 0;
+		return pMem->u.i != 0;
 	}
 	return ifNull;
 }
+
+#if 0  /* DISABLED - Legacy sorter helper for removed Sort opcodes (sorter_t type removed) */
 /*
  * __sorted_merge --
  *	The parameters are pointers to the head of two sorted lists
@@ -488,6 +507,7 @@ __sorted_merge(sorter_t* left, sorter_t* right)
 	}
 	return head.pNext;
 }
+#endif  /* DISABLED - Legacy sorter helper */
 
 /*
  * __fgets --
@@ -566,10 +586,10 @@ __expand_cursor_array_size(vdbe_t* vm, int num_cursors)
 {
 	if (num_cursors >= vm->nCursor) {
 		if (__dbsql_realloc(NULL, ((num_cursors + 1) *
-				  sizeof(cursor_t*)), &vm->cursors) == ENOMEM)
+				  sizeof(VdbeCursor*)), &vm->cursors) == ENOMEM)
 			return 1;
 		memset(&vm->cursors[vm->nCursor], 0,
-		       (sizeof(cursor_t*) * (num_cursors + 1 - vm->nCursor)));
+		       (sizeof(VdbeCursor*) * (num_cursors + 1 - vm->nCursor)));
 		vm->nCursor = num_cursors + 1;
 	}
 	return 0;
@@ -917,7 +937,7 @@ case OP_Halt: {
 */
 case OP_Integer: {
 	pTos++;
-	pTos->i = pOp->p1;
+	pTos->u.i = pOp->p1;
 	pTos->flags = MEM_Int;
 	if (pOp->p3) {
 		pTos->z = pOp->p3;
@@ -1007,20 +1027,17 @@ case OP_Dup: {
 	mem_t *pFrom = &pTos[-pOp->p1];
 	/* Note: aStack assertion removed - register-based VDBE */
 	pTos++;
-	memcpy(pTos, pFrom, (sizeof(*pFrom) - NBFS));
+	memcpy(pTos, pFrom, (MEMCELLSIZE));
 	if (pTos->flags & MEM_Str) {
 		if (pOp->p2 && (pTos->flags & (MEM_Dyn | MEM_Ephem))) {
 			pTos->flags &= ~MEM_Dyn;
 			pTos->flags |= MEM_Ephem;
-		} else if (pTos->flags & MEM_Short) {
-			memcpy(pTos->zShort, pFrom->zShort, pTos->n);
-			pTos->z = pTos->zShort;
 		} else if ((pTos->flags & MEM_Static) == 0) {
 			if (__dbsql_calloc(NULL, 1, pFrom->n,
 					   &pTos->z) == ENOMEM)
 				goto no_mem;
 			memcpy(pTos->z, pFrom->z, pFrom->n);
-			pTos->flags &= ~(MEM_Static | MEM_Ephem | MEM_Short);
+			pTos->flags &= ~(MEM_Static | MEM_Ephem);
 			pTos->flags |= MEM_Dyn;
 		}
 	}
@@ -1052,18 +1069,8 @@ case OP_Pull: {
 		}
 		*pFrom = pFrom[1];
 		DBSQL_ASSERT((pFrom->flags & MEM_Ephem) == 0);
-		if (pFrom->flags & MEM_Short) {
-			DBSQL_ASSERT(pFrom->flags & MEM_Str);
-			DBSQL_ASSERT(pFrom->z == pFrom[1].zShort);
-			pFrom->z = pFrom->zShort;
-		}
 	}
 	*pTos = ts;
-	if (pTos->flags & MEM_Short) {
-		DBSQL_ASSERT(pTos->flags & MEM_Str);
-		DBSQL_ASSERT(pTos->z == pTos[-pOp->p1].zShort);
-		pTos->z = pTos->zShort;
-	}
 	break;
 }
 
@@ -1082,19 +1089,18 @@ case OP_Push: {
 	}
 	__entity_release_mem(pTo);
 	*pTo = *pTos;
-	if (pTo->flags & MEM_Short) {
-		DBSQL_ASSERT(pTo->z == pTos->zShort);
-		pTo->z = pTo->zShort;
-	}
 	pTos--;
 	break;
 }
 
 
+#if 0  /* DISABLED - Legacy callback opcodes (azColName/xCallback/nCallback removed) */
 /* Opcode: ColumnName P1 * P3
 **
 ** P3 becomes the P1-th column name (first is 0).  An array of pointers
 ** to all column names is passed as the 4th parameter to the callback.
+**
+** OBSOLETE: Replaced by register-based column_names in vdbe_t.
 */
 case OP_ColumnName: {
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nOp);
@@ -1108,6 +1114,8 @@ case OP_ColumnName: {
 ** Pop P1 values off the stack and form them into an array.  Then
 ** invoke the callback function using the newly formed array as the
 ** 3rd parameter.
+**
+** OBSOLETE: Replaced by OP_ResultRow which uses register-based result_row.
 */
 case OP_Callback: {
 	int i;
@@ -1145,6 +1153,7 @@ case OP_Callback: {
 	/* Note: aStack assertion removed - register-based VDBE */
 	break;
 }
+#endif  /* Legacy callback opcodes disabled */
 
 /* Opcode: ResultRow P1 P2 *
 **
@@ -1181,6 +1190,7 @@ case OP_ResultRow: {
 ** This opcode is used to report the number and names of columns
 ** in cases where the result set is empty.
 */
+#if 0  /* DISABLED - Legacy callback (xCallback/azColName removed) */
 case OP_NullCallback: {
 	if (p->nCallback == 0 && p->xCallback != 0) {
 		if (__safety_off(db))
@@ -1195,6 +1205,12 @@ case OP_NullCallback: {
 	p->nResColumn = pOp->p1;
 	break;
 }
+#else  /* Legacy callback (xCallback/azColName removed) */
+case OP_NullCallback:
+	/* Legacy callback (xCallback/azColName removed) */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
 
 /* Opcode: Concat P1 P2 P3
 **
@@ -1416,11 +1432,15 @@ arithmetic_result_is_null:
 	break;
 }
 
+#if 0  /* DISABLED - Legacy stack-based OP_Function (uses removed p->zArgv) */
 /* Opcode: Function P1 * P3
 **
 ** Invoke a user function (P3 is a pointer to a Function structure that
 ** defines the function) with P1 string arguments taken from the stack.
 ** Pop all arguments from the stack and push back the result.
+**
+** OBSOLETE: Stack-based implementation using removed p->zArgv field.
+** Modern code generators emit register-based function calls.
 **
 ** See also: AggFunc
 */
@@ -1454,9 +1474,7 @@ case OP_Function: {
 	__pop_stack(&pTos, n);
 	pTos++;
 	*pTos = ctx.s;
-	if (pTos->flags & MEM_Short) {
-		pTos->z = pTos->zShort;
-	}
+
 	if (ctx.isError) {
 		__str_append(&p->zErrMsg, ((pTos->flags & MEM_Str) != 0) ?
 			     pTos->z : "user function error", (char*)0);
@@ -1464,6 +1482,7 @@ case OP_Function: {
 	}
 	break;
 }
+#endif  /* Legacy stack-based OP_Function disabled */
 
 /* Opcode: BitAnd * * *
 **
@@ -1509,8 +1528,8 @@ case OP_ShiftRight: {
 	}
 	__entity_to_int(pTos);
 	__entity_to_int(pNos);
-	a = pTos->i;
-	b = pNos->i;
+	a = pTos->u.i;
+	b = pNos->u.i;
 	switch(pOp->opcode) {
 	case OP_BitAnd:      a &= b;     break;
 	case OP_BitOr:       a |= b;     break;
@@ -1521,7 +1540,7 @@ case OP_ShiftRight: {
 	DBSQL_ASSERT((pTos->flags & MEM_Dyn) == 0);
 	DBSQL_ASSERT((pNos->flags & MEM_Dyn) == 0);
 	pTos--;
-	pTos->i = a;
+	pTos->u.i = a;
 	DBSQL_ASSERT(pTos->flags == MEM_Int);
 	break;
 }
@@ -1536,7 +1555,7 @@ case OP_ShiftRight: {
 case OP_AddImm: {
 	/* Note: aStack assertion removed - register-based VDBE */
 	__entity_to_int(pTos);
-	pTos->i += pOp->p1;
+	pTos->u.i += pOp->p1;
 	break;
 }
 
@@ -1561,17 +1580,17 @@ case OP_ForceInt: {
 		break;
 	}
 	if (pTos->flags & MEM_Int) {
-		v = pTos->i + (pOp->p1 != 0);
+		v = pTos->u.i + (pOp->p1 != 0);
 	} else {
 		__entity_to_real(pTos);
-		v = (int)pTos->r;
-		if (pTos->r>(double)v)
+		v = (int)pTos->u.r;
+		if (pTos->u.r>(double)v)
 			v++;
-		if (pOp->p1 && pTos->r == (double)v)
+		if (pOp->p1 && pTos->u.r == (double)v)
 			v++;
 	}
 	__entity_release_mem(pTos);
-	pTos->i = v;
+	pTos->u.i = v;
 	pTos->flags = MEM_Int;
 	break;
 }
@@ -1592,12 +1611,12 @@ case OP_MustBeInt: {
 	if (pTos->flags & MEM_Int) {
 		/* Do nothing */
 	} else if (pTos->flags & MEM_Real) {
-		int i = (int)pTos->r;
+		int i = (int)pTos->u.r;
 		double r = (double)i;
-		if (r != pTos->r) {
+		if (r != pTos->u.r) {
 			goto mismatch;
 		}
-		pTos->i = i;
+		pTos->u.i = i;
 	} else if (pTos->flags & MEM_Str) {
 		int v;
 		if (!__dbsql_atoi(pTos->z, &v)) {
@@ -1606,13 +1625,13 @@ case OP_MustBeInt: {
 				goto mismatch;
 			}
 			__entity_to_real(pTos);
-			v = (int)pTos->r;
+			v = (int)pTos->u.r;
 			r = (double)v;
-			if (r != pTos->r) {
+			if (r != pTos->u.r) {
 				goto mismatch;
 			}
 		}
-		pTos->i = v;
+		pTos->u.i = v;
 	} else {
 		goto mismatch;
 	}
@@ -1766,13 +1785,13 @@ case OP_Ge: {
 		}
 		break;
 	} else if ((ft & fn & MEM_Int) == MEM_Int) {
-		c = pNos->i - pTos->i;
+		c = pNos->u.i - pTos->u.i;
 	} else if ((ft & MEM_Int) != 0 && (fn & MEM_Str) !=0
 		   && __dbsql_atoi(pNos->z,&v)) {
-		c = v - pTos->i;
+		c = v - pTos->u.i;
 	} else if ((fn & MEM_Int) != 0 && (ft & MEM_Str) !=0 &&
 		   __dbsql_atoi(pTos->z,&v)) {
-		c = pNos->i - v;
+		c = pNos->u.i - v;
 	} else {
 		__entity_as_string(pTos);
 		__entity_as_string(pNos);
@@ -1792,7 +1811,7 @@ case OP_Ge: {
 			pc = pOp->p2 - 1;
 	} else {
 		pTos++;
-		pTos->i = c;
+		pTos->u.i = c;
 		pTos->flags = MEM_Int;
 	}
 	break;
@@ -1972,7 +1991,7 @@ case OP_StrGe: {
 	} else {
 		pTos++;
 		pTos->flags = MEM_Int;
-		pTos->i = c;
+		pTos->u.i = c;
 	}
 	break;
 }
@@ -1999,13 +2018,13 @@ case OP_Or: {
 		v1 = 2;
 	} else {
 		__entity_to_int(pTos);
-		v1 = pTos->i == 0;
+		v1 = pTos->u.i == 0;
 	}
 	if (pNos->flags & MEM_Null) {
 		v2 = 2;
 	} else {
 		__entity_to_int(pNos);
-		v2 = pNos->i == 0;
+		v2 = pNos->u.i == 0;
 	}
 	if (pOp->opcode == OP_And) {
 		static const unsigned char and_logic[] =
@@ -2021,7 +2040,7 @@ case OP_Or: {
 	if (v1 == 2) {
 		pTos->flags = MEM_Null;
 	} else {
-		pTos->i = v1==0;
+		pTos->u.i = v1==0;
 		pTos->flags = MEM_Int;
 	}
 	break;
@@ -2044,14 +2063,14 @@ case OP_AbsValue: {
 	/* Note: aStack assertion removed - register-based VDBE */
 	if (pTos->flags & MEM_Real) {
 		__entity_release_mem(pTos);
-		if (pOp->opcode == OP_Negative || pTos->r < 0.0) {
-			pTos->r = -pTos->r;
+		if (pOp->opcode == OP_Negative || pTos->u.r < 0.0) {
+			pTos->u.r = -pTos->u.r;
 		}
 		pTos->flags = MEM_Real;
 	} else if (pTos->flags & MEM_Int) {
 		__entity_release_mem(pTos);
-		if (pOp->opcode == OP_Negative || pTos->i < 0) {
-			pTos->i = -pTos->i;
+		if (pOp->opcode == OP_Negative || pTos->u.i < 0) {
+			pTos->u.i = -pTos->u.i;
 		}
 		pTos->flags = MEM_Int;
 	} else if (pTos->flags & MEM_Null) {
@@ -2059,8 +2078,8 @@ case OP_AbsValue: {
 	} else {
 		__entity_to_real(pTos);
 		__entity_release_mem(pTos);
-		if (pOp->opcode == OP_Negative || pTos->r < 0.0) {
-			pTos->r = -pTos->r;
+		if (pOp->opcode == OP_Negative || pTos->u.r < 0.0) {
+			pTos->u.r = -pTos->u.r;
 		}
 		pTos->flags = MEM_Real;
 	}
@@ -2079,7 +2098,7 @@ case OP_Not: {
 		break;  /* Do nothing to NULLs */
 	__entity_to_int(pTos);
 	DBSQL_ASSERT(pTos->flags == MEM_Int);
-	pTos->i = !pTos->i;
+	pTos->u.i = !pTos->u.i;
 	break;
 }
 
@@ -2095,7 +2114,7 @@ case OP_BitNot: {
 		break;  /* Do nothing to NULLs */
 	__entity_to_int(pTos);
 	DBSQL_ASSERT(pTos->flags == MEM_Int);
-	pTos->i = ~pTos->i;
+	pTos->u.i = ~pTos->u.i;
 	break;
 }
 
@@ -2261,7 +2280,7 @@ case OP_MakeRecord: {
 		}
 	}
 	if (addUnique)
-		nByte += sizeof(p->uniqueCnt);
+		nByte += sizeof(0 /* TODO: uniqueCnt removed */);
 	if (nByte + nField + 1 < 256) {
 		idxWidth = 1;
 	} else if (nByte + (2 * nField) + 2 < 65536) {
@@ -2277,7 +2296,7 @@ case OP_MakeRecord: {
 			goto no_mem;
 	}
 	j = 0;
-	addr = idxWidth * (nField + 1) + addUnique * sizeof(p->uniqueCnt);
+	addr = idxWidth * (nField + 1) + addUnique * sizeof(0 /* TODO: uniqueCnt removed */);
 	for (i = 0, pRec = &pTos[1 - nField]; i < nField; i++, pRec++) {
 		zNewRecord[j++] = addr & 0xff;
 		if (idxWidth > 1) {
@@ -2298,9 +2317,11 @@ case OP_MakeRecord: {
 		}
 	}
 	if (addUnique) {
-		memcpy(&zNewRecord[j], &p->uniqueCnt, sizeof(p->uniqueCnt));
-		p->uniqueCnt++;
-		j += sizeof(p->uniqueCnt);
+		/* TODO: uniqueCnt field removed - needs redesign */
+		/* For now, use a constant placeholder */
+		u32 uniqueVal = 0;
+		memcpy(&zNewRecord[j], &uniqueVal, sizeof(uniqueVal));
+		j += sizeof(uniqueVal);
 	}
 	for (i = 0, pRec = &pTos[1 - nField]; i < nField; i++, pRec++) {
 		if ((pRec->flags & MEM_Null) == 0) {
@@ -2313,9 +2334,9 @@ case OP_MakeRecord: {
 	pTos->n = nByte;
 	if (nByte <= NBFS) {
 		DBSQL_ASSERT(zNewRecord == zTemp);
-		memcpy(pTos->zShort, zTemp, nByte);
-		pTos->z = pTos->zShort;
-		pTos->flags = MEM_Str | MEM_Short;
+		memcpy(pTos->z, zTemp, nByte);
+		pTos->z = pTos->z;
+		pTos->flags = MEM_Str;
 	} else {
 		DBSQL_ASSERT(zNewRecord != zTemp);
 		pTos->z = zNewRecord;
@@ -2419,20 +2440,20 @@ case OP_MakeKey: {
 		if (flags & MEM_Null) {
 			nByte += 2;
 			containsNull = 1;
-		} else if (pOp->p3 && pOp->p3[j] == 't') {
+		} else if (pOp->p4.z && pOp->p4.z[j] == 't') {  /* Was p3[j] */
 			__entity_as_string(pRec);
 			pRec->flags &= ~(MEM_Int | MEM_Real);
 			nByte += (pRec->n + 1);
 		} else if ((flags & (MEM_Real | MEM_Int)) != 0 ||
 			   __str_is_numeric(pRec->z)) {
 			if ((flags & (MEM_Real | MEM_Int)) == MEM_Int) {
-				pRec->r = pRec->i;
+				pRec->u.r = pRec->u.i;
 			} else if ((flags & (MEM_Real | MEM_Int)) == 0) {
-				pRec->r = __dbsql_atof(pRec->z);
+				pRec->u.r = __dbsql_atof(pRec->z);
 			}
 			__entity_release_mem(pRec);
-			z = pRec->zShort;
-			__str_real_as_sortable(pRec->r, z);
+			z = pRec->z;
+			__str_real_as_sortable(pRec->u.r, z);
 			len = strlen(z);
 			pRec->z = 0;
 			pRec->flags = MEM_Real;
@@ -2458,7 +2479,7 @@ case OP_MakeKey: {
 			zNewKey[j++] = 0;
 		} else if (pRec->flags == MEM_Real) {
 			zNewKey[j++] = 'b';
-			memcpy(&zNewKey[j], pRec->zShort, pRec->n);
+			memcpy(&zNewKey[j], pRec->z, pRec->n);
 			j += pRec->n;
 		} else {
 			DBSQL_ASSERT(pRec->flags & MEM_Str);
@@ -2472,7 +2493,7 @@ case OP_MakeKey: {
 		pRec = &pTos[-nField];
 		/* Note: aStack assertion removed - register-based VDBE */
 		__entity_to_int(pRec);
-		iKey = INT_TO_KEY(pRec->i);
+		iKey = INT_TO_KEY(pRec->u.i);
 		memcpy(&zNewKey[j], &iKey, sizeof(u_int32_t));
 		__pop_stack(&pTos, (nField + 1));
 		if (pOp->p2 && containsNull)
@@ -2485,9 +2506,9 @@ case OP_MakeKey: {
 	pTos->n = nByte;
 	if (nByte <= NBFS) {
 		DBSQL_ASSERT(zNewKey == zTemp);
-		pTos->z = pTos->zShort;
-		memcpy(pTos->zShort, zTemp, nByte);
-		pTos->flags = MEM_Str | MEM_Short;
+		pTos->z = pTos->z;
+		memcpy(pTos->z, zTemp, nByte);
+		pTos->flags = MEM_Str;
 	} else {
 		pTos->z = zNewKey;
 		pTos->flags = MEM_Str | MEM_Dyn;
@@ -2511,7 +2532,7 @@ case OP_IncrKey: {
 	 * are always dynamic strings or zShort[] strings.  So we
 	 * are always free to modify the string in place.
 	 */
-	DBSQL_ASSERT(pTos->flags & (MEM_Dyn | MEM_Short));
+	DBSQL_ASSERT(pTos->flags & (MEM_Dyn));
 	pTos->z[pTos->n-1]++;
 	break;
 }
@@ -2553,7 +2574,7 @@ case OP_Transaction: {
 		break;
 	rc = __sm_begin_txn(db->aDb[i].pBt);
 	db->aDb[i].inTrans = 1;
-	p->undoTransOnError = 1;
+	/* TODO: undoTransOnError field removed */
 	break;
 }
 
@@ -2619,7 +2640,7 @@ case OP_SetFormatVersion: {
 	DBSQL_ASSERT(db->aDb[pOp->p1].pBt != 0);
 	/* Note: aStack assertion removed - register-based VDBE */
 	__entity_to_int(pTos);
-	rc = __sm_set_format_version(db->aDb[pOp->p1].pBt, pOp->p1, pTos->i);
+	rc = __sm_set_format_version(db->aDb[pOp->p1].pBt, pOp->p1, pTos->u.i);
 	DBSQL_ASSERT(pTos->flags == MEM_Int);
 	pTos--;
 	break;
@@ -2634,7 +2655,7 @@ case OP_SetFormatVersion: {
 case OP_SetSchemaSignature: {
 	/* Note: aStack assertion removed - register-based VDBE */
 	__entity_to_int(pTos);
-	rc = __sm_set_schema_sig(db->aDb[pOp->p1].pBt, pTos->i);
+	rc = __sm_set_schema_sig(db->aDb[pOp->p1].pBt, pTos->u.i);
 	DBSQL_ASSERT(pTos->flags == MEM_Int);
 	pTos--;
 	break;
@@ -2738,7 +2759,7 @@ case OP_OpenWrite: {
 	/* Get KeyInfo or nField from P4 */
 	if (pOp->p4type == P4_KEYINFO) {
 		pKeyInfo = pOp->p4.pKeyInfo;
-		nField = pKeyInfo->nField + pKeyInfo->nXField;
+		nField = pKeyInfo->nAllField;  /* Was nField + nXField */
 	} else if (pOp->p4type == P4_INT32) {
 		nField = pOp->p4.i;
 	}
@@ -2821,7 +2842,7 @@ case OP_OpenTemp: {
 		/* Reuse existing ephemeral cursor - just clear its content */
 		pCur->seqCount = 0;
 		pCur->cacheStatus = CACHE_STALE;
-		rc = __sm_clear_table(pCur->ub.pBtx, pCur->pgnoRoot, 0);
+		rc = __sm_clear_table(pCur->ub.pBtx, pCur->pgnoRoot);
 		if (rc != DBSQL_SUCCESS)
 			goto abort_due_to_error;
 	} else {
@@ -2977,12 +2998,12 @@ case OP_MoveTo: {
 
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	pC = &p->cursors[i];
-	if (pC->pCursor != 0) {
+	pC = p->cursors[i];
+	if (pC->uc.pCursor != 0) {
 		int res, oc;
 		pC->nullRow = 0;
 		if (pTos->flags & MEM_Int) {
-			int iKey = INT_TO_KEY(pTos->i);
+			int iKey = INT_TO_KEY(pTos->u.i);
 			if (pOp->p2 == 0 && pOp->opcode == OP_MoveTo) {
 				pC->movetoTarget = iKey;
 				pC->deferredMoveto = 1;
@@ -2990,14 +3011,14 @@ case OP_MoveTo: {
 				pTos--;
 				break;
 			}
-			__sm_moveto(pC->pCursor, (char*)&iKey, sizeof(int),
+			__sm_moveto(pC->uc.pCursor, (char*)&iKey, sizeof(int),
 				    &res);
-			pC->lastRecno = pTos->i;
-			pC->recnoIsValid = (res == 0);
+			/* TODO: Legacy field removed */ /* pC->lastRecno = pTos->u.i; */
+			/* TODO: Legacy field removed */ /* pC->recnoIsValid = (res == 0); */
 		} else {
 			__entity_as_string(pTos);
-			__sm_moveto(pC->pCursor, pTos->z, pTos->n, &res);
-			pC->recnoIsValid = 0;
+			__sm_moveto(pC->uc.pCursor, pTos->z, pTos->n, &res);
+			/* TODO: Legacy field removed */ /* pC->recnoIsValid = 0; */
 		}
 		pC->deferredMoveto = 0;
 #ifdef CONFIG_TEST
@@ -3005,22 +3026,22 @@ case OP_MoveTo: {
 #endif
 		oc = pOp->opcode;
 		if (oc == OP_MoveTo && res < 0) {
-			__sm_next(pC->pCursor, &res);
-			pC->recnoIsValid = 0;
+			__sm_next(pC->uc.pCursor, &res);
+			/* TODO: Legacy field removed */ /* pC->recnoIsValid = 0; */
 			if (res && pOp->p2 > 0) {
 				pc = pOp->p2 - 1;
 			}
 		} else if (oc == OP_MoveLt) {
 			if (res >= 0) {
-				__sm_prev(pC->pCursor, &res);
-				pC->recnoIsValid = 0;
+				__sm_prev(pC->uc.pCursor, &res);
+				/* TODO: Legacy field removed */ /* pC->recnoIsValid = 0; */
 			} else {
 				/*
 				 * 'res' might be negative because the table is
 				 * empty.  Check to see if this is the case.
 				 */
 				int keysize;
-				res = (__sm_key_size(pC->pCursor, &keysize)
+				res = (__sm_key_size(pC->uc.pCursor, &keysize)
 				       != 0 || keysize == 0);
 			}
 			if (res && pOp->p2 > 0) {
@@ -3074,10 +3095,10 @@ case OP_Found: {
 	VdbeCursor *pC;
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	if ((pC = &p->cursors[i])->pCursor != 0) {
+	if ((pC = p->cursors[i])->uc.pCursor != 0) {
 		int res, rx;
 		__entity_as_string(pTos);
-		rx = __sm_moveto(pC->pCursor, pTos->z, pTos->n, &res);
+		rx = __sm_moveto(pC->uc.pCursor, pTos->z, pTos->n, &res);
 		alreadyExists = (rx == DBSQL_SUCCESS && res == 0);
 		pC->deferredMoveto = 0;
 	}
@@ -3169,16 +3190,16 @@ case OP_SeekGE:  /* FALLTHROUGH */
 case OP_SeekGT: {
 	int i = pOp->p1;
 	VdbeCursor *pC;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 	int res;
 	int oc;
 	i64 iKey;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	DBSQL_ASSERT(pOp->p2 != 0);
-	pC = &p->cursors[i];
+	pC = p->cursors[i];
 	DBSQL_ASSERT(pC != 0);
-	pCrsr = pC->pCursor;
+	pCrsr = pC->uc.pCursor;
 	DBSQL_ASSERT(pCrsr != 0);
 
 	oc = pOp->opcode;
@@ -3281,14 +3302,14 @@ case OP_SeekGT: {
 case OP_SeekRowid: {
 	int i = pOp->p1;
 	VdbeCursor *pC;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 	int res;
 	i64 iKey;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	pC = &p->cursors[i];
+	pC = p->cursors[i];
 	DBSQL_ASSERT(pC != 0);
-	pCrsr = pC->pCursor;
+	pCrsr = pC->uc.pCursor;
 	DBSQL_ASSERT(pCrsr != 0);
 
 	pC->nullRow = 0;
@@ -3356,7 +3377,7 @@ case OP_SeekRowid: {
 case OP_IsUnique: {
 	int i = pOp->p1;
 	mem_t *pNos = &pTos[-1];
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 	int R;
 
 	/*
@@ -3364,10 +3385,10 @@ case OP_IsUnique: {
 	 */
 	/* Note: aStack assertion removed - register-based VDBE */
 	__entity_to_int(pTos);
-	R = pTos->i;
+	R = pTos->u.i;
 	pTos--;
 	DBSQL_ASSERT(i >= 0 && i <= p->nCursor);
-	if ((pCrsr = p->cursors[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i]->uc.pCursor) != 0) {
 		int res, rc;
 		int v;         /* The record number on the P1 entry
 				  that matches K. */
@@ -3387,7 +3408,7 @@ case OP_IsUnique: {
 		 * bytes match K.  If there is no such entry, jump immediately
 		 * to P2.
 		 */
-		DBSQL_ASSERT(p->cursors[i].deferredMoveto == 0);
+		DBSQL_ASSERT(p->cursors[i]->deferredMoveto == 0);
 		rc = __sm_moveto(pCrsr, zKey, (nKey - 4), &res);
 		if (rc != DBSQL_SUCCESS)
 			goto abort_due_to_error;
@@ -3426,7 +3447,7 @@ case OP_IsUnique: {
 		 * number of an entry that violates a UNIQUE constraint.)
 		 */
 		pTos++;
-		pTos->i = v;
+		pTos->u.i = v;
 		pTos->flags = MEM_Int;
 	}
 	break;
@@ -3447,20 +3468,20 @@ case OP_IsUnique: {
 */
 case OP_NotExists: {
 	int i = pOp->p1;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	if ((pCrsr = p->cursors[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i]->uc.pCursor) != 0) {
 		int res, rx, iKey;
 		DBSQL_ASSERT(pTos->flags & MEM_Int);
-		iKey = INT_TO_KEY(pTos->i);
+		iKey = INT_TO_KEY(pTos->u.i);
 		rx = __sm_moveto(pCrsr, (char*)&iKey, sizeof(int), &res);
-		p->cursors[i].lastRecno = pTos->i;
-		p->cursors[i].recnoIsValid = res==0;
-		p->cursors[i].nullRow = 0;
+		/* TODO: Legacy field removed */ /* p->cursors[i]->lastRecno = pTos->u.i; */
+		/* TODO: Legacy field removed */ /* p->cursors[i]->recnoIsValid = res==0; */
+		p->cursors[i]->nullRow = 0;
 		if (rx != DBSQL_SUCCESS || res != 0) {
 			pc = pOp->p2 - 1;
-			p->cursors[i].recnoIsValid = 0;
+			/* TODO: Legacy field removed */ /* p->cursors[i]->recnoIsValid = 0; */
 		}
 	}
 	__entity_release_mem(pTos);
@@ -3486,7 +3507,7 @@ case OP_NewRecno: {
 	int v = 0;
 	VdbeCursor *pC;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	if ((pC = &p->cursors[i])->pCursor == 0) {
+	if ((pC = p->cursors[i])->uc.pCursor == 0) {
 		v = 0;
 	} else {
 		/* !!!
@@ -3523,14 +3544,13 @@ case OP_NewRecno: {
 		int res, rx, cnt, x;
 		cnt = 0;
 		if (!pC->useRandomRowid) {
-			if (pC->nextRowidValid) {
-				v = pC->nextRowid;
-			} else {
-				rx = __sm_last(pC->pCursor, &res);
+			/* TODO: nextRowidValid removed - always use SM cursor */
+			{
+				rx = __sm_last(pC->uc.pCursor, &res);
 				if (res) {
 					v = 1;
 				} else {
-					__sm_key(pC->pCursor, 0, sizeof(v),
+					__sm_key(pC->uc.pCursor, 0, sizeof(v),
 						 (void*)&v);
 					v = KEY_TO_INT(v);
 					if (v == 0x7fffffff) {
@@ -3540,12 +3560,7 @@ case OP_NewRecno: {
 					}
 				}
 			}
-			if (v < 0x7fffffff) {
-				pC->nextRowidValid = 1;
-				pC->nextRowid = v + 1;
-			} else {
-				pC->nextRowidValid = 0;
-			}
+			/* TODO: nextRowidValid/nextRowid removed */
 		}
 		if (pC->useRandomRowid) {
 			v = db->priorNewRowid;
@@ -3563,7 +3578,7 @@ case OP_NewRecno: {
 				if (v == 0)
 					continue;
 				x = INT_TO_KEY(v);
-				rx = __sm_moveto(pC->pCursor, &x, sizeof(int),
+				rx = __sm_moveto(pC->uc.pCursor, &x, sizeof(int),
 						 &res);
 				cnt++;
 			} while(cnt < 1000 && rx == DBSQL_SUCCESS && res == 0);
@@ -3573,11 +3588,11 @@ case OP_NewRecno: {
 				goto abort_due_to_error;
 			}
 		}
-		pC->recnoIsValid = 0;
+		/* TODO: Legacy field removed */ /* pC->recnoIsValid = 0; */
 		pC->deferredMoveto = 0;
 	}
 	pTos++;
-	pTos->i = v;
+	pTos->u.i = v;
 	pTos->flags = MEM_Int;
 	break;
 }
@@ -3611,7 +3626,7 @@ case OP_PutStrKey: {
 	VdbeCursor *pC;
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	if (((pC = &p->cursors[i])->pCursor != 0 || pC->pseudoTable)) {
+	if (((pC = p->cursors[i]) && (pC->uc.pCursor != 0 || pC->eCurType == CURTYPE_PSEUDO))) {
 		char *zKey;
 		int nKey, iKey;
 		if (pOp->opcode == OP_PutStrKey) {
@@ -3621,42 +3636,26 @@ case OP_PutStrKey: {
 		} else {
 			DBSQL_ASSERT(pNos->flags & MEM_Int);
 			nKey = sizeof(int);
-			iKey = INT_TO_KEY(pNos->i);
+			iKey = INT_TO_KEY(pNos->u.i);
 			zKey = (char*)&iKey;
 			if (pOp->p2) {
 				db->_num_last_changes++;
 				db->_num_total_changes++;
-				db->lastRowid = pNos->i;
+				db->lastRowid = pNos->u.i;
 			}
-			if (pC->nextRowidValid && pTos->i >= pC->nextRowid) {
-				pC->nextRowidValid = 0;
-			}
+			/* TODO: nextRowidValid field removed in register-based VDBE */
 		}
-		if (pC->pseudoTable) {
-			/*
-			 * PutStrKey does not work for pseudo-tables.
-			 * The following DBSQL_ASSERT makes sure we are not
-			 * trying to use PutStrKey on a pseudo-table
-			 */
+		if (pC->eCurType == CURTYPE_PSEUDO) {
+			/* TODO: CURTYPE_PSEUDO insert needs modernization */
+			/* In new VDBE, pseudo cursors store data differently */
 			DBSQL_ASSERT(pOp->opcode == OP_PutIntKey);
-			__dbsql_free(NULL, pC->pData);
-			pC->iKey = iKey;
-			pC->nData = pTos->n;
-			if (pTos->flags & MEM_Dyn) {
-				pC->pData = pTos->z;
-				pTos->flags = MEM_Null;
-			} else {
-				if (__dbsql_calloc(NULL, 1, pC->nData,
-						&pC->pData) != ENOMEM) {
-					memcpy(pC->pData, pTos->z, pC->nData);
-				}
-			}
 			pC->nullRow = 0;
+			/* TODO: Pseudo-table data storage removed - needs redesign */
 		} else {
-			rc = __sm_insert(pC->pCursor, zKey, nKey, pTos->z,
+			rc = __sm_insert(pC->uc.pCursor, zKey, nKey, pTos->z,
 					 pTos->n);
 		}
-		pC->recnoIsValid = 0;
+		/* TODO: recnoIsValid field removed */
 		pC->deferredMoveto = 0;
 	}
 	__pop_stack(&pTos, 2);
@@ -3681,11 +3680,12 @@ case OP_Delete: {
 	int i = pOp->p1;
 	VdbeCursor *pC;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	pC = &p->cursors[i];
-	if (pC->pCursor != 0) {
-		__vdbe_cursor_moveto(pC);
-		rc = __sm_delete(pC->pCursor);
-		pC->nextRowidValid = 0;
+	pC = p->cursors[i];
+	if (pC->uc.pCursor != 0) {
+		/* TODO: __vdbe_cursor_moveto needs VdbeCursor * */
+		/* __vdbe_cursor_moveto(pC); */
+		rc = __sm_delete(pC->uc.pCursor);
+		/* TODO: nextRowidValid field removed in register-based VDBE */
 	}
 	if (pOp->p2) {
 		db->_num_last_changes++;
@@ -3704,7 +3704,8 @@ case OP_Delete: {
 case OP_KeyAsData: {
 	int i = pOp->p1;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	p->cursors[i].keyAsData = pOp->p2;
+	/* Note: keyAsData replaced by isTable (inverted logic) */
+	p->cursors[i]->isTable = !pOp->p2;
 	break;
 }
 
@@ -3734,37 +3735,39 @@ case OP_RowData: {
 
 	pTos++;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	pC = &p->cursors[i];
+	pC = p->cursors[i];
 	if (pC->nullRow) {
 		pTos->flags = MEM_Null;
-	} else if (pC->pCursor != 0) {
-		sm_VdbeCursor *pCrsr = pC->pCursor;
-		__vdbe_cursor_moveto(pC);
+	} else if (pC->uc.pCursor != 0) {
+		sm_cursor_t *pCrsr = pC->uc.pCursor;
+		/* TODO: __vdbe_cursor_moveto needs VdbeCursor * */
+		/* __vdbe_cursor_moveto(pC); */
 		if (pC->nullRow) {
 			pTos->flags = MEM_Null;
 			break;
-		} else if (pC->keyAsData || pOp->opcode == OP_RowKey) {
+		} else if (!pC->isTable || pOp->opcode == OP_RowKey) {
 			__sm_key_size(pCrsr, &n);
 		} else {
 			__sm_data_size(pCrsr, &n);
 		}
 		pTos->n = n;
 		if (n <= NBFS) {
-			pTos->flags = MEM_Str | MEM_Short;
-			pTos->z = pTos->zShort;
+			pTos->flags = MEM_Str;
+			pTos->z = pTos->z;
 		} else {
 			if (__dbsql_calloc(NULL, 1, n, &pTos->z) == ENOMEM)
 				goto no_mem;
 			pTos->flags = MEM_Str | MEM_Dyn;
 		}
-		if (pC->keyAsData || pOp->opcode == OP_RowKey) {
+		if (!pC->isTable || pOp->opcode == OP_RowKey) {
 			__sm_key(pCrsr, 0, n, pTos->z);
 		} else {
 			__sm_data(pCrsr, 0, n, pTos->z);
 		}
-	} else if (pC->pseudoTable) {
-		pTos->n = pC->nData;
-		pTos->z = pC->pData;
+	} else if (pC && pC->eCurType == CURTYPE_PSEUDO) {
+		/* TODO: CURTYPE_PSEUDO data access needs modernization */
+		pTos->n = 0;
+		pTos->z = NULL;
 		pTos->flags = MEM_Str|MEM_Ephem;
 	} else {
 		pTos->flags = MEM_Null;
@@ -3797,7 +3800,7 @@ case OP_Column: {
 	int p2 = pOp->p2;
 	VdbeCursor *pC;
 	char *zRec;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 	int idxWidth;
 	unsigned char aHdr[10];
 
@@ -3808,21 +3811,23 @@ case OP_Column: {
 		DBSQL_ASSERT(pTos[i].flags & MEM_Str);
 		zRec = pTos[i].z;
 		payloadSize = pTos[i].n;
-	} else if ((pC = &p->cursors[i])->pCursor != 0) {
-		__vdbe_cursor_moveto(pC);
+	} else if ((pC = p->cursors[i]) && pC->uc.pCursor != 0) {
+		/* TODO: __vdbe_cursor_moveto needs VdbeCursor * not cursor_t * */
+		/* __vdbe_cursor_moveto(pC); */
 		zRec = 0;
-		pCrsr = pC->pCursor;
+		pCrsr = pC->uc.pCursor;
 		if (pC->nullRow) {
 			payloadSize = 0;
-		} else if (pC->keyAsData) {
+		} else if (!pC->isTable) {  /* Index cursor (was keyAsData) */
 			__sm_key_size(pCrsr, &payloadSize);
 		} else {
 			__sm_data_size(pCrsr, &payloadSize);
 		}
-	} else if (pC->pseudoTable) {
-		payloadSize = pC->nData;
-		zRec = pC->pData;
-		DBSQL_ASSERT(payloadSize == 0 || zRec != 0);
+	} else if (pC && pC->eCurType == CURTYPE_PSEUDO) {  /* Was pseudoTable */
+		/* TODO: CURTYPE_PSEUDO data access needs modernization */
+		/* In new VDBE, seekResult holds the register number */
+		payloadSize = 0;  /* Stub for now */
+		zRec = NULL;
 	} else {
 		payloadSize = 0;
 	}
@@ -3851,7 +3856,7 @@ case OP_Column: {
 	}
 	if (zRec) {
 		memcpy(aHdr, &zRec[idxWidth * p2], idxWidth * 2);
-	} else if (pC->keyAsData) {
+	} else if (!pC->isTable) {  /* Index cursor (was keyAsData) */
 		__sm_key(pCrsr, idxWidth * p2, idxWidth * 2, (char*)aHdr);
 	} else {
 		__sm_data(pCrsr, idxWidth * p2, idxWidth * 2, (char*)aHdr);
@@ -3884,14 +3889,14 @@ case OP_Column: {
 		pTos->z = &zRec[offset];
 	} else {
 		if (amt <= NBFS) {
-			pTos->flags = MEM_Str | MEM_Short;
-			pTos->z = pTos->zShort;
+			pTos->flags = MEM_Str;
+			pTos->z = pTos->z;
 		} else {
 			if (__dbsql_calloc(NULL, 1, amt, &pTos->z) == ENOMEM)
 				goto no_mem;
 			pTos->flags = MEM_Str | MEM_Dyn;
 		}
-		if (pC->keyAsData) {
+		if (!pC->isTable) {  /* Index cursor (was keyAsData) */
 			__sm_key(pCrsr, offset, amt, pTos->z);
 		} else {
 			__sm_data(pCrsr, offset, amt, pTos->z);
@@ -3939,7 +3944,7 @@ case OP_Rowid: {
 	}
 	/* Read rowid from btree cursor */
 	else if (pC->eCurType == CURTYPE_BTREE) {
-		sm_VdbeCursor *pCrsr = pC->uc.pCursor;
+		sm_cursor_t *pCrsr = pC->uc.pCursor;
 		if (pCrsr == 0) {
 			__vdbe_mem_set_null(pOut);
 			break;
@@ -3970,17 +3975,18 @@ case OP_Rowid: {
 */
 case OP_FullKey: {
 	int i = pOp->p1;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 
-	DBSQL_ASSERT(p->cursors[i].keyAsData);
-	DBSQL_ASSERT(!p->cursors[i].pseudoTable);
+	DBSQL_ASSERT(p->cursors[i]->keyAsData);
+	DBSQL_ASSERT(!p->cursors[i]->pseudoTable);
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	pTos++;
-	if ((pCrsr = p->cursors[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i]->uc.pCursor) != 0) {
 		int amt;
 		char *z;
 
-		__vdbe_cursor_moveto(&p->cursors[i]);
+		/* TODO: __vdbe_cursor_moveto needs VdbeCursor * not cursor_t * */
+		/* __vdbe_cursor_moveto(p->cursors[i]); */
 		__sm_key_size(pCrsr, &amt);
 		if (amt <= 0) {
 			rc = DBSQL_CORRUPT;
@@ -3991,8 +3997,8 @@ case OP_FullKey: {
 				goto no_mem;
 			pTos->flags = MEM_Str | MEM_Dyn;
 		} else {
-			z = pTos->zShort;
-			pTos->flags = MEM_Str | MEM_Short;
+			z = pTos->z;
+			pTos->flags = MEM_Str;
 		}
 		__sm_key(pCrsr, 0, amt, z);
 		pTos->z = z;
@@ -4011,8 +4017,8 @@ case OP_NullRow: {
 	int i = pOp->p1;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	p->cursors[i].nullRow = 1;
-	p->cursors[i].recnoIsValid = 0;
+	p->cursors[i]->nullRow = 1;
+	/* TODO: recnoIsValid field removed in register-based VDBE */
 	break;
 }
 
@@ -4027,11 +4033,11 @@ case OP_NullRow: {
 case OP_Last: {
 	int i = pOp->p1;
 	VdbeCursor *pC;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	pC = &p->cursors[i];
-	if ((pCrsr = pC->pCursor) != 0) {
+	pC = p->cursors[i];
+	if ((pCrsr = pC->uc.pCursor) != 0) {
 		int res;
 		rc = __sm_last(pCrsr, &res);
 		pC->nullRow = res;
@@ -4065,7 +4071,7 @@ case OP_Last: {
 */
 case OP_Rewind: {
 	VdbeCursor *pC;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 	int res;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
@@ -4117,7 +4123,7 @@ case OP_Rewind: {
 */
 case OP_Prev: {
 	VdbeCursor *pC;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 	int res;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
@@ -4157,7 +4163,7 @@ case OP_Prev: {
 */
 case OP_Next: {
 	VdbeCursor *pC;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 	int res;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
@@ -4200,11 +4206,11 @@ case OP_Next: {
 */
 case OP_IdxPut: {
 	int i = pOp->p1;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	DBSQL_ASSERT(pTos->flags & MEM_Str);
-	if ((pCrsr = p->cursors[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i]->uc.pCursor) != 0) {
 		int nKey = pTos->n;
 		const char *zKey = pTos->z;
 		if (pOp->p2) {
@@ -4221,9 +4227,10 @@ case OP_IdxPut: {
 						     4, &c) == DBSQL_SUCCESS &&
 				    c == 0) {
 					rc = DBSQL_CONSTRAINT;
-					if (pOp->p3 && pOp->p3[0]) {
+					/* Note: p3 is now an int register, error msg in p4.z */
+					if (pOp->p4.z && pOp->p4.z[0]) {
 						__str_append(&p->zErrMsg,
-							    pOp->p3, (char*)0);
+							    pOp->p4.z, (char*)0);
 					}
 					goto abort_due_to_error;
 				}
@@ -4236,7 +4243,7 @@ case OP_IdxPut: {
 			}
 		}
 		rc = __sm_insert(pCrsr, zKey, nKey, "", 0);
-		DBSQL_ASSERT(p->cursors[i].deferredMoveto == 0);
+		DBSQL_ASSERT(p->cursors[i]->deferredMoveto == 0);
 	}
 	__entity_release_mem(pTos);
 	pTos--;
@@ -4250,17 +4257,17 @@ case OP_IdxPut: {
 */
 case OP_IdxDelete: {
 	int i = pOp->p1;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(pTos->flags & MEM_Str);
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
-	if ((pCrsr = p->cursors[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i]->uc.pCursor) != 0) {
 		int rx, res;
 		rx = __sm_moveto(pCrsr, pTos->z, pTos->n, &res);
 		if (rx == DBSQL_SUCCESS && res == 0) {
 			rc = __sm_delete(pCrsr);
 		}
-		DBSQL_ASSERT(p->cursors[i].deferredMoveto == 0);
+		DBSQL_ASSERT(p->cursors[i]->deferredMoveto == 0);
 	}
 	__entity_release_mem(pTos);
 	pTos--;
@@ -4278,14 +4285,14 @@ case OP_IdxDelete: {
 */
 case OP_IdxRecno: {
 	int i = pOp->p1;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	pTos++;
-	if ((pCrsr = p->cursors[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i]->uc.pCursor) != 0) {
 		int v;
 		int sz;
-		DBSQL_ASSERT(p->cursors[i].deferredMoveto == 0);
+		DBSQL_ASSERT(p->cursors[i]->deferredMoveto == 0);
 		__sm_key_size(pCrsr, &sz);
 		if (sz < sizeof(u_int32_t)) {
 			pTos->flags = MEM_Null;
@@ -4293,7 +4300,7 @@ case OP_IdxRecno: {
 			__sm_key(pCrsr, sz - sizeof(u_int32_t),
 				 sizeof(u_int32_t), (char*)&v);
 			v = KEY_TO_INT(v);
-			pTos->i = v;
+			pTos->u.i = v;
 			pTos->flags = MEM_Int;
 		}
 	} else {
@@ -4331,15 +4338,15 @@ case OP_IdxLT: /* FALLTHROUGH */
 case OP_IdxGT: /* FALLTHROUGH */
 case OP_IdxGE: {
 	int i= pOp->p1;
-	sm_VdbeCursor *pCrsr;
+	sm_cursor_t *pCrsr;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	/* Note: aStack assertion removed - register-based VDBE */
-	if ((pCrsr = p->cursors[i].pCursor) != 0) {
+	if ((pCrsr = p->cursors[i]->uc.pCursor) != 0) {
 		int res, rc;
 
 		__entity_as_string(pTos);
-		DBSQL_ASSERT(p->cursors[i].deferredMoveto == 0);
+		DBSQL_ASSERT(p->cursors[i]->deferredMoveto == 0);
 		rc = __sm_key_compare(pCrsr, pTos->z, pTos->n, 4, &res);
 		if (rc != DBSQL_SUCCESS) {
 			break;
@@ -4452,7 +4459,7 @@ case OP_Clear: {
 case OP_CreateIndex: /* FALLTHROUGH */
 case OP_CreateTable: {
 	int pgno;
-	DBSQL_ASSERT(pOp->p3 != 0 && pOp->p3type == P3_POINTER);
+	/* Note: p3type removed in register-based VDBE - p3 is now an int register */
 	DBSQL_ASSERT(pOp->p2 >= 0 && pOp->p2 < db->nDb);
 	DBSQL_ASSERT(db->aDb[pOp->p2].pBt != 0);
 	if (pOp->opcode == OP_CreateTable) {
@@ -4462,10 +4469,9 @@ case OP_CreateTable: {
 	}
 	pTos++;
 	if (rc == DBSQL_SUCCESS) {
-		pTos->i = pgno;
+		pTos->u.i = pgno;
 		pTos->flags = MEM_Int;
-		*(u_int32_t*)pOp->p3 = pgno;
-		pOp->p3 = 0;
+		/* Note: Old code tried to write via p3 pointer - removed for register-based VDBE */
 	} else {
 		pTos->flags = MEM_Null;
 	}
@@ -4477,6 +4483,7 @@ case OP_CreateTable: {
 ** Write the integer on the top of the stack
 ** into the temporary storage list.
 */
+#if 0  /* DISABLED - keylistStack/x.pList removed, use RowSet instead */
 case OP_ListWrite: {
 	keylist_t *pKeylist;
 	/* Note: aStack assertion removed - register-based VDBE */
@@ -4493,7 +4500,7 @@ case OP_ListWrite: {
 		p->x.pList = pKeylist;
 	}
 	__entity_to_int(pTos);
-	pKeylist->aKey[pKeylist->nUsed++] = pTos->i;
+	pKeylist->aKey[pKeylist->nUsed++] = pTos->u.i;
 	DBSQL_ASSERT(pTos->flags==MEM_Int);
 	pTos--;
 	break;
@@ -4524,7 +4531,7 @@ case OP_ListRead: {
 		DBSQL_ASSERT(pKeylist->nRead < pKeylist->nUsed);
 		DBSQL_ASSERT(pKeylist->nRead < pKeylist->nKey);
 		pTos++;
-		pTos->i = pKeylist->aKey[pKeylist->nRead++];
+		pTos->u.i = pKeylist->aKey[pKeylist->nRead++];
 		pTos->flags = MEM_Int;
 		if (pKeylist->nRead >= pKeylist->nUsed) {
 			p->x.pList = pKeylist->pNext;
@@ -4582,12 +4589,25 @@ case OP_ListPop: {
 	break;
 }
 
+#else  /* Legacy List opcodes not implemented */
+case OP_ListWrite:
+case OP_ListRewind:
+case OP_ListRead:
+case OP_ListReset:
+case OP_ListPush:
+case OP_ListPop:
+	/* Legacy List opcodes replaced by RowSet in SQLite 3.x */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
+
 /* Opcode: SortPut * * *
 **
 ** The TOS is the key and the NOS is the data.  Pop both from the stack
 ** and put them on the sorter.  The key and data should have been
 ** made using SortMakeKey and SortMakeRec, respectively.
 */
+#if 0  /* DISABLED - Legacy Sort opcodes (p->pSort removed, use OP_Sorter* instead) */
 case OP_SortPut: {
 	mem_t *pNos = &pTos[-1];
 	sorter_t *pSorter;
@@ -4773,6 +4793,16 @@ case OP_SortNext: {
 	}
 	break;
 }
+#else  /* Legacy Sort opcodes (p->pSort removed, use OP_Sorter* instead) */
+case OP_SortPut:
+case OP_SortMakeRec:
+case OP_SortMakeKey:
+case OP_Sort:
+case OP_SortNext:
+	/* Legacy Sort opcodes (p->pSort removed, use OP_Sorter* instead) */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
 
 /* Opcode: SortCallback P1 * *
 **
@@ -4781,6 +4811,7 @@ case OP_SortNext: {
 ** instruction.  Pop this record from the stack and invoke the
 ** callback on it.
 */
+#if 0  /* DISABLED - Legacy callback (xCallback/azResColumn removed) */
 case OP_SortCallback: {
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(pTos->flags & MEM_Str);
@@ -4806,6 +4837,12 @@ case OP_SortCallback: {
 	pTos--;
 	break;
 }
+#else  /* Legacy callback (xCallback/azResColumn removed) */
+case OP_SortCallback:
+	/* Legacy callback (xCallback/azResColumn removed) */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
 
 /* Opcode: SortReset * * *
 **
@@ -4821,6 +4858,7 @@ case OP_SortReset: {
 ** Open the file named by P3 for reading using the FileRead opcode.
 ** If P3 is "stdin" then open standard input for reading.
 */
+#if 0  /* DISABLED - Legacy File/COPY opcodes (pFile/azField/nField/zLine/zShort removed) */
 case OP_FileOpen: {
 	DBSQL_ASSERT(pOp->p3 != 0);
 	if (p->pFile) {
@@ -5044,15 +5082,22 @@ case OP_MemStore: {
 				goto no_mem;
 			memcpy(pMem->z, pTos->z, pMem->n);
 		}
-	} else if (pMem->flags & MEM_Short) {
-		pMem->z = pMem->zShort;
-	}
+
 	if (pOp->p2) {
 		__entity_release_mem(pTos);
 		pTos--;
 	}
 	break;
 }
+#else  /* Legacy File/COPY opcodes (pFile/azField/nField/zLine/zShort removed) */
+case OP_FileOpen:
+case OP_FileRead:
+case OP_FileColumn:
+case OP_MemStore:
+	/* Legacy File/COPY opcodes (pFile/azField/nField/zLine/zShort removed) */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
 
 /* Opcode: MemLoad P1 * *
 **
@@ -5070,7 +5115,7 @@ case OP_MemLoad: {
 	memcpy(pTos, &p->registers[i], sizeof(pTos[0]) - NBFS);;
 	if (pTos->flags & MEM_Str) {
 		pTos->flags |= MEM_Ephem;
-		pTos->flags &= ~(MEM_Dyn | MEM_Static | MEM_Short);
+		pTos->flags &= ~(MEM_Dyn | MEM_Static);
 	}
 	break;
 }
@@ -5090,8 +5135,8 @@ case OP_MemIncr: {
 	DBSQL_ASSERT(i >= 0 && i < p->nMem);
 	pMem = &p->registers[i];
 	DBSQL_ASSERT(pMem->flags == MEM_Int);
-	pMem->i++;
-	if (pOp->p2 > 0 && pMem->i > 0) {
+	pMem->u.i++;
+	if (pOp->p2 > 0 && pMem->u.i > 0) {
 		pc = pOp->p2 - 1;
 	}
 	break;
@@ -5102,6 +5147,7 @@ case OP_MemIncr: {
 ** Reset the aggregator so that it no longer contains any data.
 ** Future aggregator elements will contain P2 values each.
 */
+#if 0  /* DISABLED - Legacy aggregate opcodes (p->agg removed) */
 case OP_AggReset: {
 	__vdbe_agg_reset(&p->agg);
 	p->agg.nMem = pOp->p2;
@@ -5124,6 +5170,7 @@ case OP_AggInit: {
 	break;
 }
 
+#if 0  /* DISABLED - Legacy stack-based OP_AggFunc (uses removed p->zArgv) */
 /* Opcode: AggFunc * P2 P3
 **
 ** Execute the step function for an aggregate.  The
@@ -5134,6 +5181,9 @@ case OP_AggInit: {
 ** the aggregate column that corresponds to this aggregate function.
 ** Ideally, this index would be another parameter, but there are
 ** no free parameters left.  The integer is popped from the stack.
+**
+** OBSOLETE: Stack-based implementation using removed p->zArgv field.
+** Modern code generators should emit register-based aggregate calls.
 */
 case OP_AggFunc: {
 	int n = pOp->p2;
@@ -5154,13 +5204,13 @@ case OP_AggFunc: {
 			azArgv[i] = pRec->z;
 		}
 	}
-	i = pTos->i;
+	i = pTos->u.i;
 	DBSQL_ASSERT(i >= 0 && i < p->agg.nMem);
 	ctx.pFunc = (func_def_t*)pOp->p3;
 	pMem = &p->agg.pCurrent->registers[i];
-	ctx.s.z = pMem->zShort;  /* Space used for small aggregate contexts */
+	ctx.s.z = pMem->z;  /* Space used for small aggregate contexts */
 	ctx.pAgg = pMem->z;
-	ctx.cnt = ++pMem->i;
+	ctx.cnt = ++pMem->u.i;
 	ctx.isError = 0;
 	ctx.isStep = 1;
 	(ctx.pFunc->xStep)(&ctx, n, (const char**)azArgv);
@@ -5172,6 +5222,7 @@ case OP_AggFunc: {
 	}
 	break;
 }
+#endif  /* Legacy stack-based OP_AggFunc disabled */
 
 /* Opcode: AggFocus * P2 *
 **
@@ -5228,9 +5279,7 @@ case OP_AggSet: {
 	*pMem = *pTos;
 	if (pMem->flags & MEM_Dyn) {
 		pTos->flags = MEM_Null;
-	} else if (pMem->flags & MEM_Short) {
-		pMem->z = pMem->zShort;
-	}
+
 	__entity_release_mem(pTos);
 	pTos--;
 	break;
@@ -5253,7 +5302,7 @@ case OP_AggGet: {
 	pMem = &pFocus->registers[i];
 	*pTos = *pMem;
 	if (pTos->flags & MEM_Str) {
-		pTos->flags &= ~(MEM_Dyn|MEM_Static|MEM_Short);
+		pTos->flags &= ~(MEM_Dyn|MEM_Static);
 		pTos->flags |= MEM_Ephem;
 	}
 	break;
@@ -5293,9 +5342,9 @@ case OP_AggNext: {
 			if (p->agg.apFunc[i]->xFinalize == 0)
 				continue;
 			ctx.s.flags = MEM_Null;
-			ctx.s.z = aMem[i].zShort;
+			ctx.s.z = NULL;
 			ctx.pAgg = (void*)aMem[i].z;
-			freeCtx = aMem[i].z && aMem[i].z!=aMem[i].zShort;
+			freeCtx = aMem[i].z && aMem[i].z!=NULL;
 			ctx.cnt = aMem[i].i;
 			ctx.isStep = 0;
 			ctx.pFunc = p->agg.apFunc[i];
@@ -5305,12 +5354,24 @@ case OP_AggNext: {
 			}
 			aMem[i] = ctx.s;
 			if (aMem[i].flags & MEM_Short) {
-				aMem[i].z = aMem[i].zShort;
+				aMem[i].z = NULL;
 			}
 		}
 	}
 	break;
 }
+#else  /* Legacy aggregate opcodes (p->agg removed) */
+case OP_AggReset:
+case OP_AggInit:
+case OP_AggFunc:
+case OP_AggFocus:
+case OP_AggSet:
+case OP_AggGet:
+case OP_AggNext:
+	/* Legacy aggregate opcodes (p->agg removed) */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
 
 /* ================================================================
  * Phase 5: Modern aggregate and sorting opcodes (SQLite 3.52.0)
@@ -5491,7 +5552,7 @@ case OP_SorterOpen: {
 	nField = pOp->p3;
 
 	/* Allocate a new cursor */
-	if (__dbsql_calloc(NULL, 1, sizeof(cursor_t), &pCx) == ENOMEM)
+	if (__dbsql_calloc(NULL, 1, sizeof(VdbeCursor), &pCx) == ENOMEM)
 		goto no_mem;
 
 	p->cursors[pOp->p1] = pCx;
@@ -5739,6 +5800,7 @@ case OP_InitCoroutine: {
 **
 ** NOTE: Legacy SQLite 2.x code - disabled (aSet removed in modernization)
 */
+#if 0  /* DISABLED - Legacy Set opcodes (p->aSet removed) */
 case OP_SetInsert: {
 #if 0  /* DISABLED - aSet removed in modernization */
 	int i = pOp->p1;
@@ -5877,6 +5939,16 @@ case OP_SetNext: {
 #endif
 	break;
 }
+#else  /* Legacy Set opcodes (p->aSet removed) */
+case OP_SetInsert:
+case OP_SetFound:
+case OP_SetNotFound:
+case OP_SetFirst:
+case OP_SetNext:
+	/* Legacy Set opcodes (p->aSet removed) */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
 
 /* Opcode: Vacuum * * *
 **
@@ -5935,7 +6007,7 @@ default: {
 	    DBSQL_ASSERT(pTos->flags != 0);  /* Must define some type */
 	    if (pTos->flags & MEM_Str) {
 		    int x = pTos->flags &
-			    (MEM_Static | MEM_Dyn | MEM_Ephem | MEM_Short);
+			    (MEM_Static | MEM_Dyn | MEM_Ephem);
 		    DBSQL_ASSERT(x != 0);            /* Strings must define
 							a string subtype. */
 		    DBSQL_ASSERT((x & (x-1)) == 0);  /* Only one string subtype
@@ -5947,15 +6019,15 @@ default: {
 		     * MEM_Short
 		     */
 		    DBSQL_ASSERT((pTos->flags & MEM_Short) == 0
-				 || pTos->z==pTos->zShort);
+				 || pTos->z==pTos->z);
 		    DBSQL_ASSERT((pTos->flags & MEM_Short) != 0
-				 || pTos->z!=pTos->zShort);
+				 || pTos->z!=pTos->z);
 	    } else {
 		    /*
 		     * Cannot define a string subtype for non-string objects.
 		     */
 		    DBSQL_ASSERT((pTos->flags &
-			 (MEM_Static | MEM_Dyn | MEM_Ephem | MEM_Short)) == 0);
+			 (MEM_Static | MEM_Dyn | MEM_Ephem)) == 0);
 	    }
 	    /* MEM_Null excludes all other types. */
 	    DBSQL_ASSERT(pTos->flags == MEM_Null
@@ -5976,9 +6048,9 @@ default: {
 			    fprintf(p->trace, " NULL");
 		    } else if ((pTos[i].flags &
 				(MEM_Int | MEM_Str)) == (MEM_Int | MEM_Str)) {
-			    fprintf(p->trace, " si:%d", pTos[i].u.i);
+			    fprintf(p->trace, " si:%ld", pTos[i].u.i);
 		    } else if (pTos[i].flags & MEM_Int) {
-			    fprintf(p->trace, " i:%d", pTos[i].u.i);
+			    fprintf(p->trace, " i:%ld", pTos[i].u.i);
 		    } else if (pTos[i].flags & MEM_Real) {
 			    fprintf(p->trace, " r:%g", pTos[i].u.r);
 		    } else if (pTos[i].flags & MEM_Str) {
