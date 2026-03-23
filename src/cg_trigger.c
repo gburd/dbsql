@@ -244,16 +244,6 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 	 * table, build the master entry.
 	 */
 	if (!parser->initFlag) {
-		static vdbe_op_t insert_trig[] = {
-		{ OP_NewRecno,   0, 0,  0          },
-		{ OP_String,     0, 0,  "trigger"  },
-		{ OP_String,     0, 0,  0          },  /* 2: trigger name */
-		{ OP_String,     0, 0,  0          },  /* 3: table name */
-		{ OP_Integer,    0, 0,  0          },
-		{ OP_String,     0, 0,  0          },  /* 5: SQL */
-		{ OP_MakeRecord, 5, 0,  0          },
-		{ OP_PutIntKey,  0, 0,  0          },
-		};
 		int addr;
 		vdbe_t *v;
 
@@ -265,11 +255,19 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 			goto triggerfinish_cleanup;
 		__vdbe_prepare_write(parser, 0, 0);
 		__open_master_table(v, nt->iDb);
-		addr = __vdbe_add_op_list(v, ARRAY_SIZE(insert_trig),
-					  insert_trig);
-		__vdbe_change_p4(v, (addr + 2), nt->name, 0); 
-		__vdbe_change_p4(v, (addr + 3), nt->table, 0); 
-		__vdbe_change_p4(v, (addr + 5), all->z, all->n);
+		/* Generate: INSERT INTO master(type,name,tbl_name,rootpage,sql) VALUES */
+		addr = __vdbe_add_op(v, OP_NewRecno, 0, 0);
+		__vdbe_add_op(v, OP_String, 0, 0);
+		__vdbe_change_p4(v, -1, "trigger", P3_STATIC);
+		__vdbe_add_op(v, OP_String, 0, 0);
+		__vdbe_change_p4(v, -1, nt->name, 0);
+		__vdbe_add_op(v, OP_String, 0, 0);
+		__vdbe_change_p4(v, -1, nt->table, 0);
+		__vdbe_add_op(v, OP_Integer, 0, 0);
+		__vdbe_add_op(v, OP_String, 0, 0);
+		__vdbe_change_p4(v, -1, all->z, all->n);
+		__vdbe_add_op(v, OP_MakeRecord, 5, 0);
+		__vdbe_add_op(v, OP_PutIntKey, 0, 0);
 		if (nt->iDb == 0) {
 			__change_schema_signature(dbp, v);
 		}
@@ -581,24 +579,26 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 	 * Generate code to destroy the database record of the trigger.
 	 */
 	if (table != 0 && !nested && (v = __parser_get_vdbe(parser)) != 0) {
-		int base;
-		static vdbe_op_t drop_trigger[] = {
-			{ OP_Rewind,     0, ADDR(9),  0},
-			{ OP_String,     0, 0,        0}, /* 1 */
-			{ OP_Column,     0, 1,        0},
-			{ OP_Ne,         0, ADDR(8),  0},
-			{ OP_String,     0, 0,        "trigger"},
-			{ OP_Column,     0, 0,        0},
-			{ OP_Ne,         0, ADDR(8),  0},
-			{ OP_Delete,     0, 0,        0},
-			{ OP_Next,       0, ADDR(1),  0}, /* 8 */
-		};
+		int lbl1, lbl8, lbl9;
 
 		__vdbe_prepare_write(parser, 0, 0);
 		__open_master_table(v, trigger->iDb);
-		base = __vdbe_add_op_list(v,  ARRAY_SIZE(drop_trigger),
-					  drop_trigger);
-		__vdbe_change_p4(v, base+1, trigger->name, 0);
+		/* Generate: DELETE FROM master WHERE name=? AND type='trigger' */
+		lbl9 = __vdbe_make_label(v);
+		lbl8 = __vdbe_make_label(v);
+		lbl1 = __vdbe_add_op(v, OP_Rewind, 0, lbl9);
+		__vdbe_add_op(v, OP_String, 0, 0);
+		__vdbe_change_p4(v, -1, trigger->name, 0);
+		__vdbe_add_op(v, OP_Column, 0, 1);
+		__vdbe_add_op(v, OP_Ne, 0, lbl8);
+		__vdbe_add_op(v, OP_String, 0, 0);
+		__vdbe_change_p4(v, -1, "trigger", P3_STATIC);
+		__vdbe_add_op(v, OP_Column, 0, 0);
+		__vdbe_add_op(v, OP_Ne, 0, lbl8);
+		__vdbe_add_op(v, OP_Delete, 0, 0);
+		__vdbe_resolve_label(v, lbl8);
+		__vdbe_add_op(v, OP_Next, 0, lbl1);
+		__vdbe_resolve_label(v, lbl9);
 		if (trigger->iDb == 0) {
 			__change_schema_signature(dbp, v);
 		}

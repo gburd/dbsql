@@ -1,0 +1,81 @@
+# Trigger Structure Field Mappings
+# SQLite 3.52.0 Modernization
+# Date: 2026-03-19
+
+## trigger_t (struct trigger)
+
+OLD FIELD       NEW FIELD       TYPE CHANGE     STATUS      NOTES
+============================================================================
+name            zName           -               RENAMED     Standard SQLite 'z' prefix
+iTabDb          iDb             -               REMOVED     Use single iDb field
+foreach         (removed)       -               REMOVED     Only FOR EACH ROW supported
+nameToken       (removed)       token_t         REMOVED     Use zName directly
+
+PRESERVED FIELDS:
+- zName (was name)
+- table
+- op
+- tr_tm
+- bReturning
+- pWhen
+- pColumns
+- pSchema
+- pTabSchema
+- step_list
+- pNext
+- iDb
+
+## trigger_step_t (struct trigger_step)
+
+OLD FIELD       NEW FIELD       TYPE CHANGE         STATUS      NOTES
+============================================================================
+target          pSrc            token_t->src_list_t*  CONVERTED   Unified table reference
+
+CONVERSION PATTERN:
+  Old: ts->target = *tab_name;  (token assignment)
+  New: ts->pSrc = __src_list_append(NULL, tab_name, NULL);
+
+CLEANUP PATTERN:
+  Old: if (tmp->target.dyn) __dbsql_free(NULL, (char *)tmp->target.z);
+  New: __src_list_delete(tmp->pSrc);
+
+PRESERVED FIELDS:
+- op
+- orconf
+- pTrig
+- pSelect
+- pSrc (was target)
+- pWhere
+- pExprList
+- pIdList
+- pUpsert
+- zSpan
+- pNext
+- pLast
+
+## Function Signature Changes
+
+__update():      Added 'expr_list_t *returning' parameter (pass NULL from triggers)
+__insert():      Added 'expr_list_t *returning' parameter (pass NULL from triggers)
+__delete_from(): Added 'expr_list_t *returning' parameter (pass NULL from triggers)
+
+## Static Initializer Fix Pattern
+
+OLD (ERROR):
+  static vdbe_op_t ops[] = {
+    { OP_String, 0, 0, "literal" }  // Error: not computable at load time
+  };
+
+NEW (CORRECT):
+  static vdbe_op_t ops[] = {
+    { OP_String, 0, 0, 0 }          // Initialize to 0
+  };
+  addr = __vdbe_add_op_list(v, ARRAY_SIZE(ops), ops);
+  __vdbe_change_p4(v, addr, "literal", 0);  // Set dynamically
+
+## Compatibility Notes
+
+1. FOR EACH STATEMENT removed - only FOR EACH ROW supported
+2. Trigger names stored as strings, not tokens
+3. Target table specified via src_list_t* (unified with other SQL operations)
+4. Database schema name accessed via __dbsql_db.zName, not schema_t

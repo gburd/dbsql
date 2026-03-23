@@ -1033,7 +1033,7 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 			 * not pointing to a persistent table structure that
 			 * defines part of the schema.
 			 */
-			table->isTransient = 1;
+			table->tabFlags |= TF_Ephemeral;
 		} else {
 			/* An ordinary table or view name in the FROM clause.*/
 			tables->a[i].pTab = table = 
@@ -1247,7 +1247,7 @@ __select_unbind(select_t* select)
 		return;
 	for (i = 0; i < src->nSrc; i++) {
 		if ((table = src->a[i].pTab) != 0) {
-			if (table->isTransient) {
+			if (table->tabFlags & TF_Ephemeral) {
 				__vdbe_delete_table(0, table);
 			}
 			src->a[i].pTab = 0;
@@ -2052,7 +2052,7 @@ __flatten_subquery(parser_t* parser, select_t* select, int from, int agg_p, int 
 	jointype = outer_from_clause->a[from].jointype;
 
 	if (outer_from_clause->a[from].pTab &&
-	    outer_from_clause->a[from].pTab->isTransient) {
+	    (outer_from_clause->a[from].pTab->tabFlags & TF_Ephemeral)) {
 		__vdbe_delete_table(0, outer_from_clause->a[from].pTab);
 	}
 	__dbsql_free(NULL, outer_from_clause->a[from].zDatabase);

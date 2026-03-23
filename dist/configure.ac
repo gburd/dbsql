@@ -474,6 +474,13 @@ AC_REPLACE_FUNCS(srand48_r lrand48_r)
 # Check for system functions we use.
 AC_CHECK_FUNCS(usleep)
 
+# Check for readline library support for the dbsql CLI
+VL_LIB_READLINE
+if test "$vl_cv_lib_readline" != "no"; then
+	AC_DEFINE(HAVE_READLINE, 1,
+		[Define to 1 if you have readline support enabled.])
+fi
+
 # A/UX has a broken getopt(3).
 case "$host_os" in
 aux*)	AC_LIBOBJ([getopt]);;

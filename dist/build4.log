@@ -1,0 +1,36 @@
+path '/home/gburd/ws/dbsql/dist' does not contain a 'flake.nix', searching up
+this derivation will be built:
+  /nix/store/dprxvczkrz9pxy3vqsivmb873xwbninl-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/dprxvczkrz9pxy3vqsivmb873xwbninl-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/dprxvczkrz9pxy3vqsivmb873xwbninl-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/4a9vggw9nihaijs5iw8zl0m0ybwnlaas-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       >       |                              ^~~~~~
+       > ../dist/../src/cg_build.c:127:68: warning: passing argument 4 of '__vdbe_make_ready' makes integer from pointer without a cast [-Wint-conversion]
+       >   127 |                 __vdbe_make_ready(v, parser->nVar, callback, parser->pArg,
+       >       |                                                              ~~~~~~^~~~~~
+       >       |                                                                    |
+       >       |                                                                    void *
+       > ../dist/../src/inc/dbsql_ext.h:224:49: note: expected 'int' but argument is of type 'void *'
+       >   224 | void __vdbe_make_ready __P((vdbe_t *, int, int, int, int));
+       >       |                                                 ^~~
+       > ./dbsql.h:41:30: note: in definition of macro '__P'
+       >    41 | #define      __P(protos)     protos
+       >       |                              ^~~~~~
+       > ../dist/../src/cg_build.c: In function '__ident_put':
+       > ../dist/../src/cg_build.c:1097:23: warning: implicit declaration of function '__get_keyword_code' [-Wimplicit-function-declaration]
+       >  1097 |                       __get_keyword_code(ident, j) != TK_ID);
+       >       |                       ^~~~~~~~~~~~~~~~~~
+       > ../dist/../src/cg_build.c: In function '__create_foreign_key':
+       > ../dist/../src/cg_build.c:1819:20: error: invalid use of flexible array member
+       >  1819 |         fkey->aCol = (struct col_map*)z;
+       >       |                    ^
+       > ../dist/../src/cg_build.c: In function '__create_index':
+       > ../dist/../src/cg_build.c:2068:25: warning: assignment to 'i16 *' {aka 'short int *'} from incompatible pointer type 'int *' [-Wincompatible-pointer-types]
+       >  2068 |         index->aiColumn = (int*)&index[1];
+       >       |                         ^
+       > make: *** [Makefile:368: cg_build.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/dprxvczkrz9pxy3vqsivmb873xwbninl-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv

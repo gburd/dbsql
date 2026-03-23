@@ -1,0 +1,36 @@
+path '/home/gburd/ws/dbsql/dist' does not contain a 'flake.nix', searching up
+this derivation will be built:
+  /nix/store/j07yd0rvbdcbs7zgzchil324pyaz35a9-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/j07yd0rvbdcbs7zgzchil324pyaz35a9-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/j07yd0rvbdcbs7zgzchil324pyaz35a9-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/w4r8m4l0js7w4cgpw23g166q4m58j5q6-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       >       |
+       > ./opcodes.h:119: note: this is the location of the previous definition
+       >   119 | #define OP_SortCallback                118
+       >       |
+       > ./opcodes.h:154: warning: "OP_NullCallback" redefined
+       >   154 | #define OP_NullCallback                151  /* Legacy: use OP_ResultRow */
+       >       |
+       > ./opcodes.h:16: note: this is the location of the previous definition
+       >    16 | #define OP_NullCallback                 15
+       >       |
+       > ../dist/../src/cg_trigger.c: In function '__finish_trigger':
+       > ../dist/../src/cg_trigger.c:251:41: warning: initialization of 'int' from 'char *' makes integer from pointer without a cast [-Wint-conversion]
+       >   251 |                 { OP_String,     0, 0,  "trigger"  },
+       >       |                                         ^~~~~~~~~
+       > ../dist/../src/cg_trigger.c:251:41: note: (near initialization for 'insert_trig[1].p1')
+       > ../dist/../src/cg_trigger.c:251:41: error: initializer element is not computable at load time
+       > ../dist/../src/cg_trigger.c:251:41: note: (near initialization for 'insert_trig[1].p1')
+       > ../dist/../src/cg_trigger.c: In function '__drop_trigger_ptr':
+       > ../dist/../src/cg_trigger.c:592:55: warning: initialization of 'int' from 'char *' makes integer from pointer without a cast [-Wint-conversion]
+       >   592 |                         { OP_String,     0, 0,        "trigger"},
+       >       |                                                       ^~~~~~~~~
+       > ../dist/../src/cg_trigger.c:592:55: note: (near initialization for 'drop_trigger[4].p1')
+       > ../dist/../src/cg_trigger.c:592:55: error: initializer element is not computable at load time
+       > ../dist/../src/cg_trigger.c:592:55: note: (near initialization for 'drop_trigger[4].p1')
+       > make: *** [Makefile:384: cg_trigger.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/j07yd0rvbdcbs7zgzchil324pyaz35a9-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv

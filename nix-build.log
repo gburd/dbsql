@@ -1,0 +1,108 @@
+this derivation will be built:
+  /nix/store/xm2c70cyan8iizcvfdzsjd2sax7s9cp0-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv
+building '/nix/store/xm2c70cyan8iizcvfdzsjd2sax7s9cp0-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv'...
+error: Cannot build '/nix/store/xm2c70cyan8iizcvfdzsjd2sax7s9cp0-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/rx5qfc7lfpp12jg5xfhrbvsjp1q1qmgb-dbsql-DBSQL-0.3.1-pre20260321_dirty-
+       Last 25 log lines:
+       > libtool: install: cp -p .libs/libdbsql-0.4.so /nix/store/rx5qfc7lfpp12jg5xfhrbvsjp1q1qmgb-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.so
+       > libtool: install: cp -p .libs/libdbsql-0.4.lai /nix/store/rx5qfc7lfpp12jg5xfhrbvsjp1q1qmgb-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.la
+       > libtool: install: cp -p .libs/libdbsql-0.4.a /nix/store/rx5qfc7lfpp12jg5xfhrbvsjp1q1qmgb-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.a
+       > libtool: install: chmod 644 /nix/store/rx5qfc7lfpp12jg5xfhrbvsjp1q1qmgb-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.a
+       > libtool: install: ranlib /nix/store/rx5qfc7lfpp12jg5xfhrbvsjp1q1qmgb-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.a
+       > libtool: finish: PATH="/nix/store/wafffsakgcxdcfwhrrlylw2wkawvdcww-autoconf-2.71/bin:/nix/store/spri6k9qb8hz2viahybvjd25y0z855hq-automake-1.16.5/bin:/nix/store/gzk32jyj8r3l4yhjn80gl10p355g3ngi-gettext-0.21.1/bin:/nix/store/kxxcmrl3c2sfsb1mzaifpvdwmrwp9mlm-libtool-2.4.7/bin:/nix/store/0v0b4pcb7fcjz693kqqhaci14l4zhrpr-gnum4-1.4.19/bin:/nix/store/3ssn79pr531nfyh578r9kwvinp0mvy72-file-5.45/bin:/nix/store/2j7b1ngdvqd0bidb6bn9icskwm6sq63v-perl-5.38.0/bin:/nix/store/ay0p9mbw1w3zkvwzx3c94xq7x8jrn9wq-patchelf-0.15.0/bin:/nix/store/18bs92p6yf6w2wwxhbplgx02y6anq092-gcc-wrapper-12.3.0/bin:/nix/store/h5kvfrjmpw792v8jg7nrzfkffmn0iyy8-gcc-12.3.0/bin:/nix/store/f6in5kb2y5v06zinz1a6xy6cyg67q026-glibc-2.37-8-bin/bin:/nix/store/y9gr7abwxvzcpg5g73vhnx1fpssr5frr-coreutils-9.3/bin:/nix/store/mc6q3cdz5s0p1aj4y586bglsfsnsf2k8-binutils-wrapper-2.40/bin:/nix/store/74y3751gsixaz9797ib0hp7c658sp1y5-binutils-2.40/bin:/nix/store/dazm2xm9z2hxq9pqmlyirpmbj7lpibni-db-4.8.30-bin/bin:/nix/store/aqlscqccxp85w5zxrcmim7qf1i88xyli-tcl-8.5.19/bin:/nix/store/y9gr7abwxvzcpg5g73vhnx1fpssr5frr-coreutils-9.3/bin:/nix/store/b6izr8wh0p7dyvh3cyg14wq2rn8d31ik-findutils-4.9.0/bin:/nix/store/q56n7lhjw724i7b33qaqra61p7m7c0cd-diffutils-3.10/bin:/nix/store/x23by79p38ll0js1alifmf3y56vqfs49-gnused-4.9/bin:/nix/store/xafzciap7acqhfx84dvqkp18bg4lrai3-gnugrep-3.11/bin:/nix/store/8kkn44iwdbgqkrj661nr4cjcpmrqqmx8-gawk-5.2.2/bin:/nix/store/89s3w7b4g78989kpzc7sy4phv0nqfira-gnutar-1.35/bin:/nix/store/2a9na7bp4r3290yqqzg503325dwglxyq-gzip-1.13/bin:/nix/store/gxknjk51s7q86llkbzpaqv43kflj9d8j-bzip2-1.0.8-bin/bin:/nix/store/2jp6cv2q4cgh91f5lp57p945rq98ldhr-gnumake-4.4.1/bin:/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin:/nix/store/c15ama0p8jr4mn0943yjk4rpa2hxk7ml-patch-2.7.6/bin:/nix/store/sb3sxnp4g40gfw758a0m4sjm7slvmax9-xz-5.4.4-bin/bin:/nix/store/xfjqspcc9442hi0lm0szv3sw75zswvml-file-5.45/bin:/sbin" ldconfig -n /nix/store/rx5qfc7lfpp12jg5xfhrbvsjp1q1qmgb-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib
+       > ----------------------------------------------------------------------
+       > Libraries have been installed in:
+       >    /nix/store/rx5qfc7lfpp12jg5xfhrbvsjp1q1qmgb-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib
+       >
+       > If you ever happen to want to link against installed libraries
+       > in a given directory, LIBDIR, you must either use libtool, and
+       > specify the full pathname of the library, or use the '-LLIBDIR'
+       > flag during linking and do at least one of the following:
+       >    - add LIBDIR to the 'LD_LIBRARY_PATH' environment variable
+       >      during execution
+       >    - add LIBDIR to the 'LD_RUN_PATH' environment variable
+       >      during linking
+       >    - use the '-Wl,-rpath -Wl,LIBDIR' linker flag
+       >
+       > See any operating system documentation about shared libraries for
+       > more information, such as the ld(1) and ld.so(8) manual pages.
+       > ----------------------------------------------------------------------
+       > /nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/bash: -c: line 6: syntax error: unexpected end of file
+       > make: *** [Makefile:260: install_lib] Error 2
+       For full logs, run:
+         nix log /nix/store/xm2c70cyan8iizcvfdzsjd2sax7s9cp0-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv
+this derivation will be built:
+  /nix/store/j9ki74c32vjnik873dg3hdc985i6bxx8-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv
+building '/nix/store/j9ki74c32vjnik873dg3hdc985i6bxx8-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv'...
+error: Cannot build '/nix/store/j9ki74c32vjnik873dg3hdc985i6bxx8-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/3aaamn6v8vhc6q3v5iyir2nigg455rqd-dbsql-DBSQL-0.3.1-pre20260321_dirty-
+       Last 25 log lines:
+       > libtool: install: chmod 644 /nix/store/3aaamn6v8vhc6q3v5iyir2nigg455rqd-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.a
+       > libtool: install: ranlib /nix/store/3aaamn6v8vhc6q3v5iyir2nigg455rqd-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.a
+       > libtool: finish: PATH="/nix/store/wafffsakgcxdcfwhrrlylw2wkawvdcww-autoconf-2.71/bin:/nix/store/spri6k9qb8hz2viahybvjd25y0z855hq-automake-1.16.5/bin:/nix/store/gzk32jyj8r3l4yhjn80gl10p355g3ngi-gettext-0.21.1/bin:/nix/store/kxxcmrl3c2sfsb1mzaifpvdwmrwp9mlm-libtool-2.4.7/bin:/nix/store/0v0b4pcb7fcjz693kqqhaci14l4zhrpr-gnum4-1.4.19/bin:/nix/store/3ssn79pr531nfyh578r9kwvinp0mvy72-file-5.45/bin:/nix/store/2j7b1ngdvqd0bidb6bn9icskwm6sq63v-perl-5.38.0/bin:/nix/store/ay0p9mbw1w3zkvwzx3c94xq7x8jrn9wq-patchelf-0.15.0/bin:/nix/store/18bs92p6yf6w2wwxhbplgx02y6anq092-gcc-wrapper-12.3.0/bin:/nix/store/h5kvfrjmpw792v8jg7nrzfkffmn0iyy8-gcc-12.3.0/bin:/nix/store/f6in5kb2y5v06zinz1a6xy6cyg67q026-glibc-2.37-8-bin/bin:/nix/store/y9gr7abwxvzcpg5g73vhnx1fpssr5frr-coreutils-9.3/bin:/nix/store/mc6q3cdz5s0p1aj4y586bglsfsnsf2k8-binutils-wrapper-2.40/bin:/nix/store/74y3751gsixaz9797ib0hp7c658sp1y5-binutils-2.40/bin:/nix/store/dazm2xm9z2hxq9pqmlyirpmbj7lpibni-db-4.8.30-bin/bin:/nix/store/aqlscqccxp85w5zxrcmim7qf1i88xyli-tcl-8.5.19/bin:/nix/store/y9gr7abwxvzcpg5g73vhnx1fpssr5frr-coreutils-9.3/bin:/nix/store/b6izr8wh0p7dyvh3cyg14wq2rn8d31ik-findutils-4.9.0/bin:/nix/store/q56n7lhjw724i7b33qaqra61p7m7c0cd-diffutils-3.10/bin:/nix/store/x23by79p38ll0js1alifmf3y56vqfs49-gnused-4.9/bin:/nix/store/xafzciap7acqhfx84dvqkp18bg4lrai3-gnugrep-3.11/bin:/nix/store/8kkn44iwdbgqkrj661nr4cjcpmrqqmx8-gawk-5.2.2/bin:/nix/store/89s3w7b4g78989kpzc7sy4phv0nqfira-gnutar-1.35/bin:/nix/store/2a9na7bp4r3290yqqzg503325dwglxyq-gzip-1.13/bin:/nix/store/gxknjk51s7q86llkbzpaqv43kflj9d8j-bzip2-1.0.8-bin/bin:/nix/store/2jp6cv2q4cgh91f5lp57p945rq98ldhr-gnumake-4.4.1/bin:/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin:/nix/store/c15ama0p8jr4mn0943yjk4rpa2hxk7ml-patch-2.7.6/bin:/nix/store/sb3sxnp4g40gfw758a0m4sjm7slvmax9-xz-5.4.4-bin/bin:/nix/store/xfjqspcc9442hi0lm0szv3sw75zswvml-file-5.45/bin:/sbin" ldconfig -n /nix/store/3aaamn6v8vhc6q3v5iyir2nigg455rqd-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib
+       > ----------------------------------------------------------------------
+       > Libraries have been installed in:
+       >    /nix/store/3aaamn6v8vhc6q3v5iyir2nigg455rqd-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib
+       >
+       > If you ever happen to want to link against installed libraries
+       > in a given directory, LIBDIR, you must either use libtool, and
+       > specify the full pathname of the library, or use the '-LLIBDIR'
+       > flag during linking and do at least one of the following:
+       >    - add LIBDIR to the 'LD_LIBRARY_PATH' environment variable
+       >      during execution
+       >    - add LIBDIR to the 'LD_RUN_PATH' environment variable
+       >      during linking
+       >    - use the '-Wl,-rpath -Wl,LIBDIR' linker flag
+       >
+       > See any operating system documentation about shared libraries for
+       > more information, such as the ld(1) and ld.so(8) manual pages.
+       > ----------------------------------------------------------------------
+       > ln: missing file operand
+       > Try 'ln --help' for more information.
+       > ln: missing file operand
+       > Try 'ln --help' for more information.
+       > make: *** [Makefile:260: install_lib] Error 1
+       For full logs, run:
+         nix log /nix/store/j9ki74c32vjnik873dg3hdc985i6bxx8-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv
+this derivation will be built:
+  /nix/store/2b3rnx98hfmhkh9asl88spffa36z086p-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv
+building '/nix/store/2b3rnx98hfmhkh9asl88spffa36z086p-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv'...
+error: Cannot build '/nix/store/2b3rnx98hfmhkh9asl88spffa36z086p-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/mvgn1gj8vy12q1npl958qisbah2pla1z-dbsql-DBSQL-0.3.1-pre20260321_dirty-
+       Last 25 log lines:
+       > libtool: install: cp -p .libs/libdbsql-0.4.lai /nix/store/mvgn1gj8vy12q1npl958qisbah2pla1z-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.la
+       > libtool: install: cp -p .libs/libdbsql-0.4.a /nix/store/mvgn1gj8vy12q1npl958qisbah2pla1z-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.a
+       > libtool: install: chmod 644 /nix/store/mvgn1gj8vy12q1npl958qisbah2pla1z-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.a
+       > libtool: install: ranlib /nix/store/mvgn1gj8vy12q1npl958qisbah2pla1z-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib/libdbsql-0.4.a
+       > libtool: finish: PATH="/nix/store/wafffsakgcxdcfwhrrlylw2wkawvdcww-autoconf-2.71/bin:/nix/store/spri6k9qb8hz2viahybvjd25y0z855hq-automake-1.16.5/bin:/nix/store/gzk32jyj8r3l4yhjn80gl10p355g3ngi-gettext-0.21.1/bin:/nix/store/kxxcmrl3c2sfsb1mzaifpvdwmrwp9mlm-libtool-2.4.7/bin:/nix/store/0v0b4pcb7fcjz693kqqhaci14l4zhrpr-gnum4-1.4.19/bin:/nix/store/3ssn79pr531nfyh578r9kwvinp0mvy72-file-5.45/bin:/nix/store/2j7b1ngdvqd0bidb6bn9icskwm6sq63v-perl-5.38.0/bin:/nix/store/ay0p9mbw1w3zkvwzx3c94xq7x8jrn9wq-patchelf-0.15.0/bin:/nix/store/18bs92p6yf6w2wwxhbplgx02y6anq092-gcc-wrapper-12.3.0/bin:/nix/store/h5kvfrjmpw792v8jg7nrzfkffmn0iyy8-gcc-12.3.0/bin:/nix/store/f6in5kb2y5v06zinz1a6xy6cyg67q026-glibc-2.37-8-bin/bin:/nix/store/y9gr7abwxvzcpg5g73vhnx1fpssr5frr-coreutils-9.3/bin:/nix/store/mc6q3cdz5s0p1aj4y586bglsfsnsf2k8-binutils-wrapper-2.40/bin:/nix/store/74y3751gsixaz9797ib0hp7c658sp1y5-binutils-2.40/bin:/nix/store/dazm2xm9z2hxq9pqmlyirpmbj7lpibni-db-4.8.30-bin/bin:/nix/store/aqlscqccxp85w5zxrcmim7qf1i88xyli-tcl-8.5.19/bin:/nix/store/y9gr7abwxvzcpg5g73vhnx1fpssr5frr-coreutils-9.3/bin:/nix/store/b6izr8wh0p7dyvh3cyg14wq2rn8d31ik-findutils-4.9.0/bin:/nix/store/q56n7lhjw724i7b33qaqra61p7m7c0cd-diffutils-3.10/bin:/nix/store/x23by79p38ll0js1alifmf3y56vqfs49-gnused-4.9/bin:/nix/store/xafzciap7acqhfx84dvqkp18bg4lrai3-gnugrep-3.11/bin:/nix/store/8kkn44iwdbgqkrj661nr4cjcpmrqqmx8-gawk-5.2.2/bin:/nix/store/89s3w7b4g78989kpzc7sy4phv0nqfira-gnutar-1.35/bin:/nix/store/2a9na7bp4r3290yqqzg503325dwglxyq-gzip-1.13/bin:/nix/store/gxknjk51s7q86llkbzpaqv43kflj9d8j-bzip2-1.0.8-bin/bin:/nix/store/2jp6cv2q4cgh91f5lp57p945rq98ldhr-gnumake-4.4.1/bin:/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin:/nix/store/c15ama0p8jr4mn0943yjk4rpa2hxk7ml-patch-2.7.6/bin:/nix/store/sb3sxnp4g40gfw758a0m4sjm7slvmax9-xz-5.4.4-bin/bin:/nix/store/xfjqspcc9442hi0lm0szv3sw75zswvml-file-5.45/bin:/sbin" ldconfig -n /nix/store/mvgn1gj8vy12q1npl958qisbah2pla1z-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib
+       > ----------------------------------------------------------------------
+       > Libraries have been installed in:
+       >    /nix/store/mvgn1gj8vy12q1npl958qisbah2pla1z-dbsql-DBSQL-0.3.1-pre20260321_dirty-/lib
+       >
+       > If you ever happen to want to link against installed libraries
+       > in a given directory, LIBDIR, you must either use libtool, and
+       > specify the full pathname of the library, or use the '-LLIBDIR'
+       > flag during linking and do at least one of the following:
+       >    - add LIBDIR to the 'LD_LIBRARY_PATH' environment variable
+       >      during execution
+       >    - add LIBDIR to the 'LD_RUN_PATH' environment variable
+       >      during linking
+       >    - use the '-Wl,-rpath -Wl,LIBDIR' linker flag
+       >
+       > See any operating system documentation about shared libraries for
+       > more information, such as the ld(1) and ld.so(8) manual pages.
+       > ----------------------------------------------------------------------
+       > Installing DBSQL utilities: /nix/store/mvgn1gj8vy12q1npl958qisbah2pla1z-dbsql-DBSQL-0.3.1-pre20260321_dirty-/bin ...
+       > libtool: install: cp -p .libs/dbsql /nix/store/mvgn1gj8vy12q1npl958qisbah2pla1z-dbsql-DBSQL-0.3.1-pre20260321_dirty-/bin/dbsql
+       > make: *** No rule to make target 'install_docs', needed by 'library_install'.  Stop.
+       For full logs, run:
+         nix log /nix/store/2b3rnx98hfmhkh9asl88spffa36z086p-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv
+this derivation will be built:
+  /nix/store/140dkqd2hb1xciv4ldyz2pzsr3yb7ka1-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv
+building '/nix/store/140dkqd2hb1xciv4ldyz2pzsr3yb7ka1-dbsql-DBSQL-0.3.1-pre20260321_dirty-.drv'...

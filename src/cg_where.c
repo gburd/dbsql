@@ -498,7 +498,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		__dbsql_free(parser->db, where_info);
 		return 0;
 	}
-	where_info->parser = parser;
+	where_info->pParse = parser;
 	where_info->pTabList = tab_list;
 	where_info->peakNTab = where_info->savedNTab = parser->nTab;
 	where_info->iBreak = __vdbe_make_label(v);
@@ -799,7 +799,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 */
 	for (i = 0; i < tab_list->nSrc; i++) {
 		table = tab_list->a[i].pTab;
-		if (table->isTransient || table->pSelect )
+		if ((table->tabFlags & TF_Ephemeral) || table->pSelect )
 			continue;
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenRead, tab_list->a[i].iCursor,
@@ -1046,7 +1046,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			level->p1 = cur;
 			level->p2 = start;
 			if (test_op != OP_Noop) {
-				__vdbe_add_op(v, OP_Recno, cur, 0);
+				__vdbe_add_op(v, OP_Rowid, cur, 0);
 				__vdbe_add_op(v, OP_MemLoad, level->iMem, 0);
 				__vdbe_add_op(v, test_op, 0, brk);
 			}
@@ -1365,7 +1365,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	}
 	where_info->iContinue = cont;
 	if (push_key_p && !have_key_p) {
-		__vdbe_add_op(v, OP_Recno, tab_list->a[0].iCursor, 0);
+		__vdbe_add_op(v, OP_Rowid, tab_list->a[0].iCursor, 0);
 	}
 	__free_mask_set(&mask_set);
 	return where_info;
@@ -1384,7 +1384,7 @@ __where_end(where_info_t* winfo)
 	int i, addr;
 	where_level_t *level;
 	table_t *table;
-	vdbe_t *v = winfo->parser->pVdbe;
+	vdbe_t *v = winfo->pParse->pVdbe;
 	src_list_t *tab_list = winfo->pTabList;
 
 	for (i = (tab_list->nSrc - 1); i >= 0; i--) {
@@ -1415,7 +1415,7 @@ __where_end(where_info_t* winfo)
 	for (i = 0; i < tab_list->nSrc; i++) {
 		table = tab_list->a[i].pTab;
 		DBSQL_ASSERT(table != 0);
-		if (table->isTransient || table->pSelect)
+		if ((table->tabFlags & TF_Ephemeral) || table->pSelect)
 			continue;
 		level = &winfo->a[i];
 		__vdbe_add_op(v, OP_Close, tab_list->a[i].iCursor, 0);
@@ -1424,10 +1424,10 @@ __where_end(where_info_t* winfo)
 		}
 	}
 #if 0  /* NOTE: Never reuse a cursor */
-	if( winfo->parser->nTab==winfo->peakNTab ){
-		winfo->parser->nTab = winfo->savedNTab;
+	if( winfo->pParse->nTab==winfo->peakNTab ){
+		winfo->pParse->nTab = winfo->savedNTab;
 	}
 #endif
-	__dbsql_free(winfo->parser->db, winfo);
+	__dbsql_free(winfo->pParse->db, winfo);
 	return;
 }

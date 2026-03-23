@@ -2039,6 +2039,10 @@ struct trigger {
 
 	/* Legacy DBSQL compatibility shim */
 	int iDb;                 /* Database index (0=main, 1=temp, 2+=attached) */
+	char *name;              /* Alias for zName (deprecated) */
+	int foreach;             /* FOR EACH ROW/STATEMENT (deprecated - always TK_ROW) */
+	token_t nameToken;       /* Original name token (deprecated) */
+	int iTabDb;              /* Table's database index (deprecated) */
 };
 
 /* ================================================================
@@ -2070,6 +2074,9 @@ struct trigger_step {
 	trigger_step_t *pNext;   /* Next in the link-list */
 	trigger_step_t *pLast;   /* Last element in link-list.  Valid for
 				    1st element only */
+
+	/* Legacy DBSQL compatibility shim */
+	token_t target;          /* Deprecated: use pSrc instead */
 };
 
 /*

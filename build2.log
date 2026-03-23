@@ -1,0 +1,35 @@
+this derivation will be built:
+  /nix/store/vsqvxvbsqb4msbgp2mhwf7i0gb7n7qwr-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/vsqvxvbsqb4msbgp2mhwf7i0gb7n7qwr-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/vsqvxvbsqb4msbgp2mhwf7i0gb7n7qwr-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/lsjhwd9dwccgxwnhrpsvm9ldxsjjw78v-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       > ../dist/../src/cg_trigger.c:603:52: error: 'trigger_t' {aka 'struct trigger'} has no member named 'name'
+       >   603 |                 __vdbe_change_p4(v, base+1, trigger->name, 0);
+       >       |                                                    ^~
+       > ../dist/../src/cg_trigger.c:615:43: error: 'trigger_t' {aka 'struct trigger'} has no member named 'name'
+       >   615 |                 const char *name = trigger->name;
+       >       |                                           ^~
+       > ../dist/../src/cg_trigger.c: In function '__triggers_exist':
+       > ../dist/../src/cg_trigger.c:706:32: error: 'trigger_t' {aka 'struct trigger'} has no member named 'foreach'
+       >   706 |                     trig_cursor->foreach == foreach &&
+       >       |                                ^~
+       > ../dist/../src/cg_trigger.c: In function 'targetSrcList':
+       > ../dist/../src/cg_trigger.c:751:54: error: 'trigger_step_t' {aka 'struct trigger_step'} has no member named 'target'
+       >   751 |                 src = __src_list_append(0, &db, &step->target);
+       >       |                                                      ^~
+       > ../dist/../src/cg_trigger.c:753:49: error: 'trigger_step_t' {aka 'struct trigger_step'} has no member named 'target'
+       >   753 |                 src = __src_list_append(0, &step->target, 0);
+       >       |                                                 ^~
+       > ../dist/../src/cg_trigger.c: In function '__code_row_trigger':
+       > ../dist/../src/cg_trigger.c:885:28: error: 'trigger_t' {aka 'struct trigger'} has no member named 'foreach'
+       >   885 |                     trigger->foreach == TK_ROW) {
+       >       |                            ^~
+       > ../dist/../src/cg_trigger.c:920:70: error: 'trigger_t' {aka 'struct trigger'} has no member named 'name'
+       >   920 |                         __auth_context_push(parser, &authctx, trigger->name);
+       >       |                                                                      ^~
+       > make: *** [Makefile:384: cg_trigger.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/vsqvxvbsqb4msbgp2mhwf7i0gb7n7qwr-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv

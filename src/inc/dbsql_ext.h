@@ -225,7 +225,7 @@ void __vdbe_make_ready __P((vdbe_t *, int, int, int, int));
 void __vdbe_sorter_reset __P((vdbe_t *));
 void __vdbe_agg_reset __P((agg_t *));
 void __vdbe_keylist_free __P((keylist_t *));
-void __vdbe_free_cursor __P((vdbe_t *, cursor_t *));
+void __vdbe_free_cursor __P((vdbe_t *, VdbeCursor *));
 int __vdbe_reset __P((vdbe_t *, char **));
 int __vdbe_finalize __P((vdbe_t *, char **));
 int __api_bind __P((dbsql_stmt_t *, int, const char *, int, int));

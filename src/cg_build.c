@@ -1813,9 +1813,7 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
 		goto fk_end;
 	fkey->pFrom = table;
 	fkey->pNextFrom = table->pFKey;
-	z = (char*)&fkey[1];
-	fkey->aCol = (struct col_map*)z;
-	z += sizeof(struct col_map)*ncol;
+	z = (char*)&fkey->aCol[ncol];  /* Point to memory after aCol array */
 	fkey->zTo = z;
 	memcpy(z, to->z, to->n);
 	z[to->n] = 0;
@@ -2197,7 +2195,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 			__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
 			lbl2 = __vdbe_make_label(v);
 			__vdbe_add_op(v, OP_Rewind, 2, lbl2);
-			lbl1 = __vdbe_add_op(v, OP_Recno, 2, 0);
+			lbl1 = __vdbe_add_op(v, OP_Rowid, 2, 0);
 			for (i = 0; i < index->nColumn; i++) {
 				int col = index->aiColumn[i];
 				if (table->iPKey == col) {
