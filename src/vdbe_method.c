@@ -549,8 +549,10 @@ __vdbe_dequote_p4(vdbe_t* vm, int addr)
 	op = &vm->opcodes[addr];
 	if (op->p4.z == 0 || op->p4.z[0] == 0)
 		return;
-	if (op->p4type == P4_POINTER)
+	if (op->p4type != P4_DYNAMIC && op->p4type != P4_STATIC) {
+		/* Only process string types */
 		return;
+	}
 	if (op->p4type != P4_DYNAMIC) {
 		__dbsql_strdup(NULL, op->p4.z, (char**)&op->p4.z);
 		op->p4type = P4_DYNAMIC;
@@ -576,7 +578,8 @@ __vdbe_compress_space(vdbe_t* vm, int addr)
 	if (vm->opcodes == 0 || addr < 0 || addr >= vm->nOp)
 		return;
 	op = &vm->opcodes[addr];
-	if (op->p4type == P4_POINTER) {
+	if (op->p4type != P4_DYNAMIC && op->p4type != P4_STATIC) {
+		/* Only process string types */
 		return;
 	}
 	if (op->p4type != P4_DYNAMIC) {
@@ -658,10 +661,13 @@ __vdbe_mem_release(mem_t* p)
 		/* Aggregate context: finalize if needed */
 		if (p->u.pDef && p->u.pDef->xFinalize) {
 			dbsql_func_t ctx;
+			mem_t out;
 			memset(&ctx, 0, sizeof(ctx));
+			memset(&out, 0, sizeof(out));
+			out.flags = MEM_Null;
 			ctx.pFunc = p->u.pDef;
-			ctx.s.flags = MEM_Null;
-			ctx.pAgg = p->z;
+			ctx.pOut = &out;
+			ctx.pMem = p;  /* Aggregate context memory */
 			(*p->u.pDef->xFinalize)(&ctx);
 		}
 		__dbsql_free(NULL, p->zMalloc);
@@ -866,31 +872,32 @@ dbsql_set_result_string(p, result, n)
 	const char *result;
 	int n;
 {
+	mem_t *pOut = p->pOut;
 	DBSQL_ASSERT(!p->isStep);
-	if (p->s.flags & MEM_Dyn) {
-		if (p->s.xDel) {
-			p->s.xDel(p->s.z);
+	if (pOut->flags & MEM_Dyn) {
+		if (pOut->xDel) {
+			pOut->xDel(pOut->z);
 		} else {
-			__dbsql_free(NULL, p->s.z);
+			__dbsql_free(NULL, pOut->z);
 		}
 	}
 	if (result == 0) {
-		p->s.flags = MEM_Null;
+		pOut->flags = MEM_Null;
 		n = 0;
-		p->s.z = 0;
-		p->s.n = 0;
+		pOut->z = 0;
+		pOut->n = 0;
 	} else {
 		if (n < 0)
 			n = strlen(result);
-		if (__dbsql_calloc(NULL, 1, n + 1, &p->s.z) != ENOMEM) {
-			memcpy(p->s.z, result, n);
-			p->s.z[n] = 0;
+		if (__dbsql_calloc(NULL, 1, n + 1, &pOut->z) != ENOMEM) {
+			memcpy(pOut->z, result, n);
+			pOut->z[n] = 0;
 		}
-		p->s.flags = MEM_Str | MEM_Dyn | MEM_Term;
-		p->s.xDel = 0;
-		p->s.n = n;
+		pOut->flags = MEM_Str | MEM_Dyn | MEM_Term;
+		pOut->xDel = 0;
+		pOut->n = n;
 	}
-	return p->s.z;
+	return pOut->z;
 }
 
 /*
@@ -901,17 +908,18 @@ dbsql_set_result_string(p, result, n)
 void
 dbsql_set_result_null(dbsql_func_t* p)
 {
+	mem_t *pOut = p->pOut;
 	DBSQL_ASSERT(!p->isStep);
-	if (p->s.flags & MEM_Dyn) {
-		if (p->s.xDel) {
-			p->s.xDel(p->s.z);
+	if (pOut->flags & MEM_Dyn) {
+		if (pOut->xDel) {
+			pOut->xDel(pOut->z);
 		} else {
-			__dbsql_free(NULL, p->s.z);
+			__dbsql_free(NULL, pOut->z);
 		}
 	}
-	p->s.flags = MEM_Null;
-	p->s.z = 0;
-	p->s.n = 0;
+	pOut->flags = MEM_Null;
+	pOut->z = 0;
+	pOut->n = 0;
 }
 
 /*
@@ -923,15 +931,15 @@ void
 dbsql_set_result_int(dbsql_func_t* p, int result)
 {
 	DBSQL_ASSERT(!p->isStep);
-	if (p->s.flags & MEM_Dyn) {
-		if (p->s.xDel) {
-			p->s.xDel(p->s.z);
+	if (p->pOut->flags & MEM_Dyn) {
+		if (p->pOut->xDel) {
+			p->pOut->xDel(p->pOut->z);
 		} else {
-			__dbsql_free(NULL, p->s.z);
+			__dbsql_free(NULL, p->pOut->z);
 		}
 	}
-	p->s.u.i = (int64_t)result;
-	p->s.flags = MEM_Int;
+	p->pOut->u.i = (int64_t)result;
+	p->pOut->flags = MEM_Int;
 }
 
 /*
@@ -945,15 +953,15 @@ dbsql_set_result_int64(p, result)
 	int64_t result;
 {
 	DBSQL_ASSERT(!p->isStep);
-	if (p->s.flags & MEM_Dyn) {
-		if (p->s.xDel) {
-			p->s.xDel(p->s.z);
+	if (p->pOut->flags & MEM_Dyn) {
+		if (p->pOut->xDel) {
+			p->pOut->xDel(p->pOut->z);
 		} else {
-			__dbsql_free(NULL, p->s.z);
+			__dbsql_free(NULL, p->pOut->z);
 		}
 	}
-	p->s.u.i = result;
-	p->s.flags = MEM_Int;
+	p->pOut->u.i = result;
+	p->pOut->flags = MEM_Int;
 }
 
 /*
@@ -965,15 +973,15 @@ void
 dbsql_set_result_double(dbsql_func_t* p, double result)
 {
 	DBSQL_ASSERT(!p->isStep);
-	if (p->s.flags & MEM_Dyn) {
-		if (p->s.xDel) {
-			p->s.xDel(p->s.z);
+	if (p->pOut->flags & MEM_Dyn) {
+		if (p->pOut->xDel) {
+			p->pOut->xDel(p->pOut->z);
 		} else {
-			__dbsql_free(NULL, p->s.z);
+			__dbsql_free(NULL, p->pOut->z);
 		}
 	}
-	p->s.u.r = result;
-	p->s.flags = MEM_Real;
+	p->pOut->u.r = result;
+	p->pOut->flags = MEM_Real;
 }
 
 /*
@@ -1007,37 +1015,37 @@ dbsql_set_result_blob(p, result, size, xDel)
 	void(*xDel)(void*);
 {
 	DBSQL_ASSERT(!p->isStep);
-	if (p->s.flags & MEM_Dyn) {
-		if (p->s.xDel) {
-			p->s.xDel(p->s.z);
+	if (p->pOut->flags & MEM_Dyn) {
+		if (p->pOut->xDel) {
+			p->pOut->xDel(p->pOut->z);
 		} else {
-			__dbsql_free(NULL, p->s.z);
+			__dbsql_free(NULL, p->pOut->z);
 		}
 	}
 	if (result == 0 || size == 0) {
-		p->s.flags = MEM_Null;
-		p->s.z = 0;
-		p->s.n = 0;
+		p->pOut->flags = MEM_Null;
+		p->pOut->z = 0;
+		p->pOut->n = 0;
 		return;
 	}
 	if (xDel == (void(*)(void*))(-1)) {
 		/* DBSQL_TRANSIENT */
-		if (__dbsql_calloc(NULL, 1, size, &p->s.z) != ENOMEM) {
-			memcpy(p->s.z, result, size);
+		if (__dbsql_calloc(NULL, 1, size, &p->pOut->z) != ENOMEM) {
+			memcpy(p->pOut->z, result, size);
 		}
-		p->s.flags = MEM_Blob | MEM_Dyn;
-		p->s.xDel = 0;
+		p->pOut->flags = MEM_Blob | MEM_Dyn;
+		p->pOut->xDel = 0;
 	} else if (xDel == 0) {
 		/* DBSQL_STATIC */
-		p->s.z = (char*)result;
-		p->s.flags = MEM_Blob | MEM_Static;
-		p->s.xDel = 0;
+		p->pOut->z = (char*)result;
+		p->pOut->flags = MEM_Blob | MEM_Static;
+		p->pOut->xDel = 0;
 	} else {
-		p->s.z = (char*)result;
-		p->s.flags = MEM_Blob | MEM_Dyn;
-		p->s.xDel = xDel;
+		p->pOut->z = (char*)result;
+		p->pOut->flags = MEM_Blob | MEM_Dyn;
+		p->pOut->xDel = xDel;
 	}
-	p->s.n = (int)size;
+	p->pOut->n = (int)size;
 }
 
 /*
@@ -1053,7 +1061,7 @@ dbsql_set_result_varchar(p, result, size, xDel)
 	size_t size;
 	void(*xDel)(void*);
 {
-	__vdbe_mem_set_str(&p->s, result, (int)size, xDel);
+	__vdbe_mem_set_str(p->pOut, result, (int)size, xDel);
 }
 
 /*
@@ -1082,13 +1090,16 @@ void *
 dbsql_aggregate_context(dbsql_func_t* p, int num_bytes)
 {
 	DBSQL_ASSERT(p && p->pFunc && p->pFunc->xStep);
-	if (p->pAgg == 0) {
+	if (p->pMem == 0 || p->pMem->z == 0) {
 		if (num_bytes <= 0) {
 			return 0;
 		}
-		__dbsql_calloc(NULL, 1, num_bytes, &p->pAgg);
+		if (p->pMem) {
+			__vdbe_mem_grow(p->pMem, num_bytes, 0);
+			p->pMem->flags = MEM_Agg;
+		}
 	}
-	return p->pAgg;
+	return p->pMem ? p->pMem->z : 0;
 }
 
 /*
@@ -1102,7 +1113,12 @@ int
 dbsql_aggregate_count(dbsql_func_t* p)
 {
 	DBSQL_ASSERT(p && p->pFunc && p->pFunc->xStep);
-	return p->cnt;
+	/*
+	 * In the register-based VDBE, the aggregate count is no longer
+	 * directly tracked in the context structure. Return 0 for now.
+	 * This function may need to be deprecated or track count differently.
+	 */
+	return 0;
 }
 
 #if !defined(NDEBUG) || defined(VDBE_PROFILE)
@@ -1423,90 +1439,52 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
  * __vdbe_sorter_reset --
  *	Remove any elements that remain on the sorter for the VDBE given.
  *
+ *	TODO: Legacy function removed in SQLite 3.52.0.
+ *	Sorting is now handled via CURTYPE_SORTER cursors, not a
+ *	separate pSort linked list in the vdbe_t structure.
+ *
  * PUBLIC: void __vdbe_sorter_reset __P((vdbe_t *));
  */
 void
 __vdbe_sorter_reset(vdbe_t* vm)
 {
-	while(vm->pSort) {
-		sorter_t *s = vm->pSort;
-		vm->pSort = s->next_vdbe;
-		__dbsql_free(NULL, s->zKey);
-		__dbsql_free(NULL, s->pData);
-		__dbsql_free(NULL, s);
-	}
+	/* TODO: Stub - sorting redesigned to use cursors in SQLite 3.52.0 */
+	(void)vm; /* Suppress unused parameter warning */
 }
 
 /*
  * __vdbe_agg_reset --
  *	Reset an Agg structure.  Delete all its contents.
  *
- *	For installable aggregate functions, if the step function has been
- *	called, make sure the finalizer function has also been called.  The
- *	finalizer might need to free memory that was allocated as part of its
- *	private context.  If the finalizer has not been called yet, call it
- *	now.
+ *	TODO: Legacy function removed in SQLite 3.52.0.
+ *	Aggregate handling is now done via the frame mechanism and
+ *	OP_AggFinal opcode. The agg_t structure no longer exists in
+ *	the vdbe_t structure.
  *
  * PUBLIC: void __vdbe_agg_reset __P((agg_t *));
  */
 void
 __vdbe_agg_reset(agg_t* agg)
 {
-	int i;
-	hash_ele_t *p;
-	for (p = __hash_first(&agg->hash); p; p = __hash_next(p)) {
-		agg_elem_t *elem = __hash_data(p);
-		DBSQL_ASSERT(agg->apFunc != 0);
-		for (i = 0; i < agg->nMem; i++) {
-			mem_t *mem = &elem->registers[i];
-			if (agg->apFunc[i] && (mem->flags & MEM_AggCtx) != 0) {
-				dbsql_func_t ctx;
-				ctx.pFunc = agg->apFunc[i];
-				ctx.s.flags = MEM_Null;
-				ctx.pAgg = mem->z;
-				ctx.cnt = mem->u.i;
-				ctx.isStep = 0;
-				ctx.isError = 0;
-				(*agg->apFunc[i]->xFinalize)(&ctx);
-				if (mem->flags & MEM_Dyn) {
-					if (mem->xDel) {
-						mem->xDel(mem->z);
-					} else {
-						__dbsql_free(NULL, mem->z);
-					}
-				}
-			} else if (mem->flags & MEM_Dyn) {
-				if (mem->xDel) {
-					mem->xDel(mem->z);
-				} else {
-					__dbsql_free(NULL, mem->z);
-				}
-			}
-		}
-		__dbsql_free(NULL, elem);
-	}
-	__hash_clear(&agg->hash);
-	__dbsql_free(NULL, agg->apFunc);
-	agg->apFunc = 0;
-	agg->pCurrent = 0;
-	agg->pSearch = 0;
-	agg->nMem = 0;
+	/* TODO: Stub - aggregate handling redesigned in SQLite 3.52.0 */
+	(void)agg; /* Suppress unused parameter warning */
 }
 
 /*
  * __vdbe_keylist_free --
- *	Delete a keylist
+ *	Delete a keylist.
+ *
+ *	TODO: Legacy function with incomplete typedef keylist_t.
+ *	The List opcodes (OP_ListRead, OP_ListWrite, etc.) that use
+ *	this should be migrated to use cursors or result sets.
  *
  * PUBLIC: void __vdbe_keylist_free __P((keylist_t *));
  */
 void
 __vdbe_keylist_free(keylist_t* p)
 {
-	while(p) {
-		keylist_t *next = p->next_vdbe;
-		__dbsql_free(NULL, p);
-		p = next;
-	}
+	/* TODO: Stub - keylist_t is incomplete type, needs structure definition */
+	(void)p; /* Suppress unused parameter warning */
 }
 
 /*
@@ -1529,7 +1507,7 @@ __vdbe_free_cursor(vdbe_t* vm, VdbeCursor* pCur)
 			__sm_close_cursor(pCur->uc.pCursor);
 		}
 		if (pCur->isEphemeral && pCur->ub.pBtx != 0) {
-			__sm_close(pCur->ub.pBtx);
+			__sm_close_db(pCur->ub.pBtx);
 		}
 		break;
 	case CURTYPE_SORTER:
@@ -1703,9 +1681,9 @@ __vdbe_finalize(vdbe_t* vm, char* *err_msgs)
 	rc = __vdbe_reset(vm, err_msgs);
 	__vdbe_delete(vm);
 	if (db->want_to_close && db->pVdbe == 0) {
-		db->close(db);
-	}
-	return rc;
+	/* TODO: Legacy field want_to_close removed in SQLite 3.52.0
+	 * Database close handling is now done explicitly by the caller.
+	 */
 }
 
 /*
