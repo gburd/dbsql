@@ -104,6 +104,8 @@
                   preConfigure = ''
                     mkdir -p build_unix
                     cd build_unix
+                    # Symlink config.hin so configure can find it
+                    ln -sf ../dist/config.hin .
                     configureScript=../dist/configure
                   '';
 
@@ -112,7 +114,7 @@
                     # Generate opcodes.h by extracting OP_* case statements from vdbe.c
                     echo '/* Automatically generated file.  Do not edit */' > opcodes.h
                     grep '^case OP_' ../src/vdbe.c | \
-                      sed -e 's://:' | \
+                      sed -e 's/:.*//' | \
                       awk '{printf "#define %-30s %3d\n", $2, ++cnt} END {print ""; print "/* Legacy DBSQL compatibility opcodes */"; printf "#define %-30s %3d  /* Copy register value */\n", "OP_Copy", cnt+1; printf "#define %-30s %3d  /* Legacy: use OP_ResultRow */\n", "OP_SortCallback", cnt+2; printf "#define %-30s %3d  /* Legacy: use OP_ResultRow */\n", "OP_NullCallback", cnt+3}' >> opcodes.h
 
                     echo "Generated opcodes.h with $(grep -c '^#define OP_' opcodes.h) opcodes"
