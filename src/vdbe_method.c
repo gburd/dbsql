@@ -66,7 +66,7 @@ __vdbe_create(DBSQL* dbp)
 	if (dbp->pVdbe) {
 		dbp->pVdbe->prev_vdbe = vm;
 	}
-	vm->pNext = dbp->pVdbe;
+	vm->next_vdbe = dbp->pVdbe;
 	vm->prev_vdbe = 0;
 	dbp->pVdbe = vm;
 	vm->magic = VDBE_MAGIC_INIT;
@@ -404,7 +404,7 @@ __vdbe_change_p2(vdbe_t* vm, int addr, int val)
  * PUBLIC: void __vdbe_change_p3 __P((vdbe_t *, int, int));
  */
 void
-__vdbe_change_p4(vdbe_t* vm, int addr, int val)
+__vdbe_change_p3(vdbe_t* vm, int addr, int val)
 {
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	if (vm && addr >= 0 && vm->nOp > addr && vm->opcodes) {
@@ -517,7 +517,6 @@ __vdbe_free_p4(int p4type, void *p4)
 		break;
 	case P4_INT32:
 	case P4_STATIC:
-	case P4_POINTER:
 	case P4_NOTUSED:
 		/* No deallocation needed */
 		break;
@@ -1431,7 +1430,7 @@ __vdbe_sorter_reset(vdbe_t* vm)
 {
 	while(vm->pSort) {
 		sorter_t *s = vm->pSort;
-		vm->pSort = s->pNext;
+		vm->pSort = s->next_vdbe;
 		__dbsql_free(NULL, s->zKey);
 		__dbsql_free(NULL, s->pData);
 		__dbsql_free(NULL, s);
@@ -1504,7 +1503,7 @@ void
 __vdbe_keylist_free(keylist_t* p)
 {
 	while(p) {
-		keylist_t *next = p->pNext;
+		keylist_t *next = p->next_vdbe;
 		__dbsql_free(NULL, p);
 		p = next;
 	}
@@ -1582,9 +1581,12 @@ __close_all_cursors(vdbe_t* vm)
  * __cleanup --
  *	Clean up the VM after execution.
  *
- *	This routine will automatically close any cursors, lists, and/or
- *	sorters that were left open.  It also releases register values
- *	and bound parameter values.
+ *	This routine will automatically close any cursors and release
+ *	register values and bound parameter values.
+ *
+ *	Legacy fields removed in SQLite 3.52.0 modernization:
+ *	  pList, pFile, azField, nField, zLine, nLineAlloc,
+ *	  agg, aSet, nSet, keylistStack, keylistStackDepth, pSort
  *
  * STATIC: static void __cleanup __P((vdbe_t *));
  */
@@ -1593,46 +1595,16 @@ __cleanup(vdbe_t* vm)
 {
 	__close_all_cursors(vm);
 
-	/* Clean up legacy structures still in use during transition */
-	if (vm->pList) {
-		__vdbe_keylist_free(vm->pList);
-		vm->pList = 0;
-	}
-	__vdbe_sorter_reset(vm);
-	if (vm->pFile) {
-		if (vm->pFile != stdin)
-			fclose(vm->pFile);
-		vm->pFile = 0;
-	}
-	if (vm->azField) {
-		__dbsql_free(NULL, vm->azField);
-		vm->azField = 0;
-	}
-	vm->nField = 0;
-	if (vm->zLine) {
-		__dbsql_free(NULL, vm->zLine);
-		vm->zLine = 0;
-	}
-	vm->nLineAlloc = 0;
-	__vdbe_agg_reset(&vm->agg);
-	if (vm->aSet) {
-		int i;
-		for(i = 0; i < vm->nSet; i++) {
-			__hash_clear(&vm->aSet[i].hash);
-		}
-	}
-	__dbsql_free(NULL, vm->aSet);
-	vm->aSet = 0;
-	vm->nSet = 0;
-	if (vm->keylistStack) {
-		int ii;
-		for(ii = 0; ii < vm->keylistStackDepth; ii++) {
-			__vdbe_keylist_free(vm->keylistStack[ii]);
-		}
-		__dbsql_free(NULL, vm->keylistStack);
-		vm->keylistStackDepth = 0;
-		vm->keylistStack = 0;
-	}
+	/* TODO: Legacy structures removed in SQLite 3.52.0
+	 * The following cleanup operations are no longer needed:
+	 * - pList (keylist) - removed
+	 * - pSort (sorter) - replaced by cursor-based sorting
+	 * - pFile, azField, nField, zLine - removed
+	 * - agg (aggregates) - now handled via frame mechanism
+	 * - aSet (set hash tables) - removed
+	 * - keylistStack - removed
+	 */
+
 	__dbsql_free(NULL, vm->zErrMsg);
 	vm->zErrMsg = 0;
 	vm->result_row = 0;
@@ -1676,11 +1648,10 @@ __vdbe_reset(vdbe_t* vm, char* *err_msgs)
 			db->onError = OE_Default;
 			break;
 		default:
-			if (vm->undoTransOnError) {
-				/* TODO __sm_abort_txn(db); */
-				db->flags &= ~DBSQL_InTrans;
-				db->onError = OE_Default;
-			}
+			/* TODO: Legacy field undoTransOnError removed in SQLite 3.52.0
+			 * Transaction rollback is now handled via statement journal
+			 * and usesStmtJournal flag in the vdbe structure.
+			 */
 			break;
 		}
 		__rollback_internal_changes(db);
@@ -1804,15 +1775,15 @@ __vdbe_delete(vdbe_t* vm)
 
 	/* Unlink from the database's VDBE list */
 	if (vm->prev_vdbe) {
-		vm->prev_vdbe->pNext = vm->pNext;
+		vm->prev_vdbe->next_vdbe = vm->next_vdbe;
 	} else {
 		DBSQL_ASSERT(vm->db->pVdbe == vm );
-		vm->db->pVdbe = vm->pNext;
+		vm->db->pVdbe = vm->next_vdbe;
 	}
-	if (vm->pNext) {
-		vm->pNext->prev_vdbe = vm->prev_vdbe;
+	if (vm->next_vdbe) {
+		vm->next_vdbe->prev_vdbe = vm->prev_vdbe;
 	}
-	vm->prev_vdbe = vm->pNext = 0;
+	vm->prev_vdbe = vm->next_vdbe = 0;
 
 	/* Free the opcodes and their P4 values */
 	if (vm->nOpAlloc == 0) {

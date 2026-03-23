@@ -231,7 +231,7 @@ int __vdbe_finalize __P((vdbe_t *, char **));
 int __api_bind __P((dbsql_stmt_t *, int, const char *, int, int));
 void __vdbe_delete __P((vdbe_t *));
 int __vdbe_byte_swap __P((int));
-int __vdbe_cursor_moveto __P((cursor_t *));
+int __vdbe_cursor_moveto __P((VdbeCursor *));
 int64_t __vdbe_int_value __P((const mem_t *));
 double __vdbe_real_value __P((const mem_t *));
 int __vdbe_mem_grow __P((mem_t *, int, int));
