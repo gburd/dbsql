@@ -1,0 +1,35 @@
+this derivation will be built:
+  /nix/store/4l3y7hymcn1kp17g8qxi96kkms1cl47j-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/4l3y7hymcn1kp17g8qxi96kkms1cl47j-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/4l3y7hymcn1kp17g8qxi96kkms1cl47j-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/qz4gxz35iwbxyxz09njfrmrg7hcx8a51-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       > ../dist/../src/vdbe.c:5776:28: error: 'vdbe_t' {aka 'struct vdbe'} has no member named 'nSet'
+       >  5776 |         if (i >= 0 && i < p->nSet &&
+       >       |                            ^~
+       > ../dist/../src/vdbe.c:5777:27: error: 'vdbe_t' {aka 'struct vdbe'} has no member named 'aSet'
+       >  5777 |             __hash_find(&p->aSet[i].hash, pTos->z, pTos->n)) {
+       >       |                           ^~
+       > ../dist/../src/vdbe.c:5795:28: error: 'vdbe_t' {aka 'struct vdbe'} has no member named 'nSet'
+       >  5795 |         if (i < 0 || i >= p->nSet ||
+       >       |                            ^~
+       > ../dist/../src/vdbe.c:5796:27: error: 'vdbe_t' {aka 'struct vdbe'} has no member named 'aSet'
+       >  5796 |             __hash_find(&p->aSet[i].hash, pTos->z, pTos->n) == 0) {
+       >       |                           ^~
+       > ../dist/../src/vdbe.c:5957:53: warning: format '%d' expects argument of type 'int', but argument 3 has type 'i64' {aka 'long int'} [-Wformat=]
+       >  5957 |                             fprintf(p->trace, " si:%d", pTos[i].u.i);
+       >       |                                                    ~^   ~~~~~~~~~~~
+       >       |                                                     |            |
+       >       |                                                     int          i64 {aka long int}
+       >       |                                                    %ld
+       > ../dist/../src/vdbe.c:5959:52: warning: format '%d' expects argument of type 'int', but argument 3 has type 'i64' {aka 'long int'} [-Wformat=]
+       >  5959 |                             fprintf(p->trace, " i:%d", pTos[i].u.i);
+       >       |                                                   ~^   ~~~~~~~~~~~
+       >       |                                                    |            |
+       >       |                                                    int          i64 {aka long int}
+       >       |                                                   %ld
+       > make: *** [Makefile:454: vdbe.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/4l3y7hymcn1kp17g8qxi96kkms1cl47j-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv

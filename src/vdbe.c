@@ -523,21 +523,21 @@ __fgets(char* buf, int len, FILE* in)
 
 /*
  * __allocate_cursor --
- *	Allocate a new cursor_t and initialize its basic fields.
+ *	Allocate a new VdbeCursor and initialize its basic fields.
  *	Returns pointer to the new cursor or NULL on memory allocation failure.
  *
- * STATIC: static cursor_t * __allocate_cursor __P((vdbe_t *, int, int, u8));
+ * STATIC: static VdbeCursor * __allocate_cursor __P((vdbe_t *, int, int, u8));
  */
-static cursor_t *
+static VdbeCursor *
 __allocate_cursor(vdbe_t *p, int iCur, int nField, u8 eCurType)
 {
-	cursor_t *pCur;
+	VdbeCursor *pCur;
 	DBSQL *db = p->db;
 	i64 nByte;
 
 	DBSQL_ASSERT(iCur >= 0 && iCur < p->nCursor);
 
-	/* Calculate size needed for cursor_t structure */
+	/* Calculate size needed for VdbeCursor structure */
 	nByte = SZ_VDBECURSOR(nField);
 
 	/* Allocate the cursor */
@@ -2715,7 +2715,7 @@ case OP_VerifySchemaSignature: {
 */
 case OP_OpenRead: /* FALLTHROUGH */
 case OP_OpenWrite: {
-	cursor_t *pCur;
+	VdbeCursor *pCur;
 	key_info_t *pKeyInfo = 0;
 	int nField = 0;
 	int wrFlag;
@@ -2753,7 +2753,7 @@ case OP_OpenWrite: {
 		p->cursors[iCur] = 0;
 	}
 
-	/* Allocate new cursor_t */
+	/* Allocate new VdbeCursor */
 	pCur = __allocate_cursor(p, iCur, nField, CURTYPE_BTREE);
 	if (pCur == 0)
 		goto no_mem;
@@ -2800,7 +2800,7 @@ case OP_OpenWrite: {
 ** of the connection to the database.  Same word; different meanings.
 */
 case OP_OpenTemp: {
-	cursor_t *pCur;
+	VdbeCursor *pCur;
 	key_info_t *pKeyInfo = 0;
 	int nField;
 	int iCur;
@@ -2831,7 +2831,7 @@ case OP_OpenTemp: {
 			p->cursors[iCur] = 0;
 		}
 
-		/* Allocate new cursor_t */
+		/* Allocate new VdbeCursor */
 		pCur = __allocate_cursor(p, iCur, nField, CURTYPE_BTREE);
 		if (pCur == 0)
 			goto no_mem;
@@ -2905,7 +2905,7 @@ case OP_OpenTemp: {
 ** NEW or OLD tables in a trigger.
 */
 case OP_OpenPseudo: {
-	cursor_t *pCur;
+	VdbeCursor *pCur;
 	int iCur;
 
 	iCur = pOp->p1;
@@ -2973,7 +2973,7 @@ case OP_Close: {
 case OP_MoveLt: /* FALLTHROUGH */
 case OP_MoveTo: {
 	int i = pOp->p1;
-	cursor_t *pC;
+	VdbeCursor *pC;
 
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
@@ -3071,7 +3071,7 @@ case OP_NotFound: /* FALLTHROUGH */
 case OP_Found: {
 	int i = pOp->p1;
 	int alreadyExists = 0;
-	cursor_t *pC;
+	VdbeCursor *pC;
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	if ((pC = &p->cursors[i])->pCursor != 0) {
@@ -3168,8 +3168,8 @@ case OP_SeekLE:  /* FALLTHROUGH */
 case OP_SeekGE:  /* FALLTHROUGH */
 case OP_SeekGT: {
 	int i = pOp->p1;
-	cursor_t *pC;
-	sm_cursor_t *pCrsr;
+	VdbeCursor *pC;
+	sm_VdbeCursor *pCrsr;
 	int res;
 	int oc;
 	i64 iKey;
@@ -3280,8 +3280,8 @@ case OP_SeekGT: {
 */
 case OP_SeekRowid: {
 	int i = pOp->p1;
-	cursor_t *pC;
-	sm_cursor_t *pCrsr;
+	VdbeCursor *pC;
+	sm_VdbeCursor *pCrsr;
 	int res;
 	i64 iKey;
 
@@ -3356,7 +3356,7 @@ case OP_SeekRowid: {
 case OP_IsUnique: {
 	int i = pOp->p1;
 	mem_t *pNos = &pTos[-1];
-	sm_cursor_t *pCrsr;
+	sm_VdbeCursor *pCrsr;
 	int R;
 
 	/*
@@ -3447,7 +3447,7 @@ case OP_IsUnique: {
 */
 case OP_NotExists: {
 	int i = pOp->p1;
-	sm_cursor_t *pCrsr;
+	sm_VdbeCursor *pCrsr;
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	if ((pCrsr = p->cursors[i].pCursor) != 0) {
@@ -3484,7 +3484,7 @@ case OP_NewRecno: {
 	}
 	int i = pOp->p1;
 	int v = 0;
-	cursor_t *pC;
+	VdbeCursor *pC;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	if ((pC = &p->cursors[i])->pCursor == 0) {
 		v = 0;
@@ -3608,7 +3608,7 @@ case OP_PutIntKey: /* FALLTHROUGH */
 case OP_PutStrKey: {
 	mem_t *pNos = &pTos[-1];
 	int i = pOp->p1;
-	cursor_t *pC;
+	VdbeCursor *pC;
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	if (((pC = &p->cursors[i])->pCursor != 0 || pC->pseudoTable)) {
@@ -3679,7 +3679,7 @@ case OP_PutStrKey: {
 */
 case OP_Delete: {
 	int i = pOp->p1;
-	cursor_t *pC;
+	VdbeCursor *pC;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	pC = &p->cursors[i];
 	if (pC->pCursor != 0) {
@@ -3729,7 +3729,7 @@ case OP_KeyAsData: {
 case OP_RowKey: /* FALLTHROUGH */
 case OP_RowData: {
 	int i = pOp->p1;
-	cursor_t *pC;
+	VdbeCursor *pC;
 	int n;
 
 	pTos++;
@@ -3738,7 +3738,7 @@ case OP_RowData: {
 	if (pC->nullRow) {
 		pTos->flags = MEM_Null;
 	} else if (pC->pCursor != 0) {
-		sm_cursor_t *pCrsr = pC->pCursor;
+		sm_VdbeCursor *pCrsr = pC->pCursor;
 		__vdbe_cursor_moveto(pC);
 		if (pC->nullRow) {
 			pTos->flags = MEM_Null;
@@ -3795,9 +3795,9 @@ case OP_Column: {
 	int amt, offset, end, payloadSize;
 	int i = pOp->p1;
 	int p2 = pOp->p2;
-	cursor_t *pC;
+	VdbeCursor *pC;
 	char *zRec;
-	sm_cursor_t *pCrsr;
+	sm_VdbeCursor *pCrsr;
 	int idxWidth;
 	unsigned char aHdr[10];
 
@@ -3911,7 +3911,7 @@ case OP_Column: {
 ** i64 rowid access (vs the old KEY_TO_INT byte-swap encoding).
 */
 case OP_Rowid: {
-	cursor_t *pC;
+	VdbeCursor *pC;
 	i64 v;
 	mem_t *pOut;
 
@@ -3939,7 +3939,7 @@ case OP_Rowid: {
 	}
 	/* Read rowid from btree cursor */
 	else if (pC->eCurType == CURTYPE_BTREE) {
-		sm_cursor_t *pCrsr = pC->uc.pCursor;
+		sm_VdbeCursor *pCrsr = pC->uc.pCursor;
 		if (pCrsr == 0) {
 			__vdbe_mem_set_null(pOut);
 			break;
@@ -3970,7 +3970,7 @@ case OP_Rowid: {
 */
 case OP_FullKey: {
 	int i = pOp->p1;
-	sm_cursor_t *pCrsr;
+	sm_VdbeCursor *pCrsr;
 
 	DBSQL_ASSERT(p->cursors[i].keyAsData);
 	DBSQL_ASSERT(!p->cursors[i].pseudoTable);
@@ -4026,8 +4026,8 @@ case OP_NullRow: {
 */
 case OP_Last: {
 	int i = pOp->p1;
-	cursor_t *pC;
-	sm_cursor_t *pCrsr;
+	VdbeCursor *pC;
+	sm_VdbeCursor *pCrsr;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	pC = &p->cursors[i];
@@ -4064,8 +4064,8 @@ case OP_Last: {
 ** This is the register-based version (Phase 3).
 */
 case OP_Rewind: {
-	cursor_t *pC;
-	sm_cursor_t *pCrsr;
+	VdbeCursor *pC;
+	sm_VdbeCursor *pCrsr;
 	int res;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
@@ -4116,8 +4116,8 @@ case OP_Rewind: {
 ** P2: jump destination if not BOF
 */
 case OP_Prev: {
-	cursor_t *pC;
-	sm_cursor_t *pCrsr;
+	VdbeCursor *pC;
+	sm_VdbeCursor *pCrsr;
 	int res;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
@@ -4156,8 +4156,8 @@ case OP_Prev: {
 ** P2: jump destination if not EOF
 */
 case OP_Next: {
-	cursor_t *pC;
-	sm_cursor_t *pCrsr;
+	VdbeCursor *pC;
+	sm_VdbeCursor *pCrsr;
 	int res;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
@@ -4200,7 +4200,7 @@ case OP_Next: {
 */
 case OP_IdxPut: {
 	int i = pOp->p1;
-	sm_cursor_t *pCrsr;
+	sm_VdbeCursor *pCrsr;
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	DBSQL_ASSERT(pTos->flags & MEM_Str);
@@ -4250,7 +4250,7 @@ case OP_IdxPut: {
 */
 case OP_IdxDelete: {
 	int i = pOp->p1;
-	sm_cursor_t *pCrsr;
+	sm_VdbeCursor *pCrsr;
 	/* Note: aStack assertion removed - register-based VDBE */
 	DBSQL_ASSERT(pTos->flags & MEM_Str);
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
@@ -4278,7 +4278,7 @@ case OP_IdxDelete: {
 */
 case OP_IdxRecno: {
 	int i = pOp->p1;
-	sm_cursor_t *pCrsr;
+	sm_VdbeCursor *pCrsr;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	pTos++;
@@ -4331,7 +4331,7 @@ case OP_IdxLT: /* FALLTHROUGH */
 case OP_IdxGT: /* FALLTHROUGH */
 case OP_IdxGE: {
 	int i= pOp->p1;
-	sm_cursor_t *pCrsr;
+	sm_VdbeCursor *pCrsr;
 
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	/* Note: aStack assertion removed - register-based VDBE */
@@ -5482,7 +5482,7 @@ case OP_AggValue: {
 ** See also: SorterInsert, SorterSort, SorterData, SorterNext, Close
 */
 case OP_SorterOpen: {
-	cursor_t *pCx;
+	VdbeCursor *pCx;
 	int nField;
 
 	DBSQL_ASSERT(pOp->p1 >= 0);
@@ -5524,7 +5524,7 @@ case OP_SorterOpen: {
 ** See also: SorterOpen, SorterSort, SorterData, SorterNext
 */
 case OP_SorterInsert: {
-	cursor_t *pC;
+	VdbeCursor *pC;
 	mem_t *pIn2;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
@@ -5558,7 +5558,7 @@ case OP_SorterInsert: {
 ** See also: SorterOpen, SorterInsert, SorterNext, Rewind
 */
 case OP_SorterSort: {
-	cursor_t *pC;
+	VdbeCursor *pC;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
 	pC = p->cursors[pOp->p1];
@@ -5602,7 +5602,7 @@ case OP_SorterSort: {
 ** See also: SorterOpen, SorterSort, SorterNext, RowData
 */
 case OP_SorterData: {
-	cursor_t *pC;
+	VdbeCursor *pC;
 	mem_t *pOut;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
@@ -5639,7 +5639,7 @@ case OP_SorterData: {
 ** See also: SorterOpen, SorterSort, SorterData, Next
 */
 case OP_SorterNext: {
-	cursor_t *pC;
+	VdbeCursor *pC;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
 	pC = p->cursors[pOp->p1];
@@ -5676,7 +5676,7 @@ case OP_SorterNext: {
 ** See also: NewRecno, SorterOpen
 */
 case OP_Sequence: {
-	cursor_t *pC;
+	VdbeCursor *pC;
 	mem_t *pOut;
 
 	DBSQL_ASSERT(pOp->p1 >= 0 && pOp->p1 < p->nCursor);
@@ -5688,7 +5688,7 @@ case OP_Sequence: {
 
 	/* Get and increment sequence counter */
 	pOut->flags = MEM_Int;
-	pOut->i = pC->seqCount++;
+	pOut->u.i = pC->seqCount++;
 
 	break;
 }
@@ -5721,7 +5721,7 @@ case OP_InitCoroutine: {
 	 * Note: we store P3-1 because pc will be incremented before
 	 * the next instruction executes. */
 	pOut->flags = MEM_Int;
-	pOut->i = pOp->p3 - 1;
+	pOut->u.i = pOp->p3 - 1;
 
 	/* If P2 is non-zero, jump to P2 to initialize the coroutine */
 	if (pOp->p2 != 0) {
@@ -5736,8 +5736,11 @@ case OP_InitCoroutine: {
 ** If Set P1 does not exist then create it.  Then insert value
 ** P3 into that set.  If P3 is NULL, then insert the top of the
 ** stack into the set.
+**
+** NOTE: Legacy SQLite 2.x code - disabled (aSet removed in modernization)
 */
 case OP_SetInsert: {
+#if 0  /* DISABLED - aSet removed in modernization */
 	int i = pOp->p1;
 	if (p->nSet <= i) {
 		int k;
@@ -5758,6 +5761,11 @@ case OP_SetInsert: {
 		__entity_release_mem(pTos);
 		pTos--;
 	}
+#else
+	/* Set operations not yet implemented in register-based VDBE */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
 	break;
 }
 
@@ -5766,8 +5774,11 @@ case OP_SetInsert: {
 ** Pop the stack once and compare the value popped off with the
 ** contents of set P1.  If the element popped exists in set P1,
 ** then jump to P2.  Otherwise fall through.
+**
+** NOTE: Legacy SQLite 2.x code - disabled (aSet removed in modernization)
 */
 case OP_SetFound: {
+#if 0  /* DISABLED - aSet removed in modernization */
 	int i = pOp->p1;
 	/* Note: aStack assertion removed - register-based VDBE */
 	__entity_as_string(pTos);
@@ -5777,6 +5788,11 @@ case OP_SetFound: {
 	}
 	__entity_release_mem(pTos);
 	pTos--;
+#else
+	/* Set operations not yet implemented in register-based VDBE */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
 	break;
 }
 
@@ -5785,8 +5801,11 @@ case OP_SetFound: {
 ** Pop the stack once and compare the value popped off with the
 ** contents of set P1.  If the element popped does not exists in
 ** set P1, then jump to P2.  Otherwise fall through.
+**
+** NOTE: Legacy SQLite 2.x code - disabled (aSet removed in modernization)
 */
 case OP_SetNotFound: {
+#if 0  /* DISABLED - aSet removed in modernization */
 	int i = pOp->p1;
 	/* Note: aStack assertion removed - register-based VDBE */
 	__entity_as_string(pTos);
@@ -5796,6 +5815,11 @@ case OP_SetNotFound: {
 	}
 	__entity_release_mem(pTos);
 	pTos--;
+#else
+	/* Set operations not yet implemented in register-based VDBE */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
 	break;
 }
 
@@ -5810,9 +5834,15 @@ case OP_SetNotFound: {
 ** Read the next element from set P1 and push it onto the stack.  If there
 ** are no more elements in the set, do not do the push and fall through.
 ** Otherwise, jump to P2 after pushing the next set element.
+**
+** NOTE: This is legacy code from SQLite 2.x. The Set structure (p->aSet)
+** was removed in SQLite 3.52.0 modernization. This code is disabled until
+** it can be refactored to use modern SQLite 3.x mechanisms (ephemeral tables
+** or window functions).
 */
 case OP_SetFirst:  /* FALLTHROUGH */
 case OP_SetNext: {
+#if 0  /* DISABLED - aSet removed in modernization */
 	set_t *pSet;
 	CHECK_FOR_INTERRUPT;
 	if (pOp->p1 < 0 || pOp->p1 >= p->nSet) {
@@ -5840,6 +5870,11 @@ case OP_SetNext: {
 	pTos->z = __hash_key(pSet->prev);
 	pTos->n = __hash_keysize(pSet->prev);
 	pTos->flags = MEM_Str | MEM_Ephem;
+#else
+	/* Set operations not yet implemented in register-based VDBE */
+	rc = DBSQL_INTERNAL;
+	goto abort_due_to_error;
+#endif
 	break;
 }
 
@@ -5941,11 +5976,11 @@ default: {
 			    fprintf(p->trace, " NULL");
 		    } else if ((pTos[i].flags &
 				(MEM_Int | MEM_Str)) == (MEM_Int | MEM_Str)) {
-			    fprintf(p->trace, " si:%d", pTos[i].i);
+			    fprintf(p->trace, " si:%d", pTos[i].u.i);
 		    } else if (pTos[i].flags & MEM_Int) {
-			    fprintf(p->trace, " i:%d", pTos[i].i);
+			    fprintf(p->trace, " i:%d", pTos[i].u.i);
 		    } else if (pTos[i].flags & MEM_Real) {
-			    fprintf(p->trace, " r:%g", pTos[i].r);
+			    fprintf(p->trace, " r:%g", pTos[i].u.r);
 		    } else if (pTos[i].flags & MEM_Str) {
 			    int j, k;
 			    char zBuf[100];
@@ -6003,6 +6038,13 @@ vdbe_halt:
 	}
 	p->magic = VDBE_MAGIC_HALT;
 	/* Note: No need to save pTos - register-based VDBE doesn't track stack pointer */
+	return rc;
+
+	/*
+	 * Jump to here to return from the VM with the current rc value.
+	 * Used by opcodes that return DBSQL_ROW mid-execution.
+	 */
+vdbe_return:
 	return rc;
 
 	/*

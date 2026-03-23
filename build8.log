@@ -1,0 +1,35 @@
+this derivation will be built:
+  /nix/store/1h2j1246qjwcl7cj7w3w4wpqa7v8qmql-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/1h2j1246qjwcl7cj7w3w4wpqa7v8qmql-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/1h2j1246qjwcl7cj7w3w4wpqa7v8qmql-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/i89g541v32161m1rzashvmlad2jparpv-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       > ../dist/../src/vdbe.c:5661:11: error: invalid use of incomplete typedef 'cursor_t' {aka 'struct cursor'}
+       >  5661 |         pC->nullRow = 1;
+       >       |           ^~
+       > ../dist/../src/vdbe.c:5664:11: error: invalid use of incomplete typedef 'cursor_t' {aka 'struct cursor'}
+       >  5664 |         pC->cacheStatus = CACHE_STALE;
+       >       |           ^~
+       > ../dist/../src/vdbe.c:5685:12: warning: assignment to 'cursor_t *' {aka 'struct cursor *'} from incompatible pointer type 'VdbeCursor *' [-Wincompatible-pointer-types]
+       >  5685 |         pC = p->cursors[pOp->p1];
+       >       |            ^
+       > ../dist/../src/vdbe.c:5693:23: error: invalid use of incomplete typedef 'cursor_t' {aka 'struct cursor'}
+       >  5693 |         pOut->u.i = pC->seqCount++;
+       >       |                       ^~
+       > ../dist/../src/vdbe.c:5981:53: warning: format '%d' expects argument of type 'int', but argument 3 has type 'i64' {aka 'long int'} [-Wformat=]
+       >  5981 |                             fprintf(p->trace, " si:%d", pTos[i].u.i);
+       >       |                                                    ~^   ~~~~~~~~~~~
+       >       |                                                     |            |
+       >       |                                                     int          i64 {aka long int}
+       >       |                                                    %ld
+       > ../dist/../src/vdbe.c:5983:52: warning: format '%d' expects argument of type 'int', but argument 3 has type 'i64' {aka 'long int'} [-Wformat=]
+       >  5983 |                             fprintf(p->trace, " i:%d", pTos[i].u.i);
+       >       |                                                   ~^   ~~~~~~~~~~~
+       >       |                                                    |            |
+       >       |                                                    int          i64 {aka long int}
+       >       |                                                   %ld
+       > make: *** [Makefile:454: vdbe.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/1h2j1246qjwcl7cj7w3w4wpqa7v8qmql-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
