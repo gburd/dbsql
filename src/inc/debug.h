@@ -101,13 +101,13 @@ extern "C" {
 	va_list ap;							\
 									\
 	/* Call the user's callback function, if specified. */		\
-	va_start(ap);							\
+	va_start(ap, fmt);							\
 	if ((dbp) != NULL && (dbp)->dbsql_errcall != NULL)		\
 		__dbsql_errcall(dbp, error, error_set, fmt, ap);	\
 	va_end(ap);							\
 									\
 	/* Write to the user's file descriptor, if specified. */	\
-	va_start(ap);							\
+	va_start(ap, fmt);							\
 	if ((dbp) != NULL && (dbp)->dbsql_errfile != NULL)		\
 		__dbsql_errfile(dbp, error, error_set, fmt, ap);	\
 	va_end(ap);							\
@@ -116,7 +116,7 @@ extern "C" {
 	 * If we have a default and we didn't do either of the above,	\
 	 * write to the default.					\
 	 */								\
-	va_start(ap);							\
+	va_start(ap, fmt);							\
 	if ((stderr_default) && ((dbp) == NULL ||			\
 	    ((dbp)->dbsql_errcall == NULL && (dbp)->dbsql_errfile == NULL)))\
 		__dbsql_errfile(dbp, error, error_set, fmt, ap);	\

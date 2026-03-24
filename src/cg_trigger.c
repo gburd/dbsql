@@ -36,7 +36,7 @@ __vdbe_delete_trigger_step(trigger_step_t* ts)
 			__dbsql_free(NULL, (char *)tmp->target.z);
 		__expr_delete(tmp->pWhere);
 		__expr_list_delete(tmp->pExprList);
-		__select_delete(tmp->select);
+		__select_delete(tmp->pSelect);
 		__id_list_delete(tmp->pIdList);
 
 		__dbsql_free(NULL, tmp);
@@ -314,10 +314,10 @@ __persist_trigger_step(trigger_step_t* ts)
 		__dbsql_strndup(NULL, ts->target.z, &ts->target.z, ts->target.n);
 		ts->target.dyn = 1;
 	}
-	if (ts->select) {
-		select_t *new = __select_dup(ts->select);
-		__select_delete(ts->select);
-		ts->select = new;
+	if (ts->pSelect) {
+		select_t *new = __select_dup(ts->pSelect);
+		__select_delete(ts->pSelect);
+		ts->pSelect = new;
 	}
 	if( ts->pWhere ){
 		expr_t *new = __expr_dup(ts->pWhere);
@@ -355,7 +355,7 @@ __trigger_select_step(select_t* select)
 		return 0;
 
 	ts->op = TK_SELECT;
-	ts->select = select;
+	ts->pSelect = select;
 	ts->orconf = OE_Default;
 	__persist_trigger_step(ts);
 
@@ -393,7 +393,7 @@ __trigger_insert_step(token_t* tab_name, id_list_t* column, expr_list_t* elist, 
 	DBSQL_ASSERT(elist != 0 || select != 0);
 
 	ts->op = TK_INSERT;
-	ts->select = select;
+	ts->pSelect = select;
 	ts->target  = *tab_name;
 	ts->pIdList = column;
 	ts->pExprList = elist;
@@ -776,7 +776,7 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 		parser->trigStack->orconf = orconf;
 		switch(ts->op) {
 		case TK_SELECT: {
-			select_t * ss = __select_dup(ts->select);
+			select_t * ss = __select_dup(ts->pSelect);
 			DBSQL_ASSERT(ss);
 			DBSQL_ASSERT(ss->pSrc);
 			__select(parser, ss, SRT_Discard, 0, 0, 0, 0);
@@ -798,7 +798,7 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 			src = targetSrcList(parser, ts);
 			__insert(parser, src,
 				 __expr_list_dup(ts->pExprList), 
-				 __select_dup(ts->select), 
+				 __select_dup(ts->pSelect), 
 				 __id_list_dup(ts->pIdList), orconf);
 			break;
 		}

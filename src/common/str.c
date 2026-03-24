@@ -126,14 +126,7 @@ unsigned char __str_upper_to_lower[] = {
  * PUBLIC: void __str_append __P((char **, const char *, ...));
  */
 void
-#ifdef STDC_HEADERS
 __str_append(char **result, const char *fmt, ...)
-#else
-__str_append(result, fmt, va_alist)
-	char **result;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
 	size_t len;
@@ -173,13 +166,7 @@ __str_append(result, fmt, va_alist)
  * PUBLIC: void __str_nappend __P((char **, ...));
  */
 void
-#ifdef STDC_HEADERS
 __str_nappend(char **result, ...)
-#else
-__str_nappend(result, va_alist)
-	char **result;
-	va_dcl
-#endif
 {
 	va_list ap;
 	size_t len;

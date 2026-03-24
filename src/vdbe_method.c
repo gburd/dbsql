@@ -60,7 +60,7 @@ vdbe_t *
 __vdbe_create(DBSQL* dbp)
 {
 	vdbe_t *vm;
-	if (__dbsql_calloc(dbp, 1, sizeof(vdbe_t), &vm) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(vdbe_t), &vm) != 0)
 		return 0;
 	vm->db = dbp;
 	if (dbp->pVdbe) {
@@ -1370,6 +1370,18 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 	}
 
 	/*
+	 * CRITICAL FIX: Add extra registers for stack growth.
+	 * Legacy stack-based opcodes do pTos++ to push values, where pTos
+	 * starts at &aMem[nMem-1]. This means they can access aMem[nMem],
+	 * aMem[nMem+1], etc. which are OUT OF BOUNDS if we only allocate nMem
+	 * registers. Add 5 extra registers to allow for stack pushes.
+	 *
+	 * Example: SELECT 1 does OP_Integer which does pTos++ then writes to pTos,
+	 * accessing aMem[10] when only aMem[0..9] are allocated.
+	 */
+	nMem += 5;  /* Add extra space for legacy stack pushes */
+
+	/*
 	 * Allocate the register array (aMem).
 	 */
 	if (vm->registers == 0) {
@@ -1522,7 +1534,7 @@ __vdbe_free_cursor(vdbe_t* vm, VdbeCursor* pCur)
 		break;
 	}
 
-	__dbsql_free(vm->db, pCur);
+	__dbsql_free(NULL, pCur);
 }
 
 /*
@@ -1772,9 +1784,10 @@ __vdbe_delete(vdbe_t* vm)
 	if (vm->nOpAlloc == 0) {
 		vm->opcodes = 0;
 		vm->nOp = 0;
-	}
-	for (i = 0; i < vm->nOp; i++) {
-		__vdbe_free_p4(vm->opcodes[i].p4type, vm->opcodes[i].p4.p);
+	} else {
+		for (i = 0; i < vm->nOp; i++) {
+			__vdbe_free_p4(vm->opcodes[i].p4type, vm->opcodes[i].p4.p);
+		}
 	}
 
 	/* Free bound parameters */

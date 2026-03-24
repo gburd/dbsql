@@ -377,7 +377,7 @@ seltablist(A) ::= stl_prefix(X) nm(Y) dbnm(D) as(Z) on_opt(N) using_opt(U). {
 seltablist(A) ::= stl_prefix(X) LP seltablist_paren(S) RP
                   as(Z) on_opt(N) using_opt(U). {
   A = __src_list_append(X,0,0);
-  A->a[A->nSrc-1].pSelect = S;
+  A->a[A->nSrc-1].select = S;
   if( Z.n ) __src_list_add_alias(A,&Z);
   if( N ){
     if( A && A->nSrc>1 ){ A->a[A->nSrc-2].pOn = N; }

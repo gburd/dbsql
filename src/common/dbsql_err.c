@@ -219,14 +219,7 @@ unknown_err: {
  * PUBLIC:      __attribute__ ((__format__ (__printf__, 2, 3)));
  */
 void
-#ifdef STDC_HEADERS
 __dbsql_err(const DBSQL *dbp, const char *fmt, ...)
-#else
-__dbsql_err(dbp, fmt, va_alist)
-	const DBSQL *dbp;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	DBSQL_REAL_ERR(dbp, 0, 0, 0, fmt);
 }
@@ -329,14 +322,7 @@ __dbsql_errfile(dbp, error, error_set, fmt, ap)
  * PUBLIC: void __error_msg __P((parser_t *, const char *, ...));
  */
 void
-#ifdef STDC_HEADERS
 __error_msg(parser_t *parser, const char *fmt, ...)
-#else
-__error_msg(parser, fmt, va_alist)
-	parser_t parser;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
 	int len;

@@ -504,13 +504,15 @@ __sm_cursor(sm_t* sm, int id, int write, sm_cursor_t* *smcp)
 	DBSQL_ASSERT(smcp != 0);
 
 	*smcp = 0;
+	if (sm->dbp == NULL)
+		return DBSQL_ERROR;
 	dbenv = sm->dbp->dbenv;
 
 	smr = (sm_rec_t *)__hash_find(&sm->dbs, (const void *)0, id);
 	if (smr == 0)
 		return DBSQL_INTERNAL;
 
-	if (__dbsql_calloc(sm->dbp, 1, sizeof(sm_cursor_t), &smc) == ENOMEM)
+	if (__dbsql_calloc(sm->dbp, 1, sizeof(sm_cursor_t), &smc) != 0)
 		return DBSQL_NOMEM;
 
 	smc->sm = sm;

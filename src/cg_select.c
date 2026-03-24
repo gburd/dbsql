@@ -874,6 +874,9 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 	if (parser->colNamesSet || v == 0 || parser->rc == ENOMEM)
 		return;
 	parser->colNamesSet = 1;
+
+	/* Set the number of result columns */
+	__vdbe_set_num_cols(v, elist->nExpr);
 	for (i = 0; i < elist->nExpr; i++) {
 		type = 0;
 		p = elist->a[i].pExpr;
@@ -961,7 +964,7 @@ __select_op_name(int id)
  *
  *    (1)  Fill in the tables->a[].pTab fields in the SrcList that 
  *         defines the set of tables that should be scanned.  For views,
- *         fill tables->a[].pSelect with a copy of the SELECT statement
+ *         fill tables->a[].select with a copy of the SELECT statement
  *         that implements the view.  A copy is made of the view's SELECT
  *         statement so that we can freely modify or delete that statement
  *         without worrying about messing up the presistent representation
@@ -1012,17 +1015,17 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 		}
 		if (tables->a[i].zName == 0) {
 			/* A sub-query in the FROM clause of a SELECT. */
-			DBSQL_ASSERT(tables->a[i].pSelect != 0);
+			DBSQL_ASSERT(tables->a[i].select != 0);
 			if (tables->a[i].zAlias == 0) {
 				sprintf(fake_name, "___subquery_%p_",
-					(void*)tables->a[i].pSelect);
+					(void*)tables->a[i].select);
 				__str_append(&tables->a[i].zAlias,
 					     fake_name, 0);
 			}
 			tables->a[i].pTab = table = 
 				__select_result_set(parser,
 						    tables->a[i].zAlias,
-						    tables->a[i].pSelect);
+						    tables->a[i].select);
 			if (table == 0) {
 				return 1;
 			}
@@ -1051,14 +1054,14 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 					return 1;
 				}
 				/*
-				 * If tables->a[i].pSelect!=0 it means we are
+				 * If tables->a[i].select!=0 it means we are
 				 * dealing with a view within a view.  The
 				 * SELECT structure has already been copied by
 				 * the outer view so we can skip the copy step
 				 * here in the inner view.
 				 */
-				if (tables->a[i].pSelect == 0) {
-					tables->a[i].pSelect =
+				if (tables->a[i].select == 0) {
+					tables->a[i].select =
 						__select_dup(table->pSelect);
 				}
 			}
@@ -1222,7 +1225,7 @@ __fill_in_column_list(parser_t* parser, select_t* select)
  * __select_unbind --
  *	This routine recursively unlinks the select_t.pSrc.a[].pTab pointers
  *	in a select structure.  It just sets the pointers to NULL.  This
- *	routine is recursive in the sense that if the select_t.pSrc.a[].pSelect
+ *	routine is recursive in the sense that if the select_t.pSrc.a[].select
  *	pointer is not NULL, this routine is called recursively on that
  *	pointer.
  *
@@ -1250,8 +1253,8 @@ __select_unbind(select_t* select)
 				__vdbe_delete_table(0, table);
 			}
 			src->a[i].pTab = 0;
-			if (src->a[i].pSelect) {
-				__select_unbind(src->a[i].pSelect);
+			if (src->a[i].select) {
+				__select_unbind(src->a[i].select);
 			}
 		}
 	}
@@ -1973,7 +1976,7 @@ __flatten_subquery(parser_t* parser, select_t* select, int from, int agg_p, int 
 	DBSQL_ASSERT(outer_from_clause &&
 	       from >= 0 &&
 	       from < outer_from_clause->nSrc);
-	sub_select = outer_from_clause->a[from].pSelect;
+	sub_select = outer_from_clause->a[from].select;
 	DBSQL_ASSERT(sub_select != 0);
 	if (agg_p && subquery_agg_p)
 		return 0;
@@ -2617,7 +2620,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 	 * Generate code for all sub-queries in the FROM clause
 	 */
 	for (i = 0; i < tables->nSrc; i++) {
-		if (tables->a[i].pSelect == 0)
+		if (tables->a[i].select == 0)
 			continue;
 		if (tables->a[i].zName != 0) {
 			saveauth_context = parser->zAuthContext;
@@ -2626,7 +2629,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 		} else {
 			need_restore_context_p = 0;
 		}
-		__select(parser, tables->a[i].pSelect, SRT_TempTable, 
+		__select(parser, tables->a[i].select, SRT_TempTable, 
 			 tables->a[i].iCursor, select, i, &agg_p);
 		if (need_restore_context_p) {
 			parser->zAuthContext = saveauth_context;

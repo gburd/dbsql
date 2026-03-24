@@ -90,6 +90,39 @@ __null_callback(void* not_used, int n, char* *a, char* *b)
 }
 
 /*
+ * __mem_to_string --
+ *	Convert a mem_t value to a string for the callback.
+ *	Returns the string pointer (z field) or NULL for NULL values.
+ *
+ * STATIC: static const char *__mem_to_string __P((mem_t *));
+ */
+static const char *
+__mem_to_string(mem_t *mem, char *buf, size_t bufsize)
+{
+	if (mem->flags & MEM_Null) {
+		return 0;
+	}
+	if (mem->flags & MEM_Str) {
+		return mem->z;
+	}
+	if (mem->flags & MEM_Int) {
+		/* Convert integer to string in provided buffer */
+		snprintf(buf, bufsize, "%lld", (long long)mem->u.i);
+		return buf;
+	}
+	if (mem->flags & MEM_Real) {
+		/* Convert real to string in provided buffer */
+		snprintf(buf, bufsize, "%g", mem->u.r);
+		return buf;
+	}
+	if (mem->flags & MEM_Blob) {
+		/* BLOB values can't be converted to string for old callback API */
+		return "(BLOB)";
+	}
+	return "";
+}
+
+/*
  * __parse_exec --
  *	This routine is called after a single SQL statement has been
  *	parsed and we want to execute the VDBE code to implement
@@ -122,14 +155,83 @@ __parse_exec(parser_t* parser)
 			trace = 0;
 		}
 		__vdbe_trace(v, trace);
-		__vdbe_make_ready(v, parser->nVar, callback, parser->pArg,
+		__vdbe_make_ready(v, parser->nVar, parser->nMem, parser->nTab,
 				  parser->explain);
 		if (parser->useCallback) {
 			if (parser->explain) {
 				rc = __vdbe_list(v);
 				dbp->next_sig = dbp->aDb[0].schema_sig;
 			} else {
-				__vdbe_exec(v);
+				/* Loop calling __vdbe_exec to handle all rows */
+				while ((rc = __vdbe_exec(v)) == DBSQL_ROW) {
+					/* Extract column values and call callback */
+					int ncol = v->nResColumn;
+					char **col_vals = 0;
+					char **col_names = 0;
+					char **col_bufs = 0;  /* Buffers for integer/real conversion */
+					int i;
+
+					/* Allocate arrays for callback */
+					if (__dbsql_calloc(dbp, ncol, sizeof(char*), &col_vals) != 0 ||
+					    __dbsql_calloc(dbp, ncol, sizeof(char*), &col_names) != 0 ||
+					    __dbsql_calloc(dbp, ncol, sizeof(char*), &col_bufs) != 0) {
+						if (col_vals)
+							__os_free(dbp->dbenv, col_vals);
+						if (col_names)
+							__os_free(dbp->dbenv, col_names);
+						if (col_bufs)
+							__os_free(dbp->dbenv, col_bufs);
+						rc = DBSQL_NOMEM;
+						break;
+					}
+
+					/* Allocate conversion buffers (64 bytes each for numbers) */
+					for (i = 0; i < ncol; i++) {
+						if (__dbsql_calloc(dbp, 1, 64, &col_bufs[i]) != 0) {
+							for (int j = 0; j < i; j++)
+								__os_free(dbp->dbenv, col_bufs[j]);
+							__os_free(dbp->dbenv, col_vals);
+							__os_free(dbp->dbenv, col_names);
+							__os_free(dbp->dbenv, col_bufs);
+							rc = DBSQL_NOMEM;
+							goto cleanup_loop;
+						}
+					}
+
+					/* Extract column values from result_row */
+					for (i = 0; i < ncol; i++) {
+						mem_t *mem = &v->result_row[i];
+						col_vals[i] = (char*)__mem_to_string(mem, col_bufs[i], 64);
+					}
+
+					/* Extract column names */
+					for (i = 0; i < ncol; i++) {
+						mem_t *name = &v->column_names[i*2];
+						col_names[i] = (name->flags & MEM_Str) ? name->z : "";
+					}
+
+					/* Call the callback */
+					if (callback(parser->pArg, ncol, col_vals, col_names) != 0) {
+						/* Callback returned non-zero, abort */
+						rc = DBSQL_ABORT;
+						for (i = 0; i < ncol; i++)
+							__os_free(dbp->dbenv, col_bufs[i]);
+						__os_free(dbp->dbenv, col_vals);
+						__os_free(dbp->dbenv, col_names);
+						__os_free(dbp->dbenv, col_bufs);
+						break;
+					}
+
+					/* Free allocated memory */
+					for (i = 0; i < ncol; i++)
+						__os_free(dbp->dbenv, col_bufs[i]);
+					__os_free(dbp->dbenv, col_vals);
+					__os_free(dbp->dbenv, col_names);
+					__os_free(dbp->dbenv, col_bufs);
+				}
+			cleanup_loop:
+				/* Loop complete */
+				;
 			}
 			rc = __vdbe_finalize(v, &parser->zErrMsg);
 			if (rc)
@@ -2543,7 +2645,7 @@ __src_list_delete(src_list_t* list)
 		if (list->a[i].pTab && (list->a[i].pTab->tabFlags & TF_Ephemeral)) {
 			__vdbe_delete_table(0, list->a[i].pTab);
 		}
-		__select_delete(list->a[i].pSelect);
+		__select_delete(list->a[i].select);
 		__expr_delete(list->a[i].pOn);
 		__id_list_delete(list->a[i].pUsing);
 	}

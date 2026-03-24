@@ -641,6 +641,20 @@ __get_token(const unsigned char *z, int *token_type)
 }
 
 /*
+ * __parser_malloc_wrapper --
+ *	Wrapper for __dbsql_calloc that matches the parser allocator signature.
+ *	The Lemon parser expects malloc-style allocation but we need calloc
+ *	to zero the parser stack, preventing invalid pointer frees during
+ *	cleanup of uninitialized stack entries.
+ */
+static int
+__parser_malloc_wrapper(DBSQL *dbp, size_t size, void *storep)
+{
+	/* Use calloc (1, size) to zero-initialize the memory */
+	return __dbsql_calloc(dbp, 1, size, storep);
+}
+
+/*
  * __run_sql_parser --
  *	Run the parser on the given SQL string.  The parser structure
  *	is passed in.  A DBSQL_ status code is returned.
@@ -669,7 +683,8 @@ __run_sql_parser(parser_t *parser, const char *sql, char **err_msgs)
 	dbp->flags &= ~DBSQL_Interrupt;
 	parser->rc = DBSQL_SUCCESS;
 	i = 0;
-	engine = __sql_parser_alloc(dbp, __dbsql_malloc);
+	/* Use wrapper that zeros memory to prevent invalid frees of uninitialized pointers */
+	engine = __sql_parser_alloc(dbp, __parser_malloc_wrapper);
 	if (engine == 0) {
 		__str_append(err_msgs, "out of memory", (char *)0);
 		return 1;

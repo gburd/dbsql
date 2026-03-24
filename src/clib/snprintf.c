@@ -110,15 +110,7 @@
  */
 #ifndef HAVE_SNPRINTF
 int
-#ifdef STDC_HEADERS
 snprintf(char *str, size_t n, const char *fmt, ...)
-#else
-snprintf(str, n, fmt, va_alist)
-	char *str;
-	size_t n;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	static int ret_charpnt = -1;
 	va_list ap;
@@ -143,11 +135,7 @@ snprintf(str, n, fmt, va_alist)
 		    (int)sprintf(buf, "1234") != 4;
 	}
 
-#ifdef STDC_HEADERS
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	len = vsprintf(str, fmt, ap);
 	va_end(ap);
 	return (ret_charpnt ? (int)strlen(str) : len);

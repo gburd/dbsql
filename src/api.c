@@ -956,13 +956,8 @@ __api_create_function(DBSQL *dbp, const char *name, int encoding, int num_arg, v
  * ...				Arguments to the format string
  */
 static int
-#ifdef STDC_HEADERS
 __api_exec_printf(DBSQL *dbp, const char *fmt, dbsql_callback callback,
 		  void *arg, char **err_msgs, ...)
-#else
-__api_exec_printf(DBSQL *dbp, const char *fmt, dbsql_callback callback,
-          void *arg, char **err_msgs, va_dcl)
-#endif
 {
 	va_list ap;
 	int rc;
@@ -1014,12 +1009,8 @@ __api_exec_vprintf(DBSQL *dbp, const char *fmt, dbsql_callback callback, void *a
  * ...				Arguments to the format string
  */
 static int
-#ifdef STDC_HEADERS
 __api_exec_table_printf(DBSQL *dbp, const char *fmt, char ***results,
 			int *num_rows, int *num_cols, char **err_msgs, ...)
-#else
-__api_exec_printf(DBSQL *dbp, const char *fmt, char ***results, int *num_rows, int *num_cols, char **err_msgs, va_dcl)
-#endif
 {
 	va_list ap;
 	int rc;
