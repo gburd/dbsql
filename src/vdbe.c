@@ -2051,6 +2051,7 @@ case OP_MakeRecord: {
 	int idxWidth;
 	u_int32_t addr;
 	mem_t *pRec;
+	mem_t *pOut;
 	int addUnique = 0;   /* True to cause bytes to be added to make the
 			      * generated record distinct */
 	char zTemp[NBFS];    /* Temp space for small records */
@@ -2074,37 +2075,63 @@ case OP_MakeRecord: {
 	 * data(k).
 	 * Idx(N) contains the total number of bytes in the record.
 	 */
-	nField = pOp->p1;
-	pRec = &pTos[1 - nField];
-	/* Note: aStack assertion removed - register-based VDBE */
-	nByte = 0;
-	for (i = 0; i < nField; i++, pRec++) {
-		if (pRec->flags & MEM_Null) {
-			addUnique = pOp->p2;
-		} else {
-			__entity_as_string(pRec);
-			nByte += pRec->n;
+
+	/* Check for register mode (P3 > 0) */
+	if (pOp->p3 > 0) {
+		/* REGISTER MODE: P1=first_reg, P2=field_count, P3=dest_reg */
+		int iFirst = pOp->p1;
+		nField = pOp->p2;
+		pOut = &aMem[pOp->p3];
+
+		DBSQL_ASSERT(iFirst >= 0 && iFirst + nField <= p->nMem);
+		DBSQL_ASSERT(pOp->p3 > 0 && pOp->p3 <= p->nMem);
+
+		/* Calculate total size needed */
+		nByte = 0;
+		for (i = 0; i < nField; i++) {
+			pRec = &aMem[iFirst + i];
+			if ((pRec->flags & MEM_Null) == 0) {
+				__entity_as_string(pRec);
+				nByte += pRec->n;
+			}
 		}
-	}
-	if (addUnique)
-		nByte += sizeof(0 /* TODO: uniqueCnt removed */);
-	if (nByte + nField + 1 < 256) {
-		idxWidth = 1;
-	} else if (nByte + (2 * nField) + 2 < 65536) {
-		idxWidth = 2;
-	} else {
-		idxWidth = 3;
-	}
-	nByte += idxWidth * (nField + 1);
-	if (nByte <= NBFS) {
-		zNewRecord = zTemp;
-	} else {
-		if (__dbsql_calloc(NULL, 1, nByte, &zNewRecord) == ENOMEM)
-			goto no_mem;
-	}
-	j = 0;
-	addr = idxWidth * (nField + 1) + addUnique * sizeof(0 /* TODO: uniqueCnt removed */);
-	for (i = 0, pRec = &pTos[1 - nField]; i < nField; i++, pRec++) {
+
+		/* Determine index width based on record size */
+		if (nByte + nField + 1 < 256) {
+			idxWidth = 1;
+		} else if (nByte + (2 * nField) + 2 < 65536) {
+			idxWidth = 2;
+		} else {
+			idxWidth = 3;
+		}
+		nByte += idxWidth * (nField + 1);
+
+		/* Allocate space for record */
+		if (nByte <= NBFS) {
+			zNewRecord = zTemp;
+		} else {
+			if (__dbsql_calloc(NULL, 1, nByte, &zNewRecord) == ENOMEM)
+				goto no_mem;
+		}
+
+		/* Write index entries */
+		j = 0;
+		addr = idxWidth * (nField + 1);
+		for (i = 0; i < nField; i++) {
+			pRec = &aMem[iFirst + i];
+			zNewRecord[j++] = addr & 0xff;
+			if (idxWidth > 1) {
+				zNewRecord[j++] = (addr >> 8) & 0xff;
+				if (idxWidth > 2) {
+					zNewRecord[j++] = (addr >> 16) & 0xff;
+				}
+			}
+			if ((pRec->flags & MEM_Null) == 0) {
+				addr += pRec->n;
+			}
+		}
+
+		/* Write final size index */
 		zNewRecord[j++] = addr & 0xff;
 		if (idxWidth > 1) {
 			zNewRecord[j++] = (addr >> 8) & 0xff;
@@ -2112,42 +2139,104 @@ case OP_MakeRecord: {
 				zNewRecord[j++] = (addr >> 16) & 0xff;
 			}
 		}
-		if ((pRec->flags & MEM_Null) == 0) {
-			addr += pRec->n;
+
+		/* Write field data */
+		for (i = 0; i < nField; i++) {
+			pRec = &aMem[iFirst + i];
+			if ((pRec->flags & MEM_Null) == 0) {
+				memcpy(&zNewRecord[j], pRec->z, pRec->n);
+				j += pRec->n;
+			}
 		}
-	}
-	zNewRecord[j++] = addr & 0xff;
-	if (idxWidth > 1) {
-		zNewRecord[j++] = (addr >> 8) & 0xff;
-		if (idxWidth > 2) {
-			zNewRecord[j++] = (addr >> 16) & 0xff;
+
+		/* Store record in output register */
+		pOut->n = nByte;
+		if (nByte <= NBFS) {
+			DBSQL_ASSERT(zNewRecord == zTemp);
+			memcpy(pOut->z, zTemp, nByte);
+			pOut->flags = MEM_Str;
+		} else {
+			DBSQL_ASSERT(zNewRecord != zTemp);
+			pOut->z = zNewRecord;
+			pOut->flags = MEM_Str | MEM_Dyn;
 		}
-	}
-	if (addUnique) {
-		/* TODO: uniqueCnt field removed - needs redesign */
-		/* For now, use a constant placeholder */
-		u32 uniqueVal = 0;
-		memcpy(&zNewRecord[j], &uniqueVal, sizeof(uniqueVal));
-		j += sizeof(uniqueVal);
-	}
-	for (i = 0, pRec = &pTos[1 - nField]; i < nField; i++, pRec++) {
-		if ((pRec->flags & MEM_Null) == 0) {
-			memcpy(&zNewRecord[j], pRec->z, pRec->n);
-			j += pRec->n;
-		}
-	}
-	__pop_stack(&pTos, nField);
-	pTos++;
-	pTos->n = nByte;
-	if (nByte <= NBFS) {
-		DBSQL_ASSERT(zNewRecord == zTemp);
-		memcpy(pTos->z, zTemp, nByte);
-		pTos->z = pTos->z;
-		pTos->flags = MEM_Str;
 	} else {
-		DBSQL_ASSERT(zNewRecord != zTemp);
-		pTos->z = zNewRecord;
-		pTos->flags = MEM_Str | MEM_Dyn;
+		/* STACK MODE (P3 <= 0): use legacy stack-based implementation */
+		nField = pOp->p1;
+		pRec = &pTos[1 - nField];
+		/* Note: aStack assertion removed - register-based VDBE */
+		nByte = 0;
+		for (i = 0; i < nField; i++, pRec++) {
+			if (pRec->flags & MEM_Null) {
+				addUnique = pOp->p2;
+			} else {
+				__entity_as_string(pRec);
+				nByte += pRec->n;
+			}
+		}
+		if (addUnique)
+			nByte += sizeof(0 /* TODO: uniqueCnt removed */);
+		if (nByte + nField + 1 < 256) {
+			idxWidth = 1;
+		} else if (nByte + (2 * nField) + 2 < 65536) {
+			idxWidth = 2;
+		} else {
+			idxWidth = 3;
+		}
+		nByte += idxWidth * (nField + 1);
+		if (nByte <= NBFS) {
+			zNewRecord = zTemp;
+		} else {
+			if (__dbsql_calloc(NULL, 1, nByte, &zNewRecord) == ENOMEM)
+				goto no_mem;
+		}
+		j = 0;
+		addr = idxWidth * (nField + 1) + addUnique * sizeof(0 /* TODO: uniqueCnt removed */);
+		for (i = 0, pRec = &pTos[1 - nField]; i < nField; i++, pRec++) {
+			zNewRecord[j++] = addr & 0xff;
+			if (idxWidth > 1) {
+				zNewRecord[j++] = (addr >> 8) & 0xff;
+				if (idxWidth > 2) {
+					zNewRecord[j++] = (addr >> 16) & 0xff;
+				}
+			}
+			if ((pRec->flags & MEM_Null) == 0) {
+				addr += pRec->n;
+			}
+		}
+		zNewRecord[j++] = addr & 0xff;
+		if (idxWidth > 1) {
+			zNewRecord[j++] = (addr >> 8) & 0xff;
+			if (idxWidth > 2) {
+				zNewRecord[j++] = (addr >> 16) & 0xff;
+			}
+		}
+		if (addUnique) {
+			/* TODO: uniqueCnt field removed - needs redesign */
+			/* For now, use a constant placeholder */
+			u32 uniqueVal = 0;
+			memcpy(&zNewRecord[j], &uniqueVal, sizeof(uniqueVal));
+			j += sizeof(uniqueVal);
+		}
+		for (i = 0, pRec = &pTos[1 - nField]; i < nField; i++, pRec++) {
+			if ((pRec->flags & MEM_Null) == 0) {
+				memcpy(&zNewRecord[j], pRec->z, pRec->n);
+				j += pRec->n;
+			}
+		}
+		__pop_stack(&pTos, nField);
+		pTos++;
+		pTos->n = nByte;
+		if (nByte <= NBFS) {
+			DBSQL_ASSERT(zNewRecord == zTemp);
+			memcpy(pTos->z, zTemp, nByte);
+			pTos->z = pTos->z;
+			pTos->flags = MEM_Str;
+		} else {
+			DBSQL_ASSERT(zNewRecord != zTemp);
+			pTos->z = zNewRecord;
+			pTos->flags = MEM_Str | MEM_Dyn;
+		}
 	}
 	break;
 }
