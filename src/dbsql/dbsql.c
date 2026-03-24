@@ -1330,6 +1330,20 @@ main(int argc, char* *argv)
 	main_init(&data);
 
 	/*
+	 * Check for --help and --version before creating DB environment
+	 * to avoid memory leaks on these early exits.
+	 */
+	for(i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--help") == 0) {
+			usage(1);
+		} else if (strcmp(argv[i], "--version") == 0) {
+			int major, minor, patch;
+			printf("%s\n", dbsql_version(&major, &minor, &patch));
+			return 0;
+		}
+	}
+
+	/*
 	 * Initialize a minimal DB environment early for memory management.
 	 * This ensures ALL memory allocations use Berkeley DB's allocators.
 	 */
@@ -1364,13 +1378,10 @@ main(int argc, char* *argv)
 		} else if (strcmp(argv[i], "--key") ==0 ){
 			i++;
 			__dbsql_strdup(NULL, argv[i], &data.crypt_key);
-		} else if (strcmp(argv[i], "--version") == 0) {
-			int major, minor, patch;
-			printf("%s\n", dbsql_version(&major, &minor, &patch));
-			exit_code = 0;
-			goto cleanup;
-		} else if (strcmp(argv[i], "--help") == 0) {
-			usage(1);
+		} else if (strcmp(argv[i], "--version") == 0 ||
+			   strcmp(argv[i], "--help") == 0) {
+			/* Already handled before dbenv creation */
+			continue;
 		}
 	}
 	if (i < argc) {
@@ -1402,6 +1413,9 @@ main(int argc, char* *argv)
 		char *z = argv[i];
 		if (strcmp(z, "--init") == 0 || strcmp(z, "--key") == 0) {
 			i++;
+		} else if (strcmp(z, "--version") == 0 || strcmp(z, "--help") == 0) {
+			/* Already handled before dbenv creation */
+			continue;
 		} else if (strcmp(z, "--html") == 0) {
 			data.mode = MODE_Html;
 		} else if (strcmp(z, "--list") == 0) {
@@ -1424,11 +1438,6 @@ main(int argc, char* *argv)
 			data.show_header = 0;
 		} else if (strcmp(z, "--echo") == 0) {
 			data.echoOn = 1;
-		} else if (strcmp(z, "--version") == 0) {
-			int major, minor, patch;
-			printf("%s\n", dbsql_version(&major, &minor, &patch));
-			exit_code = 0;
-			goto cleanup;
 		} else {
 			fprintf(stderr,"%s: unknown option: %s\n",
 				g.progname, z);

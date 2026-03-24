@@ -88,11 +88,23 @@ valgrind --leak-check=full ./result/bin/dbsql :memory: "INVALID SQL"
 
 Expected: **definitely lost: 0 bytes** for all tests
 
+## Follow-up Fix: Move --help and --version Earlier
+
+After the initial commit, analysis revealed that --help and --version were checked AFTER g.dbenv creation, which could still leak.
+
+**Second fix applied:**
+- Added early check for --help and --version BEFORE db_env_create()
+- These flags now return immediately without creating any resources
+- Later checks skip --help/--version with comments indicating they're already handled
+- Eliminates the need for goto cleanup for these common flags
+
+This is cleaner than the goto pattern because these flags should exit as early as possible anyway.
+
 ## Additional Opportunities
 
-The analysis identified other potential improvements not addressed in this commit:
+The analysis identified other potential improvements not addressed in these commits:
 
-1. **data.crypt_key**: Allocated at line 1367, never freed
+1. **data.crypt_key**: Allocated at line 1367 (now ~1381), never freed
 2. **err_msgs**: May be allocated by exec(), not freed on error path
 3. **Other exit() calls**: Many other locations call exit() that could use the cleanup pattern
 
