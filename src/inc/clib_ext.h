@@ -12,7 +12,10 @@ int getopt __P((int, char * const *, const char *));
 #ifndef HAVE_MEMCMP
 int memcmp __P((const void *, const void *, size_t));
 #endif
-#ifndef HAVE_SRAND48_R
+/* Note: On glibc systems, srand48_r is provided by stdlib.h with signature:
+ * int srand48_r(long int seedval, struct drand48_data *buffer)
+ * We only declare our custom version if the system doesn't provide it */
+#if !defined(__GLIBC__) && !defined(HAVE_SRAND48_R)
 int srand48_r __P((struct drand48_data *));
 #endif
 int rand8_r __P((struct drand48_data *, u_int8_t *));
