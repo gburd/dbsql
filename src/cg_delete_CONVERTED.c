@@ -120,7 +120,7 @@ void __delete_from(parser, list, where)
 	int regRec;         /* Register for assembled record in triggers */
 
 	context.pParse = 0;
-	if (parser->nErr || parser->rc == ENOMEM) {
+	if (parser->n_errors || parser->rc == ENOMEM) {
 		list = 0;
 		goto delete_from_cleanup;
 	}
@@ -162,18 +162,18 @@ void __delete_from(parser, list, where)
 	 * Allocate registers for trigger OLD.* data.
 	 */
 	if (row_triggers_exist) {
-		old_idx = parser->nTab++;
-		regOldRowid = parser->nMem++;
-		regOldData = parser->nMem;
-		parser->nMem += table->nCol;
-		regRec = parser->nMem++;
+		old_idx = parser->n_tables++;
+		regOldRowid = parser->n_memory++;
+		regOldData = parser->n_memory;
+		parser->n_memory += table->n_columns;
+		regRec = parser->n_memory++;
 	}
 
 	/*
 	 * Resolve the column names in all the expressions.
 	 */
 	DBSQL_ASSERT(list->nSrc == 1);
-	cur = list->a[0].iCursor = parser->nTab++;
+	cur = list->a[0].iCursor = parser->n_tables++;
 	if (where) {
 		if (__expr_resolve_ids(parser, list, 0, where)) {
 			goto delete_from_cleanup;
@@ -215,7 +215,7 @@ void __delete_from(parser, list, where)
 	 */
 	regRowSet = 0;
 	if (dbp->flags & DBSQL_CountRows) {
-		regRowSet = parser->nMem++;
+		regRowSet = parser->n_memory++;
 		__vdbe_add_op(v, OP_Integer, 0, regRowSet);
 	}
 
@@ -232,7 +232,7 @@ void __delete_from(parser, list, where)
 			 */
 			int end_of_loop = __vdbe_make_label(v);
 			int addr;
-			int regCount = parser->nMem++;
+			int regCount = parser->n_memory++;
 			if (!view) {
 				__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 				__vdbe_add_op(v, OP_OpenRead, cur,
@@ -261,7 +261,7 @@ void __delete_from(parser, list, where)
 		 */
 
 		/* Allocate register for rowset */
-		regRowSet = parser->nMem++;
+		regRowSet = parser->n_memory++;
 		__vdbe_add_op(v, OP_Null, 0, regRowSet);
 
 		/*
@@ -275,7 +275,7 @@ void __delete_from(parser, list, where)
 		 * Remember the key of every item to be deleted.
 		 * Use OP_RowSetAdd to add rowids to the set.
 		 */
-		regRowid = parser->nMem++;
+		regRowid = parser->n_memory++;
 		__vdbe_add_op(v, OP_Rowid, cur, regRowid);
 		__vdbe_add_op(v, OP_RowSetAdd, regRowSet, regRowid);
 		if (dbp->flags & DBSQL_CountRows) {
@@ -320,12 +320,12 @@ void __delete_from(parser, list, where)
 
 			/* Load OLD.* into registers */
 			__vdbe_add_op(v, OP_Rowid, cur, regOldRowid);
-			for (i = 0; i < table->nCol; i++) {
+			for (i = 0; i < table->n_columns; i++) {
 				__vdbe_add_op(v, OP_Column, cur, i);
 				__vdbe_add_op(v, OP_Copy, 0, regOldData + i);
 			}
 			__vdbe_add_op3(v, OP_MakeRecord, regOldRowid,
-				      table->nCol + 1, regRec);
+				      table->n_columns + 1, regRec);
 			__vdbe_add_op3(v, OP_Insert, old_idx, regRec,
 				      regOldRowid);
 
@@ -348,13 +348,13 @@ void __delete_from(parser, list, where)
 			 * fires.  If there are no row triggers, the cursors
 			 * are opened only once on the outside the loop.
 			 */
-			parser->nTab = cur + 1;
+			parser->n_tables = cur + 1;
 			__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, cur, table->tnum);
 			for (i = 1, idx = table->pIndex; idx;
 			     i++, idx = idx->pNext) {
 				__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
-				__vdbe_add_op(v, OP_OpenWrite, parser->nTab++,
+				__vdbe_add_op(v, OP_OpenWrite, parser->n_tables++,
 					      idx->tnum);
 			}
 
@@ -413,7 +413,7 @@ void __delete_from(parser, list, where)
 				__vdbe_add_op(v, OP_Close, cur + i, idx->tnum);
 			}
 			__vdbe_add_op(v, OP_Close, cur, 0);
-			parser->nTab = cur;
+			parser->n_tables = cur;
 		}
 	}
 	__vdbe_conclude_write(parser);

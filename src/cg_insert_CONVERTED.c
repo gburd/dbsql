@@ -24,7 +24,7 @@
  *
  * Key changes:
  * - Use register allocation (regRowid, regData) instead of stack
- * - OP_NewRowid with P2=target register instead of OP_NewRecno
+ * - OP_NewRecno with P2=target register instead of OP_NewRecno
  * - OP_MakeRecord with P1=first_reg, P2=count, P3=dest_reg
  * - OP_Insert with P2=data_reg, P3=key_reg instead of OP_PutIntKey
  * - Register-based trigger code generation
@@ -155,7 +155,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	vdbe_op_t *op;
 	src_list_t dummy;
 
-	if (parser->nErr)
+	if (parser->n_errors)
 		goto insert_cleanup;
 
 	dbp = parser->db;
@@ -163,7 +163,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	/*
 	 * Locate the table into which we will be inserting new information.
 	 */
-	DBSQL_ASSERT(tlist->nSrc == 1);
+	DBSQL_ASSERT(tlist->n_sources == 1);
 	tname = tlist->a[0].zName;
 	if (tname == 0)
 		goto insert_cleanup;
@@ -214,7 +214,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	 * references.
 	 */
 	if (row_triggers_p) {
-		nidx = parser->nTab++;
+		nidx = parser->n_tables++;
 	}
 
 	/*
@@ -236,7 +236,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		insert_block = __vdbe_make_label(v);
 		rc = __select(parser, select, SRT_Subroutine, insert_block,
 			      0,0,0);
-		if (rc || parser->nErr)
+		if (rc || parser->n_errors)
 			goto insert_cleanup;
 		cleanup = __vdbe_make_label(v);
 		__vdbe_add_op(v, OP_Goto, 0, cleanup);
@@ -273,11 +273,11 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			 * process each row of the result.  Store the result
 			 * in a temporary table.
 			 */
-			src_tab = parser->nTab++;
+			src_tab = parser->n_tables++;
 			__vdbe_resolve_label(v, insert_block);
-			regRec = parser->nMem++;
+			regRec = parser->n_memory++;
 			__vdbe_add_op3(v, OP_MakeRecord, 0, ncol, regRec);
-			__vdbe_add_op(v, OP_NewRowid, src_tab, 0);
+			__vdbe_add_op(v, OP_NewRecno, src_tab, 0);
 			__vdbe_add_op3(v, OP_Insert, src_tab, regRec, 0);
 			__vdbe_add_op(v, OP_Return, 0, 0);
 
@@ -288,7 +288,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			 * the SELECT code above.
 			 */
 			__vdbe_change_p2(v, init_code, __vdbe_current_addr(v));
-			__vdbe_add_op(v, OP_OpenEphemeral, src_tab, 0);
+			__vdbe_add_op(v, OP_OpenTemp, src_tab, 0);
 			__vdbe_add_op(v, OP_Goto, 0, select_loop);
 			__vdbe_resolve_label(v, cleanup);
 		} else {
@@ -320,10 +320,10 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	 * Make sure the number of columns in the source data matches the
 	 * number of columns to be inserted into the table.
 	 */
-	if (column == 0 && ncol != table->nCol) {
+	if (column == 0 && ncol != table->n_columns) {
 		__error_msg(parser,
 			    "table %S has %d columns but %d values "
-			    "were supplied", tlist, 0, table->nCol, ncol);
+			    "were supplied", tlist, 0, table->n_columns, ncol);
 		goto insert_cleanup;
 	}
 	if (column != 0 && ncol != column->nId) {
@@ -349,7 +349,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			column->a[i].idx = -1;
 		}
 		for(i = 0; i < column->nId; i++) {
-			for(j = 0; j < table->nCol; j++) {
+			for(j = 0; j < table->n_columns; j++) {
 				if (strcasecmp(column->a[i].zName,
 					  table->aCol[j].zName) == 0) {
 					column->a[i].idx = j;
@@ -359,14 +359,14 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 					break;
 				}
 			}
-			if(j >= table->nCol) {
+			if(j >= table->n_columns) {
 				if (__is_row_id(column->a[i].zName)) {
 					key_col = i;
 				} else {
 					__error_msg(parser,
 					    "table %S has no column named %s",
 					    tlist, 0, column->a[i].zName);
-					parser->nErr++;
+					parser->n_errors++;
 					goto insert_cleanup;
 				}
 			}
@@ -393,7 +393,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	 * Initialize the count of rows to be inserted.
 	 */
 	if (dbp->flags & DBSQL_CountRows) {
-		cnt_mem = parser->nMem++;
+		cnt_mem = parser->n_memory++;
 		__vdbe_add_op(v, OP_Integer, 0, cnt_mem);
 	}
 
@@ -401,10 +401,10 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	 * REGISTER ALLOCATION BLOCK (new for register-based VDBE)
 	 * Allocate registers for rowid and data columns.
 	 */
-	regRowid = parser->nMem++;
-	regData = parser->nMem;
-	parser->nMem += table->nCol;
-	regRec = parser->nMem++;
+	regRowid = parser->n_memory++;
+	regData = parser->n_memory;
+	parser->n_memory += table->n_columns;
+	regRec = parser->n_memory++;
 
 	/* Allocate registers for index keys */
 	if (table->pIndex) {
@@ -413,7 +413,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		if (__dbsql_calloc(dbp, nIdx, sizeof(int), &aRegIdx) == ENOMEM)
 			goto insert_cleanup;
 		for(i = 0, idx = table->pIndex; idx; idx = idx->pNext, i++) {
-			aRegIdx[i] = parser->nMem++;
+			aRegIdx[i] = parser->n_memory++;
 		}
 	}
 
@@ -421,7 +421,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	 * Open tables and indices if there are no row triggers.
 	 */
 	if (!row_triggers_p) {
-		base = parser->nTab;
+		base = parser->n_tables;
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, base, table->tnum);
 		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
@@ -430,7 +430,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			__vdbe_add_op(v, OP_OpenWrite, (dx + base), idx->tnum);
 			__vdbe_change_p4(v, -1, idx->zName, P3_STATIC);
 		}
-		parser->nTab += dx;
+		parser->n_tables += dx;
 	}
 
 	/*
@@ -469,7 +469,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			__vdbe_add_op(v, OP_Copy, 0, regRowid);
 		} else if (select) {
 			/* Use value from SELECT result */
-			__vdbe_add_op(v, OP_SCopy, regData + key_col, regRowid);
+			__vdbe_add_op(v, OP_Copy, regData + key_col, regRowid);
 		} else {
 			__expr_code(parser, vlist->a[key_col].pExpr);
 			__vdbe_add_op(v, OP_NotNull, -1,
@@ -482,7 +482,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		/*
 		 * Create the new column data.
 		 */
-		for (i = 0; i < table->nCol; i++) {
+		for (i = 0; i < table->n_columns; i++) {
 			if (column == 0) {
 				j = i;
 			} else {
@@ -501,13 +501,13 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 				__vdbe_add_op(v, OP_Copy, 0, regData + i);
 			} else if (select) {
 				/* Already in registers from SELECT */
-				__vdbe_add_op(v, OP_SCopy, regData + j, regData + i);
+				__vdbe_add_op(v, OP_Copy, regData + j, regData + i);
 			} else {
 				__expr_code(parser, vlist->a[j].pExpr);
 				__vdbe_add_op(v, OP_Copy, 0, regData + i);
 			}
 		}
-		__vdbe_add_op3(v, OP_MakeRecord, regRowid, table->nCol + 1, regRec);
+		__vdbe_add_op3(v, OP_MakeRecord, regRowid, table->n_columns + 1, regRec);
 		__vdbe_add_op3(v, OP_Insert, nidx, regRec, regRowid);
 
 		/*
@@ -524,7 +524,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	 * deferred until now.
 	 */
 	if (row_triggers_p && !view_p) {
-		base = parser->nTab;
+		base = parser->n_tables;
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, base, table->tnum);
 		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
@@ -533,7 +533,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			__vdbe_add_op(v, OP_OpenWrite, (dx + base), idx->tnum);
 			__vdbe_change_p4(v, -1, idx->zName, P3_STATIC);
 		}
-		parser->nTab += dx;
+		parser->n_tables += dx;
 	}
 
 	/*
@@ -549,27 +549,27 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 				__vdbe_add_op(v, OP_Column, src_tab, key_col);
 				__vdbe_add_op(v, OP_Copy, 0, regRowid);
 			} else if (select) {
-				__vdbe_add_op(v, OP_SCopy, regData + key_col, regRowid);
+				__vdbe_add_op(v, OP_Copy, regData + key_col, regRowid);
 			} else {
 				__expr_code(parser, vlist->a[key_col].pExpr);
 				__vdbe_add_op(v, OP_Copy, 0, regRowid);
 			}
 			/*
 			 * If the PRIMARY KEY expression is NULL, then use
-			 * OP_NewRowid to generate a unique primary key value.
+			 * OP_NewRecno to generate a unique primary key value.
 			 */
 			__vdbe_add_op(v, OP_NotNull, regRowid,
 				      (__vdbe_current_addr(v) + 2));
-			__vdbe_add_op(v, OP_NewRowid, base, regRowid);
+			__vdbe_add_op(v, OP_NewRecno, base, regRowid);
 			__vdbe_add_op(v, OP_MustBeInt, regRowid, 0);
 		} else {
-			__vdbe_add_op(v, OP_NewRowid, base, regRowid);
+			__vdbe_add_op(v, OP_NewRecno, base, regRowid);
 		}
 
 		/*
 		 * Load data values into registers.
 		 */
-		for (i = 0; i < table->nCol; i++) {
+		for (i = 0; i < table->n_columns; i++) {
 			if (i == table->iPKey) {
 				/*
 				 * The value of the INTEGER PRIMARY KEY
@@ -602,7 +602,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			} else if (select) {
 				/* Already in registers from SELECT */
 				if (i != j) {
-					__vdbe_add_op(v, OP_SCopy, regData + j, regData + i);
+					__vdbe_add_op(v, OP_Copy, regData + j, regData + i);
 				}
 			} else {
 				__expr_code(parser, vlist->a[j].pExpr);

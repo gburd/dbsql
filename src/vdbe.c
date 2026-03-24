@@ -903,6 +903,26 @@ case OP_String: {
 	break;
 }
 
+/* Opcode: Null * P2 *
+**
+** Store a NULL value in register P2. If P2==0, use stack mode (push NULL).
+**
+** Register-based: Store NULL in aMem[P2]
+** Stack-based: Push NULL onto stack
+*/
+case OP_Null: {
+	if (pOp->p2 > 0) {
+		/* Register-based mode */
+		mem_t *pOut = &aMem[pOp->p2];
+		pOut->flags = MEM_Null;
+	} else {
+		/* Legacy stack-based mode */
+		pTos++;
+		pTos->flags = MEM_Null;
+	}
+	break;
+}
+
 /* Opcode: Variable P1 * *
 **
 ** Push the value of variable P1 onto the stack.  A variable is
