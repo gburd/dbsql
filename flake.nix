@@ -171,9 +171,9 @@
 
                     echo "Generated opcodes.h with $(grep -c '^#define OP_' opcodes.h) opcodes"
 
-                    # Copy opcodes.h to src/inc/ where vdbe.h expects to find it
-                    cp opcodes.h ../src/inc/opcodes.h
-                    echo "Copied opcodes.h to src/inc/"
+                    # Keep opcodes.h in build directory where -I. will find it
+                    # Don't try to copy to ../src/inc/ since that's in immutable Nix store
+                    echo "opcodes.h is in build directory, will be found via -I."
                   '';
 
                   meta = with lib; {
