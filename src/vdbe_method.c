@@ -1417,7 +1417,7 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 		vm->trace = stdout;
 	}
 #endif
-	vm->pc = -1; /* Will be set to 0 on first step */
+	vm->pc = 0; /* Start at first instruction */
 	vm->rc = DBSQL_SUCCESS;
 	vm->errorAction = OE_Abort;
 	vm->explain |= explain_p;
