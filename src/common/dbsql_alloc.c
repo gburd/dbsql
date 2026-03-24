@@ -21,6 +21,8 @@
 #include "db_int.h"
 
 #include <string.h>
+#include <errno.h>
+#include <stdlib.h>
 
 
 /*
@@ -72,7 +74,25 @@ __dbsql_strdup(dbp, str, storep)
 	const char *str;
 	void *storep;
 {
-	return (__os_strdup((dbp ? dbp->dbenv : NULL), str, storep));
+	size_t len;
+	int ret;
+	void *p;
+
+	*(void **)storep = NULL;
+
+	if (str == NULL)
+		return EINVAL;
+
+	len = strlen(str) + 1;
+
+	/* Use our wrapper function to handle NULL dbp correctly */
+	if ((ret = __dbsql_malloc(dbp, len, &p)) != 0)
+		return (ret);
+
+	memcpy(p, str, len);
+
+	*(void **)storep = p;
+	return (0);
 }
 
 /*
@@ -91,7 +111,6 @@ __dbsql_strndup(dbp, str, storep, len)
 	size_t size;
 	int ret;
 	void *p;
-	DB_ENV *dbenv = (dbp->dbenv ? NULL : dbp->dbenv);
 
 	*(void **)storep = NULL;
 
@@ -99,10 +118,13 @@ __dbsql_strndup(dbp, str, storep, len)
 		size = strlen(str);
 	else
 		size = len;
-	if ((ret = __os_calloc(dbenv, 1, size + 1, &p)) != 0)
+
+	/* Use our wrapper function to handle NULL dbp correctly */
+	if ((ret = __dbsql_calloc(dbp, 1, size + 1, &p)) != 0)
 		return (ret);
 
 	memcpy(p, str, size);
+	((char *)p)[size] = '\0';
 
 	*(void **)storep = p;
 	return (0);
@@ -120,8 +142,13 @@ __dbsql_calloc(dbp, num, size, storep)
 	size_t num, size;
 	void *storep;
 {
-	return (__os_calloc((dbp ? dbp->dbenv : NULL), num, size,
-			storep));
+	/* If dbp is NULL, use standard calloc to avoid BerkeleyDB issues */
+	if (dbp == NULL) {
+		void **result = (void **)storep;
+		*result = calloc(num, size);
+		return (*result == NULL) ? ENOMEM : 0;
+	}
+	return (__os_calloc(dbp->dbenv, num, size, storep));
 }
 
 /*
@@ -133,7 +160,13 @@ __dbsql_calloc(dbp, num, size, storep)
 int
 __dbsql_malloc(DBSQL* dbp, size_t size, void* storep)
 {
-	return (__os_malloc((dbp ? dbp->dbenv : NULL), size, storep));
+	/* If dbp is NULL, use standard malloc to avoid BerkeleyDB issues */
+	if (dbp == NULL) {
+		void **result = (void **)storep;
+		*result = malloc(size);
+		return (*result == NULL) ? ENOMEM : 0;
+	}
+	return (__os_malloc(dbp->dbenv, size, storep));
 }
 
 /*
@@ -145,7 +178,13 @@ __dbsql_malloc(DBSQL* dbp, size_t size, void* storep)
 int
 __dbsql_realloc(DBSQL* dbp, size_t size, void* storep)
 {
-	return (__os_realloc((dbp ? dbp->dbenv : NULL), size, storep));
+	/* If dbp is NULL, use standard realloc to avoid BerkeleyDB issues */
+	if (dbp == NULL) {
+		void **result = (void **)storep;
+		*result = realloc(*result, size);
+		return (*result == NULL) ? ENOMEM : 0;
+	}
+	return (__os_realloc(dbp->dbenv, size, storep));
 }
 
 /*
@@ -157,5 +196,10 @@ __dbsql_realloc(DBSQL* dbp, size_t size, void* storep)
 void
 __dbsql_free(DBSQL* dbp, void* ptr)
 {
-	__os_free((dbp ? dbp->dbenv : NULL), ptr);
+	/* If dbp is NULL, use standard free to avoid BerkeleyDB issues */
+	if (dbp == NULL) {
+		free(ptr);
+		return;
+	}
+	__os_free(dbp->dbenv, ptr);
 }

@@ -138,7 +138,7 @@ C_OBJS= cg_attach@o@ cg_insert@o@ sql_tokenize@o@ cg_auth@o@ \
 	vdbe@o@ vdbe_method@o@ sm@o@ snprintf@o@ dbsql_err@o@ \
 	dbsql_fop@o@ cg_select@o@ os_sleep@o@ os_jtime@o@ memcmp@o@ \
 	dbsql_atof@o@ safety@o@ dbsql_atoi@o@ strcasecmp@o@ \
-	strdup@o@ dbsql_alloc@o@ str@o@
+	strdup@o@ dbsql_alloc@o@ str@o@ util@o@
 
 LEMON_OBJS=\
 	lemon@o@
@@ -248,10 +248,10 @@ install_lib:
 	@cd $(DESTDIR)$(libdir) && $(rm) -f $(LIB_INSTALL_FILE_LIST)
 	@$(INSTALLER) @INSTALL_LIBS@ $(DESTDIR)$(libdir)
 	@(cd $(DESTDIR)$(libdir) && \
-	    test -f $(libso) && $(ln) -s $(libso) $(libso_default); \
-	    test -f $(libso) && $(ln) -s $(libso) $(libso_major); \
-	    test -f $(libtso) && $(ln) -s $(libtso) $(libtso_default); \
-	    test -f $(libtso) && $(ln) -s $(libtso) $(libtso_major);
+	    (test -f $(libso) && $(ln) -s $(libso) $(libso_default) || true); \
+	    (test -f $(libso) && $(ln) -s $(libso) $(libso_major) || true); \
+	    (test -f $(libtso) && $(ln) -s $(libtso) $(libtso_default) || true); \
+	    (test -f $(libtso) && $(ln) -s $(libtso) $(libtso_major) || true))
 
 uninstall_lib:
 	@cd $(DESTDIR)$(libdir) && $(rm) -f $(LIB_INSTALL_FILE_LIST)
@@ -273,6 +273,12 @@ uninstall_utilities:
 	@(cd $(DESTDIR)$(bindir); for i in $(UTIL_PROGS); do \
 		$(rm) -f $$i $$i.exe; \
 	done)
+
+install_docs:
+	@echo "Documentation installation skipped."
+
+uninstall_docs:
+	@echo "Documentation uninstallation skipped."
 
 ##################################################
 # RPM, build and install.
@@ -398,6 +404,8 @@ dbsql_err@o@: $(srcdir)/common/dbsql_err.c
 dbsql_fop@o@: $(srcdir)/common/dbsql_fop.c
 	 $(CC) $(CFLAGS) $?
 str@o@: $(srcdir)/common/str.c
+	 $(CC) $(CFLAGS) $?
+util@o@: $(srcdir)/util.c
 	 $(CC) $(CFLAGS) $?
 hash@o@: $(srcdir)/common/hash.c
 	 $(CC) $(CFLAGS) $?

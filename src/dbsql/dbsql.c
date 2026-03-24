@@ -1345,6 +1345,10 @@ main(int argc, char* *argv)
 			i++;
 			snprintf(new, sizeof(new), "%s", argv[i]);
 			__dbsql_strdup(NULL, data.crypt_key, new);
+		} else if (strcmp(argv[i], "--version") == 0) {
+			int major, minor, patch;
+			printf("%s\n", dbsql_version(&major, &minor, &patch));
+			return 0;
 		} else if (strcmp(argv[i], "--help") == 0) {
 			usage(1);
 		}
