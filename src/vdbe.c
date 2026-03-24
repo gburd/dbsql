@@ -2675,7 +2675,7 @@ case OP_OpenWrite: {
 	/* Get KeyInfo or nField from P4 */
 	if (pOp->p4type == P4_KEYINFO) {
 		pKeyInfo = pOp->p4.pKeyInfo;
-		nField = pKeyInfo->nAllField;  /* Was nField + nXField */
+		nField = pKeyInfo->n_all_fields;  /* Was nField + nXField */
 	} else if (pOp->p4type == P4_INT32) {
 		nField = pOp->p4.i;
 	}
@@ -4802,7 +4802,7 @@ case OP_SorterSort: {
 
 #ifdef CONFIG_TEST
 	/* Increment sort count for testing */
-	dbsql_sort_count++;
+	dbsql_search_count++;
 #endif
 
 	/* In a full implementation, this would:

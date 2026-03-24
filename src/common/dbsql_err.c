@@ -310,7 +310,7 @@ __dbsql_errfile(dbp, error, error_set, fmt, ap)
 
 /*
  * __error_msg --
- *	Add an error message to pParse->zErrMsg and increment pParse->nErr.
+ *	Add an error message to pParse->zErrMsg and increment pParse->n_errors.
  *	The following formatting characters are allowed:
  *
  *	      %s      Insert a string
@@ -330,7 +330,7 @@ __error_msg(parser_t *parser, const char *fmt, ...)
 	char *z;
 	static char null[] = "NULL";
 
-	parser->nErr++;
+	parser->n_errors++;
 	len = 1 + strlen(fmt);
 	va_start(ap, fmt);
 	for(i = 0; fmt[i]; i++) {
@@ -359,7 +359,7 @@ __error_msg(parser_t *parser, const char *fmt, ...)
 		case 'S': {
 			src_list_t *p = va_arg(ap, src_list_t*);
 			int k = va_arg(ap, int);
-			DBSQL_ASSERT(p->nSrc > k && k >= 0);
+			DBSQL_ASSERT(p->n_sources > k && k >= 0);
 			len += strlen(p->a[k].zName);
 			if (p->a[k].zDatabase && p->a[k].zDatabase[0]) {
 				len += strlen(p->a[k].zDatabase) + 1;
@@ -418,7 +418,7 @@ __error_msg(parser_t *parser, const char *fmt, ...)
 			int len;
 			src_list_t *p = va_arg(ap, src_list_t*);
 			int k = va_arg(ap, int);
-			assert(p->nSrc > k && k >= 0);
+			assert(p->n_sources > k && k >= 0);
 			if (p->a[k].zDatabase && p->a[k].zDatabase[0]) {
 				len = strlen(p->a[k].zDatabase);
 				memcpy(z, p->a[k].zDatabase, len);

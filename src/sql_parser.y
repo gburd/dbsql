@@ -35,7 +35,7 @@
       __set_string(&pParse->zErrMsg, "incomplete SQL statement", (char*)0);
     }
   }
-  pParse->nErr++;
+  pParse->n_errors++;
 }
 %name dbsql_parser
 %include {
@@ -359,32 +359,32 @@ from(A) ::= FROM seltablist(X).               {A = X;}
 //
 stl_prefix(A) ::= seltablist(X) joinop(Y).    {
    A = X;
-   if( A && A->nSrc>0 ) A->a[A->nSrc-1].jointype = Y;
+   if( A && A->n_sources>0 ) A->a[A->n_sources-1].jointype = Y;
 }
 stl_prefix(A) ::= .                           {A = 0;}
 seltablist(A) ::= stl_prefix(X) nm(Y) dbnm(D) as(Z) on_opt(N) using_opt(U). {
   A = __src_list_append(X,&Y,&D);
   if( Z.n ) __src_list_add_alias(A,&Z);
   if( N ){
-    if( A && A->nSrc>1 ){ A->a[A->nSrc-2].pOn = N; }
+    if( A && A->n_sources>1 ){ A->a[A->n_sources-2].pOn = N; }
     else { __expr_delete(N); }
   }
   if( U ){
-    if( A && A->nSrc>1 ){ A->a[A->nSrc-2].pUsing = U; }
+    if( A && A->n_sources>1 ){ A->a[A->n_sources-2].pUsing = U; }
     else { __id_list_delete(U); }
   }
 }
 seltablist(A) ::= stl_prefix(X) LP seltablist_paren(S) RP
                   as(Z) on_opt(N) using_opt(U). {
   A = __src_list_append(X,0,0);
-  A->a[A->nSrc-1].select = S;
+  A->a[A->n_sources-1].pSelect = S;
   if( Z.n ) __src_list_add_alias(A,&Z);
   if( N ){
-    if( A && A->nSrc>1 ){ A->a[A->nSrc-2].pOn = N; }
+    if( A && A->n_sources>1 ){ A->a[A->n_sources-2].pOn = N; }
     else { __expr_delete(N); }
   }
   if( U ){
-    if( A && A->nSrc>1 ){ A->a[A->nSrc-2].pUsing = U; }
+    if( A && A->n_sources>1 ){ A->a[A->n_sources-2].pUsing = U; }
     else { __id_list_delete(U); }
   }
 }
@@ -435,7 +435,7 @@ orderby_opt(A) ::= .                          {A = 0;}
 orderby_opt(A) ::= ORDER BY sortlist(X).      {A = X;}
 sortlist(A) ::= sortlist(X) COMMA sortitem(Y) collate(C) sortorder(Z). {
   A = __expr_list_append(X,Y,0);
-  if( A ) A->a[A->nExpr-1].sortOrder = C+Z;
+  if( A ) A->a[A->n_expressions-1].sortOrder = C+Z;
 }
 sortlist(A) ::= sortitem(Y) collate(C) sortorder(Z). {
   A = __expr_list_append(0,Y,0);
@@ -560,7 +560,7 @@ expr(A) ::= FLOAT(X).        {A = __expr(TK_FLOAT, 0, 0, &X);}
 expr(A) ::= STRING(X).       {A = __expr(TK_STRING, 0, 0, &X);}
 expr(A) ::= VARIABLE(X).     {
   A = __expr(TK_VARIABLE, 0, 0, &X);
-  if( A ) A->iTable = ++pParse->nVar;
+  if( A ) A->iTable = ++pParse->n_variables;
 }
 expr(A) ::= ID(X) LP exprlist(Y) RP(E). {
   A = __expr_function(Y, &X);
@@ -644,56 +644,56 @@ expr(A) ::= PLUS(B) expr(X). [UPLUS] {
 }
 expr(A) ::= LP(B) select(X) RP(E). {
   A = __expr(TK_SELECT, 0, 0, 0);
-  if( A ) A->select = X;
+  if( A ) A->pSelect = X;
   __expr_span(A,&B,&E);
 }
 expr(A) ::= expr(W) BETWEEN expr(X) AND expr(Y). {
   expr_list_t *pList = __expr_list_append(0, X, 0);
   pList = __expr_list_append(pList, Y, 0);
   A = __expr(TK_BETWEEN, W, 0, 0);
-  if( A ) A->expr_list = pList;
+  if( A ) A->pList = pList;
   __expr_span(A,&W->span,&Y->span);
 }
 expr(A) ::= expr(W) NOT BETWEEN expr(X) AND expr(Y). {
   expr_list_t *pList = __expr_list_append(0, X, 0);
   pList = __expr_list_append(pList, Y, 0);
   A = __expr(TK_BETWEEN, W, 0, 0);
-  if( A ) A->expr_list = pList;
+  if( A ) A->pList = pList;
   A = __expr(TK_NOT, A, 0, 0);
   __expr_span(A,&W->span,&Y->span);
 }
 expr(A) ::= expr(X) IN LP exprlist(Y) RP(E).  {
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->expr_list = Y;
+  if( A ) A->pList = Y;
   __expr_span(A,&X->span,&E);
 }
 expr(A) ::= expr(X) IN LP select(Y) RP(E).  {
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->select = Y;
+  if( A ) A->pSelect = Y;
   __expr_span(A,&X->span,&E);
 }
 expr(A) ::= expr(X) NOT IN LP exprlist(Y) RP(E).  {
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->expr_list = Y;
+  if( A ) A->pList = Y;
   A = __expr(TK_NOT, A, 0, 0);
   __expr_span(A,&X->span,&E);
 }
 expr(A) ::= expr(X) NOT IN LP select(Y) RP(E).  {
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->select = Y;
+  if( A ) A->pSelect = Y;
   A = __expr(TK_NOT, A, 0, 0);
   __expr_span(A,&X->span,&E);
 }
 expr(A) ::= expr(X) IN nm(Y) dbnm(D). {
   src_list_t *pSrc = __src_list_append(0, &Y, &D);
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->select = __select_new(0,pSrc,0,0,0,0,0,-1,0);
+  if( A ) A->pSelect = __select_new(0,pSrc,0,0,0,0,0,-1,0);
   __expr_span(A,&X->span,D.z?&D:&Y);
 }
 expr(A) ::= expr(X) NOT IN nm(Y) dbnm(D). {
   src_list_t *pSrc = __src_list_append(0, &Y, &D);
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->select = __select_new(0,pSrc,0,0,0,0,0,-1,0);
+  if( A ) A->pSelect = __select_new(0,pSrc,0,0,0,0,0,-1,0);
   A = __expr(TK_NOT, A, 0, 0);
   __expr_span(A,&X->span,D.z?&D:&Y);
 }
@@ -702,7 +702,7 @@ expr(A) ::= expr(X) NOT IN nm(Y) dbnm(D). {
 /* CASE expressions */
 expr(A) ::= CASE(C) case_operand(X) case_exprlist(Y) case_else(Z) END(E). {
   A = __expr(TK_CASE, X, Z, 0);
-  if( A ) A->expr_list = Y;
+  if( A ) A->pList = Y;
   __expr_span(A, &C, &E);
 }
 %type case_exprlist {expr_list_t*}

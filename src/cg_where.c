@@ -32,14 +32,14 @@ typedef struct expr_info {
 	expr_t *p;              /* Pointer to the subexpression */
 	u_int8_t indexable;     /* True if this subexprssion is usable
 				   by an index */
-	short int idxLeft;      /* p->left is a column in this table
-				   number. -1 if p->left is not the
+	short int idxLeft;      /* p->pLeft is a column in this table
+				   number. -1 if p->pLeft is not the
 				   column of any table */
-	short int idxRight;     /* p->right is a column in this table
-				   number. -1 if p->right is not the
+	short int idxRight;     /* p->pRight is a column in this table
+				   number. -1 if p->pRight is not the
 				   column of any table */
-	unsigned prereqLeft;    /* Bitmask of tables referenced by p->left */
-	unsigned prereqRight;   /* Bitmask of tables referenced by p->right */
+	unsigned prereqLeft;    /* Bitmask of tables referenced by p->pLeft */
+	unsigned prereqRight;   /* Bitmask of tables referenced by p->pRight */
 	unsigned prereqAll;     /* Bitmask of tables referenced by p */
 } expr_info_t;
 
@@ -78,12 +78,12 @@ __expr_split(int num_slot, expr_info_t* slot, expr_t* expr)
 		slot[0].p = expr;
 		return 1;
 	}
-	if (expr->left->op != TK_AND) {
-		slot[0].p = expr->left;
-		cnt = 1 + __expr_split((num_slot - 1), &slot[1], expr->right);
+	if (expr->pLeft->op != TK_AND) {
+		slot[0].p = expr->pLeft;
+		cnt = 1 + __expr_split((num_slot - 1), &slot[1], expr->pRight);
 	} else {
-		cnt = __expr_split(num_slot, slot, expr->left);
-		cnt += __expr_split(num_slot-cnt, &slot[cnt], expr->right);
+		cnt = __expr_split(num_slot, slot, expr->pLeft);
+		cnt += __expr_split(num_slot-cnt, &slot[cnt], expr->pRight);
 	}
 	return cnt;
 }
@@ -142,16 +142,16 @@ __expr_table_usage(expr_mask_set_t* mask_set, expr_t* p)
 	if (p->op == TK_COLUMN) {
 		return __get_cursor_bitmask(mask_set, p->iTable);
 	}
-	if (p->right) {
-		mask = __expr_table_usage(mask_set, p->right);
+	if (p->pRight) {
+		mask = __expr_table_usage(mask_set, p->pRight);
 	}
-	if (p->left) {
-		mask |= __expr_table_usage(mask_set, p->left);
+	if (p->pLeft) {
+		mask |= __expr_table_usage(mask_set, p->pLeft);
 	}
-	if (p->expr_list) {
-		for(i = 0; i < p->expr_list->nExpr; i++) {
+	if (p->pList) {
+		for(i = 0; i < p->pList->n_expressions; i++) {
 			mask |= __expr_table_usage(mask_set,
-						   p->expr_list->a[i].pExpr);
+						   p->pList->a[i].pExpr);
 		}
 	}
 	return mask;
@@ -194,20 +194,20 @@ static void
 __expr_analyze(expr_mask_set_t* mask_set, expr_info_t* info)
 {
 	expr_t *expr = info->p;
-	info->prereqLeft = __expr_table_usage(mask_set, expr->left);
-	info->prereqRight = __expr_table_usage(mask_set, expr->right);
+	info->prereqLeft = __expr_table_usage(mask_set, expr->pLeft);
+	info->prereqRight = __expr_table_usage(mask_set, expr->pRight);
 	info->prereqAll = __expr_table_usage(mask_set, expr);
 	info->indexable = 0;
 	info->idxLeft = -1;
 	info->idxRight = -1;
 	if (__allowed_op(expr->op) &&
 	    (info->prereqRight & info->prereqLeft) == 0) {
-		if (expr->right && expr->right->op == TK_COLUMN) {
-			info->idxRight = expr->right->iTable;
+		if (expr->pRight && expr->pRight->op == TK_COLUMN) {
+			info->idxRight = expr->pRight->iTable;
 			info->indexable = 1;
 		}
-		if (expr->left->op == TK_COLUMN) {
-			info->idxLeft = expr->left->iTable;
+		if (expr->pLeft->op == TK_COLUMN) {
+			info->idxLeft = expr->pLeft->iTable;
 			info->indexable = 1;
 		}
 	}
@@ -266,9 +266,9 @@ static index_t *__find_sorting_index(table, base, orderby_clause,
 	int num_expr;
 
 	DBSQL_ASSERT(orderby_clause != 0);
-	DBSQL_ASSERT(orderby_clause->nExpr > 0);
+	DBSQL_ASSERT(orderby_clause->n_expressions > 0);
 	sort_order = (orderby_clause->a[0].sortOrder & DBSQL_SO_DIRMASK);
-	for (i = 0; i < orderby_clause->nExpr; i++) {
+	for (i = 0; i < orderby_clause->n_expressions; i++) {
 		if ((orderby_clause->a[i].sortOrder & DBSQL_SO_DIRMASK) !=
 		    sort_order) {
 			/*
@@ -299,9 +299,9 @@ static index_t *__find_sorting_index(table, base, orderby_clause,
 	 * check for a matching index.
 	 */
 	match = 0;
-	for (idx = table->pIndex; idx; idx = idx->next_index) {
-		num_expr = orderby_clause->nExpr;
-		if (idx->nColumn < num_eq_col || idx->nColumn < num_expr)
+	for (idx = table->pIndex; idx; idx = idx->pNext) {
+		num_expr = orderby_clause->n_expressions;
+		if (idx->n_key_columns < num_eq_col || idx->n_key_columns < num_expr)
 			continue;
 		for (i = j = 0; i < num_eq_col; i++) {
 			if (preferred_idx->aiColumn[i] != idx->aiColumn[i])
@@ -500,7 +500,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	}
 	where_info->pParse = parser;
 	where_info->pTabList = tab_list;
-	where_info->peakNTab = where_info->savedNTab = parser->n_tables;
+	where_info->peak_n_tab = where_info->saved_n_tab = parser->n_tables;
 	where_info->iBreak = __vdbe_make_label(v);
 
 	/*
@@ -580,7 +580,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		 direct_gt[i] = -1;
 		 for (j = 0; j < num_expr; j++) {
 			 if (wc_exprs[j].idxLeft == cur &&
-			     wc_exprs[j].p->left->iColumn < 0 &&
+			     wc_exprs[j].p->pLeft->iColumn < 0 &&
 			     ((wc_exprs[j].prereqRight & loop_mask) ==
 			      wc_exprs[j].prereqRight)) {
 				 switch(wc_exprs[j].p->op) {
@@ -599,7 +599,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 				 }
 			 }
 			 if (wc_exprs[j].idxRight == cur &&
-			     wc_exprs[j].p->right->iColumn < 0 &&
+			     wc_exprs[j].p->pRight->iColumn < 0 &&
 			     ((wc_exprs[j].prereqLeft & loop_mask) ==
 			      wc_exprs[j].prereqLeft)) {
 				 switch(wc_exprs[j].p->op) {
@@ -650,19 +650,19 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		  * of the WHERE clause cannot be used in conjunction with the
 		  * IN operator to help satisfy other columns of the index.
 		  */
-		 for(idx = table->pIndex; idx; idx = idx->next_index) {
+		 for(idx = table->pIndex; idx; idx = idx->pNext) {
 			 eq_mask = 0;
 			 lt_mask = 0;
 			 gt_mask = 0;
 			 in_mask = 0;
-			 if (idx->nColumn > 32)
+			 if (idx->n_key_columns > 32)
 				 continue;/* Ignore indices too many columns */
 			 for (j = 0; j < num_expr; j++) {
 				 if (wc_exprs[j].idxLeft == cur &&
 				     ((wc_exprs[j].prereqRight & loop_mask) ==
 				      wc_exprs[j].prereqRight)) {
-					 col = wc_exprs[j].p->left->iColumn;
-					 for (k = 0; k < idx->nColumn; k++) {
+					 col = wc_exprs[j].p->pLeft->iColumn;
+					 for (k = 0; k < idx->n_key_columns; k++) {
 					 if (idx->aiColumn[k] == col) {
 						 switch(wc_exprs[j].p->op){
 						 case TK_IN:
@@ -691,8 +691,8 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 				 if (wc_exprs[j].idxRight == cur && 
 				     ((wc_exprs[j].prereqLeft & loop_mask) ==
 				      wc_exprs[j].prereqLeft)) {
-					 col = wc_exprs[j].p->right->iColumn;
-					 for (k = 0; k < idx->nColumn; k++) {
+					 col = wc_exprs[j].p->pRight->iColumn;
+					 for (k = 0; k < idx->n_key_columns; k++) {
 					 if (idx->aiColumn[k] == col) {
 						 switch(wc_exprs[j].p->op) {
 						 case TK_EQ:
@@ -721,7 +721,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			  * number of columns on the left of the index with
 			  * == constraints.
 			  */
-			 for (num_eq = 0; num_eq < idx->nColumn; num_eq++) {
+			 for (num_eq = 0; num_eq < idx->n_key_columns; num_eq++) {
 				 m = (1 << (num_eq + 1)) - 1;
 				 if ((m & eq_mask) != m)
 					 break;
@@ -749,7 +749,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		 loop_mask |= mask;
 		 if (best_idx) {
 			 where_info->a[i].iCur = parser->n_tables++;
-			 where_info->peakNTab = parser->n_tables;
+			 where_info->peak_n_tab = parser->n_tables;
 		 }
 	}
 
@@ -786,7 +786,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			if (idx == 0) {
 				where_info->a[0].pIdx = sort_idx;
 				where_info->a[0].iCur = parser->n_tables++;
-				where_info->peakNTab = parser->n_tables;
+				where_info->peak_n_tab = parser->n_tables;
 			}
 			where_info->a[0].bRev = rev;
 			*orderby_clause = 0;
@@ -856,8 +856,8 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 				ex = wc_exprs[k].p;
 				if (ex->op != TK_IN) {
 					__expr_code(parser,
-						    wc_exprs[k].p->right);
-				} else if (ex->expr_list) {
+						    wc_exprs[k].p->pRight);
+				} else if (ex->pList) {
 					__vdbe_add_op(v, OP_SetFirst,
 						      ex->iTable, brk);
 					level->inOp = OP_SetNext;
@@ -876,7 +876,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					level->inP1 = ex->iTable;
 				}
 			} else {
-				__expr_code(parser, wc_exprs[k].p->left);
+				__expr_code(parser, wc_exprs[k].p->pLeft);
 			}
 			wc_exprs[k].p = 0;
 			cont = level->cont = __vdbe_make_label(v);
@@ -902,17 +902,17 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					    ((wc_exprs[k].prereqRight &
 					      loop_mask) ==
 					     wc_exprs[k].prereqRight) &&
-					    (ex->left->iColumn == 
+					    (ex->pLeft->iColumn == 
 					     idx->aiColumn[j])) {
 						if (ex->op == TK_EQ) {
 							__expr_code(parser,
-								   ex->right);
+								   ex->pRight);
 							wc_exprs[k].p = 0;
 							break;
 						}
 						if (ex->op == TK_IN &&
 						    col_num == 1) {
-							if (ex->expr_list) {
+							if (ex->pList) {
 								__vdbe_add_op(v, OP_SetFirst, ex->iTable, brk);
 								level->inOp = OP_SetNext;
 								level->inP1 = ex->iTable;
@@ -934,9 +934,9 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					    ((wc_exprs[k].prereqLeft &
 					      loop_mask) ==
 					     wc_exprs[k].prereqLeft) &&
-					    (wc_exprs[k].p->right->iColumn ==
+					    (wc_exprs[k].p->pRight->iColumn ==
 					     idx->aiColumn[j])) {
-						__expr_code(parser, wc_exprs[k].p->left);
+						__expr_code(parser, wc_exprs[k].p->pLeft);
 						wc_exprs[k].p = 0;
 						break;
 					}
@@ -950,7 +950,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			__vdbe_add_op(v, OP_Goto, 0, brk);
 			__vdbe_add_op(v, OP_MakeKey, col_num, 0);
 			__add_idx_key_type(v, idx);
-			if (col_num == idx->nColumn || level->bRev) {
+			if (col_num == idx->n_key_columns || level->bRev) {
 				__vdbe_add_op(v, OP_MemStore, level->iMem, 0);
 				test_op = OP_IdxGT;
 			} else {
@@ -1003,10 +1003,10 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 				       wc_exprs[k].idxRight == cur);
 				if (wc_exprs[k].idxLeft == cur) {
 					__expr_code(parser,
-						    wc_exprs[k].p->right);
+						    wc_exprs[k].p->pRight);
 				} else {
 					__expr_code(parser,
-						    wc_exprs[k].p->left);
+						    wc_exprs[k].p->pLeft);
 				}
 				__vdbe_add_op(v, OP_ForceInt,
 					      ((wc_exprs[k].p->op == TK_LT) ||
@@ -1025,10 +1025,10 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 				       wc_exprs[k].idxRight == cur);
 				if (wc_exprs[k].idxLeft == cur) {
 					__expr_code(parser,
-						    wc_exprs[k].p->right);
+						    wc_exprs[k].p->pRight);
 				} else {
 					__expr_code(parser,
-						    wc_exprs[k].p->left);
+						    wc_exprs[k].p->pLeft);
 				}
 				/*TODO: __vdbe_add_op(v, OP_MustBeInt, 0, __vdbe_current_addr(v)+1); */
 				level->iMem = parser->n_memory++;
@@ -1095,10 +1095,10 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					    ((wc_exprs[k].prereqRight &
 					      loop_mask) ==
 					     wc_exprs[k].prereqRight) &&
-					    (wc_exprs[k].p->left->iColumn ==
+					    (wc_exprs[k].p->pLeft->iColumn ==
 					     idx->aiColumn[j])) {
 						__expr_code(parser,
-							wc_exprs[k].p->right);
+							wc_exprs[k].p->pRight);
 						wc_exprs[k].p = 0;
 						break;
 					}
@@ -1107,10 +1107,10 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					    ((wc_exprs[k].prereqLeft &
 					      loop_mask) ==
 					     wc_exprs[k].prereqLeft) &&
-					    (wc_exprs[k].p->right->iColumn ==
+					    (wc_exprs[k].p->pRight->iColumn ==
 					     idx->aiColumn[j])) {
 						__expr_code(parser,
-							 wc_exprs[k].p->left);
+							 wc_exprs[k].p->pLeft);
 						wc_exprs[k].p = 0;
 						break;
 					}
@@ -1153,10 +1153,10 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					    ((wc_exprs[k].prereqRight &
 					      loop_mask) ==
 					     wc_exprs[k].prereqRight) &&
-					    (expr->left->iColumn ==
+					    (expr->pLeft->iColumn ==
 					     idx->aiColumn[j])) {
 						__expr_code(parser,
-							    expr->right);
+							    expr->pRight);
 						le_flag = expr->op==TK_LE;
 						wc_exprs[k].p = 0;
 						break;
@@ -1167,10 +1167,10 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					    ((wc_exprs[k].prereqLeft &
 					      loop_mask) ==
 					     wc_exprs[k].prereqLeft) &&
-					    (expr->right->iColumn ==
+					    (expr->pRight->iColumn ==
 					     idx->aiColumn[j])) {
 						__expr_code(parser,
-							    expr->left);
+							    expr->pLeft);
 						le_flag = expr->op==TK_GE;
 						wc_exprs[k].p = 0;
 						break;
@@ -1227,10 +1227,10 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					    ((wc_exprs[k].prereqRight &
 					      loop_mask) ==
 					     wc_exprs[k].prereqRight) &&
-					    (expr->left->iColumn ==
+					    (expr->pLeft->iColumn ==
 					     idx->aiColumn[j])) {
 						__expr_code(parser,
-							    expr->right);
+							    expr->pRight);
 						ge_flag = expr->op==TK_GE;
 						wc_exprs[k].p = 0;
 						break;
@@ -1241,10 +1241,10 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					    ((wc_exprs[k].prereqLeft &
 					      loop_mask) ==
 					     wc_exprs[k].prereqLeft) &&
-					    (expr->right->iColumn ==
+					    (expr->pRight->iColumn ==
 					     idx->aiColumn[j])) {
 						__expr_code(parser,
-							    expr->left);
+							    expr->pLeft);
 						ge_flag = expr->op==TK_LE;
 						wc_exprs[k].p = 0;
 						break;
@@ -1384,7 +1384,7 @@ __where_end(where_info_t* winfo)
 	int i, addr;
 	where_level_t *level;
 	table_t *table;
-	vdbe_t *v = winfo->pParse->vdbe;
+	vdbe_t *v = winfo->pParse->pVdbe;
 	src_list_t *tab_list = winfo->pTabList;
 
 	for (i = (tab_list->n_sources - 1); i >= 0; i--) {
@@ -1428,8 +1428,8 @@ __where_end(where_info_t* winfo)
         * is intentionally disabled as a design decision.
         * Reusing cursors can lead to subtle bugs with nested queries.
         */
-	if( winfo->pParse->nTab==winfo->peakNTab ){
-		winfo->pParse->nTab = winfo->savedNTab;
+	if( winfo->pParse->nTab==winfo->peak_n_tab ){
+		winfo->pParse->nTab = winfo->saved_n_tab;
 	}
 #endif
 	__dbsql_free(winfo->pParse->db, winfo);

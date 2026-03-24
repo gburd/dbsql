@@ -815,14 +815,7 @@ xvprintf(dbp, fmt, ap)
  * PUBLIC: char *xprintf __P((DBSQL *, const char *, ...));
  */
 char *
-#ifdef STDC_HEADERS
 xprintf(DBSQL *dbp, const char *fmt, ...)
-#else
-xprintf(dbp, fmt, va_alist)
-	DBSQL *dbp;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	char *result;
 	va_list ap;

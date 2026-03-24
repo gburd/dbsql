@@ -243,7 +243,7 @@ if (strcasecmp(left_name, "index_info") == 0) {
 	index = __find_index(dbp, right_name, 0);
 	if (index) {
 		int i;
-		table = index->table;
+		table = index->pTable;
 		/* Add column names dynamically (can't use static initializer with p4 strings) */
 		__vdbe_add_op(v, OP_ColumnName, 0, 0);
 		__vdbe_change_p4(v, -1, "seqno", P4_STATIC);
@@ -251,7 +251,7 @@ if (strcasecmp(left_name, "index_info") == 0) {
 		__vdbe_change_p4(v, -1, "cid", P4_STATIC);
 		__vdbe_add_op(v, OP_ColumnName, 2, 0);
 		__vdbe_change_p4(v, -1, "name", P4_STATIC);
-		for (i = 0; i < index->nColumn; i++) {
+		for (i = 0; i < index->n_key_columns; i++) {
 			int cnum = index->aiColumn[i];
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_Integer, cnum, 0);
@@ -323,7 +323,7 @@ if (strcasecmp(left_name, "foreign_key_list") == 0) {
 		__vdbe_change_p4(v, -1, "to", P4_STATIC);
 		while(fk) {
 			int j;
-			for (j = 0; j < fk->nCol; j++) {
+			for (j = 0; j < fk->n_columns; j++) {
 				__vdbe_add_op(v, OP_Integer, i, 0);
 				__vdbe_add_op(v, OP_Integer, j, 0);
 				__vdbe_add_op(v, OP_String, 0, 0);
