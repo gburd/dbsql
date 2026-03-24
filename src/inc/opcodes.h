@@ -150,5 +150,4 @@
 
 /* Legacy DBSQL compatibility opcodes */
 #define OP_Copy                        149  /* Copy register value */
-#define OP_SortCallback                150  /* Legacy: use OP_ResultRow */
-#define OP_NullCallback                151  /* Legacy: use OP_ResultRow */
+/* Note: OP_SortCallback (118) and OP_NullCallback (15) are already defined above */
