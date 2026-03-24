@@ -259,7 +259,7 @@ int __ref_normalize_src_list(normctx, src_list)
 				    name, src_list->a[i].zDatabase);
 			return 1;
 		}
-		if (__ref_normalize_select(normctx, src_list->a[i].pSelect))
+		if (__ref_normalize_select(normctx, src_list->a[i].select))
 			return 1;
 		if (__ref_normalize_expr(normctx, src_list->a[i].pOn))
 			return 1;
@@ -313,10 +313,10 @@ int __ref_normalize_expr(normctx, expr)
 	expr_t *expr;
 {
 	while (expr) {
-		if (__ref_normalize_select(normctx, expr->pSelect)) {
+		if (__ref_normalize_select(normctx, expr->select)) {
 			return 1;
 		}
-		if (__ref_normalize_expr_list(normctx, expr->pList)) {
+		if (__ref_normalize_expr_list(normctx, expr->expr_list)) {
 			return 1;
 		}
 		if (__ref_normalize_expr(normctx, expr->right)) {

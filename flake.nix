@@ -157,10 +157,28 @@
                     echo "Generated sql_parser.c and sql_parser.h"
 
                     # Generate opcodes.h by extracting OP_* case statements from vdbe.c
+                    # Exclude lines in #if 0 blocks to avoid duplicate definitions
                     echo '/* Automatically generated file.  Do not edit */' > opcodes.h
-                    grep '^case OP_' ../src/vdbe.c | \
-                      sed -e 's/:.*//' | \
-                      awk '{printf "#define %-30s %3d\n", $2, ++cnt} END {print ""; print "/* Legacy DBSQL compatibility opcodes */"; printf "#define %-30s %3d  /* Copy register value */\n", "OP_Copy", cnt+1; printf "#define %-30s %3d  /* Legacy: use OP_ResultRow */\n", "OP_SortCallback", cnt+2; printf "#define %-30s %3d  /* Legacy: use OP_ResultRow */\n", "OP_NullCallback", cnt+3}' >> opcodes.h
+
+                    # Use awk to skip #if 0 blocks and extract case statements
+                    awk '
+                      /^#if 0/ { disabled=1; next }
+                      /^#else/ && disabled { disabled=0; next }
+                      /^#endif/ && disabled { disabled=0; next }
+                      !disabled && /^case OP_/ {
+                        gsub(/:.*/, "");
+                        print $2;
+                      }
+                    ' ../src/vdbe.c | \
+                      awk '{printf "#define %-30s %3d\n", $1, ++cnt}' >> opcodes.h
+
+                    # Add legacy opcodes
+                    echo '' >> opcodes.h
+                    echo '/* Legacy DBSQL compatibility opcodes */' >> opcodes.h
+                    COUNT=$(grep -c '^#define OP_' opcodes.h)
+                    echo "#define OP_Copy                        $((COUNT + 1))  /* Copy register value */" >> opcodes.h
+                    echo "#define OP_SortCallback                $((COUNT + 2))  /* Legacy: use OP_ResultRow */" >> opcodes.h
+                    echo "#define OP_NullCallback                $((COUNT + 3))  /* Legacy: use OP_ResultRow */" >> opcodes.h
 
                     echo "Generated opcodes.h with $(grep -c '^#define OP_' opcodes.h) opcodes"
                   '';
