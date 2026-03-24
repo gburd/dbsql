@@ -2399,7 +2399,11 @@ src_list_t *
 __src_list_append(src_list_t* list, token_t* table, token_t* database)
 {
 	if (list == 0) {
-		if (__dbsql_calloc(NULL, 1, sizeof(src_list_t), &list)==ENOMEM)
+		/* Allocate space for structure + one array element.
+		 * FLEXARRAY is empty on C99+, so sizeof(src_list_t) doesn't
+		 * include any array space. */
+		size_t alloc_size = sizeof(src_list_t) + sizeof(struct src_list_item);
+		if (__dbsql_calloc(NULL, 1, alloc_size, &list)==ENOMEM)
 			return 0;
 		list->nAlloc = 1;
 	}

@@ -1300,7 +1300,10 @@ struct expr_list {
 		/* Legacy compatibility fields for old code */
 		u8 sortOrder;    /* Legacy: same as fg.sortFlags & 1 */
 		u8 isAgg;        /* Legacy: 1 if aggregate function */
-	} a[FLEXARRAY];          /* One slot for each expression */
+	} *a;          /* Pointer to array of expressions (old DBSQL style) */
+	/* NOTE: SQLite 3.52 uses a[FLEXARRAY] here, but old DBSQL code
+	 * allocates the array separately with realloc. To maintain compatibility
+	 * with existing __expr_list_append code, we use a pointer. */
 };
 
 /*
