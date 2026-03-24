@@ -106,7 +106,7 @@ __parse_exec(parser_t* parser)
 {
 	int rc = DBSQL_SUCCESS;
 	DBSQL *dbp = parser->db;
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	int (*callback)(void*,int,char**,char**);
 
 	if (parser->rc == ENOMEM)
@@ -134,7 +134,7 @@ __parse_exec(parser_t* parser)
 			rc = __vdbe_finalize(v, &parser->zErrMsg);
 			if (rc)
 				parser->nErr++;
-			parser->pVdbe = 0;
+			parser->vdbe = 0;
 			parser->rc = rc;
 			if (rc)
 				parser->nErr++;

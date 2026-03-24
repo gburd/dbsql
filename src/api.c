@@ -613,7 +613,7 @@ __process_sql(DBSQL *dbp, const char *sql, dbsql_callback callback,	void *arg, c
 	}
 	if (parser.useCallback == 0) {
 		DBSQL_ASSERT(vm);
-		*vm = (dbsql_stmt_t*)parser.pVdbe;
+		*vm = (dbsql_stmt_t*)parser.vdbe;
 		if (tail)
 			*tail = parser.zTail;
 	}

@@ -81,7 +81,7 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 		__vdbe_prepare_write(parser, 1, table->iDb);
 		addr = __vdbe_add_op(v, OP_FileOpen, 0, 0);
 		__vdbe_change_p4(v, addr, filename->z, filename->n);
-		__vdbe_dequote_p3(v, addr);
+		__vdbe_dequote_p4(v, addr);
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, 0, table->tnum);
 		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
@@ -100,7 +100,7 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 		addr = __vdbe_add_op(v, OP_FileRead, table->nCol, end);
 		if (delimiter) {
 			__vdbe_change_p4(v, addr, delimiter->z, delimiter->n);
-			__vdbe_dequote_p3(v, addr);
+			__vdbe_dequote_p4(v, addr);
 		} else {
 			__vdbe_change_p4(v, addr, "\t", 1);
 		}

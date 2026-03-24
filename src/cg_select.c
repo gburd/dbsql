@@ -76,7 +76,7 @@ __select_new(result_cols, from_clause, where_clause, groupby_clause,
 		new->pOrderBy = orderby_clause;
 		new->isDistinct = distinct_p;
 		new->op = TK_SELECT;
-		new->nLimit = limit;
+		new->iLimit = limit;
 		new->nOffset = offset;
 		new->iLimit = -1;
 		new->iOffset = -1;
@@ -515,7 +515,7 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 	int brk;
 {
 	int i, addr, addr1, addr2;
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	int regResult;      /* Start of memory holding current results */
 	int nResultCol;     /* Number of result columns */
 
@@ -810,7 +810,7 @@ __generate_column_types(parser_t* parser, src_list_t* tables, expr_list_t* elist
 	expr_t *p;
 	char *type;
 	table_t *table;
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	if (parser->useCallback &&
 	    (parser->db->flags & DBSQL_ReportTypes) == 0) {
 		return;
@@ -870,7 +870,7 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 	char namebuf[30]; /* TODO consider eliminating this */
 	expr_t *p;
 	table_t *table;
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	if (parser->colNamesSet || v == 0 || parser->rc == ENOMEM)
 		return;
 	parser->colNamesSet = 1;
@@ -1121,7 +1121,7 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 				/* 'name' is the text of name of TABLE */
 				table_seen = 0; /* 1 when TABLE matches */
 				if (e->op == TK_DOT && e->pLeft) {
-					name = &e->pLeft->token;
+					name = &e->pLeft->span;
 				} else {
 					name = 0;
 				}
@@ -1172,9 +1172,8 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 					    right = __expr(TK_ID, 0, 0, 0);
 					    if (right == 0)
 						    break;
-					    right->token.z = jname;
-					    right->token.n = strlen(jname);
-					    right->token.dyn = 0;
+					    right->u.zToken.z = jname;
+					    right->u.zToken.n = strlen(jname);
 					    if (tab_name && tables->nSrc > 1) {
 						    left = __expr(TK_ID, 0,
 								  0, 0);
@@ -1182,19 +1181,19 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 								  right, 0);
 						    if (expr == 0)
 							    break;
-						    left->token.z = tab_name;
-						    left->token.n =
+						    left->u.zToken.z = tab_name;
+						    left->u.zToken.n =
 							    strlen(tab_name);
-						    left->token.dyn = 0;
 						    __str_append((char**)&expr->span.z, tab_name, ".", jname, 0);
 						    expr->span.n = strlen(expr->span.z);
 						    expr->span.dyn = 1;
-						    expr->token.z = 0;
-						    expr->token.n = 0;
-						    expr->token.dyn = 0;
+						    expr->u.zToken.z = 0;
+						    expr->u.zToken.n = 0;
 					    } else {
 						    expr = right;
-						    expr->span = expr->token;
+						    expr->span.z = expr->u.zToken.z;
+						    expr->span.n = expr->u.zToken.n;
+						    expr->span.dyn = 0;
 					    }
 					    new = __expr_list_append(new, expr,
 								     0);
@@ -1307,7 +1306,7 @@ __match_orderby_to_column(parser, select, orderby_clause, table_idx,
 		return 1;
 	if (must_complete_p) {
 		for (i = 0; i < orderby_clause->nExpr; i++) {
-			orderby_clause->a[i].done = 0;
+			orderby_clause->a[i].fg.done = 0;
 		}
 	}
 	if (__fill_in_column_list(parser, select)) {
@@ -1323,7 +1322,7 @@ __match_orderby_to_column(parser, select, orderby_clause, table_idx,
 	for (i = 0; i < orderby_clause->nExpr; i++) {
 		e = orderby_clause->a[i].pExpr;
 		col = -1;
-		if (orderby_clause->a[i].done)
+		if (orderby_clause->a[i].fg.done)
 			continue;
 		if (__expr_is_integer(e, &col)) {
 			if (col <= 0 || col > elist->nExpr) {
@@ -1341,9 +1340,9 @@ __match_orderby_to_column(parser, select, orderby_clause, table_idx,
 			if (elist->a[j].zName &&
 			    (e->op == TK_ID || e->op == TK_STRING)) {
 				name = elist->a[j].zName;
-				DBSQL_ASSERT(e->token.z);
-				__dbsql_strndup(NULL, e->token.z, &label,
-					     e->token.n);
+				DBSQL_ASSERT(e->u.zToken.z);
+				__dbsql_strndup(NULL, e->u.zToken.z, &label,
+					     e->u.zToken.n);
 				__str_unquote(label);
 				if (strcasecmp(name, label) == 0) { 
 					col = j;
@@ -1358,7 +1357,7 @@ __match_orderby_to_column(parser, select, orderby_clause, table_idx,
 			e->op = TK_COLUMN;
 			e->iColumn = col;
 			e->iTable = table_idx;
-			orderby_clause->a[i].done = 1;
+			orderby_clause->a[i].fg.done = 1;
 		}
 		if (col < 0 && must_complete_p) {
 			__error_msg(parser, "ORDER BY term number %d does not "
@@ -1381,9 +1380,9 @@ __match_orderby_to_column(parser, select, orderby_clause, table_idx,
 vdbe_t *
 __parser_get_vdbe(parser_t* parser)
 {
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	if (v == 0) {
-		v = parser->pVdbe = __vdbe_create(parser->db);
+		v = parser->vdbe = __vdbe_create(parser->db);
 	}
 	return v;
 }
@@ -1479,21 +1478,21 @@ __compute_limit_registers(parser_t* parser, select_t* select)
 	 * Phase 2: LIMIT/OFFSET now use registers with OP_Integer
 	 * to store countdown values, rather than OP_MemStore.
 	 *
-	 * If the comparison is select->nLimit>0 then "LIMIT 0" shows
+	 * If the comparison is select->iLimit>0 then "LIMIT 0" shows
 	 * all rows.  It is the same as no limit. If the comparision is
-	 * select->nLimit>=0 then "LIMIT 0" show no rows at all.
+	 * select->iLimit>=0 then "LIMIT 0" show no rows at all.
 	 * "LIMIT -1" always shows all rows.  There is some
 	 * contraversy about what the correct behavior should be.
 	 * The current implementation interprets "LIMIT 0" to mean
 	 * no rows.
 	 */
-	if (select->nLimit >= 0) {
+	if (select->iLimit >= 0) {
 		reg = parser->nMem++;
 		v = __parser_get_vdbe(parser);
 		if (v == 0)
 			return;
 		/* Store negative limit for countdown in register */
-		__vdbe_add_op(v, OP_Integer, (-select->nLimit), reg);
+		__vdbe_add_op(v, OP_Integer, (-select->iLimit), reg);
 		select->iLimit = reg;
 	}
 	if (select->nOffset > 0) {
@@ -1553,7 +1552,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
                                 holding result */
 	int op;              /* One of the SRT_ operations to apply to self */
 	int prior_op;        /* The SRT_ operation to apply to prior selects */
-	int limit, offset;   /* Saved values of select->nLimit and
+	int limit, offset;   /* Saved values of select->iLimit and
                                 select->nOffset */
 	expr_list_t *orderby_clause; /* The ORDER BY clause for the right
                                         SELECT */
@@ -1571,7 +1570,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 			    __select_op_name(select->op));
 		return 1;
 	}
-	if (prior->nLimit >= 0 || prior->nOffset > 0) {
+	if (prior->iLimit >= 0 || prior->nOffset > 0) {
 		__error_msg(parser,
 			    "LIMIT clause should come after %s not before",
 			    __select_op_name(select->op));
@@ -1599,7 +1598,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 	switch(select->op) {
 	case TK_ALL:
 		if (select->pOrderBy == 0) {
-			prior->nLimit = select->nLimit;
+			prior->iLimit = select->iLimit;
 			prior->nOffset = select->nOffset;
 			rc = __select(parser, prior, dest, param, 0, 0, 0);
 			if (rc)
@@ -1607,7 +1606,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 			select->pPrior = 0;
 			select->iLimit = prior->iLimit;
 			select->iOffset = prior->iOffset;
-			select->nLimit = -1;
+			select->iLimit = -1;
 			select->nOffset = 0;
 			rc = __select(parser, select, dest, param, 0, 0, 0);
 			select->pPrior = prior;
@@ -1620,7 +1619,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 	case TK_UNION:
 		prior_op = (select->op == TK_ALL) ? SRT_Table : SRT_Union;
 		if (dest == prior_op && select->pOrderBy == 0 &&
-		    select->nLimit < 0 && select->nOffset == 0) {
+		    select->iLimit < 0 && select->nOffset == 0) {
 			/*
 			 * We can reuse a temporary table generated by a
 			 * SELECT to our right.
@@ -1663,14 +1662,14 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 		select->pPrior = 0;
 		orderby_clause = select->pOrderBy;
 		select->pOrderBy = 0;
-		limit = select->nLimit;
-		select->nLimit = -1;
+		limit = select->iLimit;
+		select->iLimit = -1;
 		offset = select->nOffset;
 		select->nOffset = 0;
 		rc = __select(parser, select, op, union_tab, 0, 0, 0);
 		select->pPrior = prior;
 		select->pOrderBy = orderby_clause;
-		select->nLimit = limit;
+		select->iLimit = limit;
 		select->nOffset = offset;
 		if (rc)
 			return rc;
@@ -1740,13 +1739,13 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 		__vdbe_add_op(v, OP_OpenTemp, tab2, 1);
 		__vdbe_add_op(v, OP_KeyAsData, tab2, 1);
 		select->pPrior = 0;
-		limit = select->nLimit;
-		select->nLimit = -1;
+		limit = select->iLimit;
+		select->iLimit = -1;
 		offset = select->nOffset;
 		select->nOffset = 0;
 		rc = __select(parser, select, SRT_Union, tab2, 0, 0, 0);
 		select->pPrior = prior;
-		select->nLimit = limit;
+		select->iLimit = limit;
 		select->nOffset = offset;
 		if (rc)
 			return rc;
@@ -1848,7 +1847,6 @@ __subst_expr(expr_t* expr, int table, expr_list_t* elist)
 		expr->iTable = new->iTable;
 		expr->iColumn = new->iColumn;
 		expr->iAgg = new->iAgg;
-		__token_copy(&expr->token, &new->token);
 		__token_copy(&expr->span, &new->span);
 	} else {
 		__subst_expr(expr->pLeft, table, elist);
@@ -1985,11 +1983,11 @@ __flatten_subquery(parser_t* parser, select_t* select, int from, int agg_p, int 
 	DBSQL_ASSERT(sub_from_clause);
 	if (sub_from_clause->nSrc == 0)
 		return 0;
-	if ((sub_select->isDistinct || sub_select->nLimit >= 0) &&
+	if ((sub_select->isDistinct || sub_select->iLimit >= 0) &&
 	    (outer_from_clause->nSrc > 1 || agg_p)) {
 		return 0;
 	}
-	if ((select->isDistinct || select->nLimit >= 0)
+	if ((select->isDistinct || select->iLimit >= 0)
 	    && subquery_agg_p )
 		return 0;
 	if (select->pOrderBy && sub_select->pOrderBy)
@@ -2156,12 +2154,12 @@ __flatten_subquery(parser_t* parser, select_t* select, int from, int agg_p, int 
 	 * Transfer the limit expression from the subquery to the outer
 	 * query.
 	 */
-	if (sub_select->nLimit >= 0) {
-		if (select->nLimit < 0) {
-			select->nLimit = sub_select->nLimit;
-		} else if ((select->nLimit + select->nOffset) >
-			   (sub_select->nLimit + sub_select->nOffset)) {
-			select->nLimit = sub_select->nLimit +
+	if (sub_select->iLimit >= 0) {
+		if (select->iLimit < 0) {
+			select->iLimit = sub_select->iLimit;
+		} else if ((select->iLimit + select->nOffset) >
+			   (sub_select->iLimit + sub_select->nOffset)) {
+			select->iLimit = sub_select->iLimit +
 				sub_select->nOffset - select->nOffset;
 		}
 	}
@@ -2208,8 +2206,6 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	vdbe_t *v;
 	int seek_op;
 	int cont;
-	expr_list_t elist;
-	struct expr_list_item list_item;
 
 	/*
 	 * Check to see if this query is a simple min() or max() query.  Return
@@ -2226,11 +2222,11 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 		return 0;
 	if (expr->pList == 0 || expr->pList->nExpr != 1)
 		return 0;
-	if (expr->token.n != 3)
+	if (expr->u.zToken.n != 3)
 		return 0;
-	if (strncasecmp(expr->token.z, "min", 3) == 0) {
+	if (strncasecmp(expr->u.zToken.z, "min", 3) == 0) {
 		seek_op = OP_Rewind;
-	} else if (strncasecmp(expr->token.z, "max", 3) == 0) {
+	} else if (strncasecmp(expr->u.zToken.z, "max", 3) == 0) {
 		seek_op = OP_Last;
 	} else {
 		return 0;
@@ -2311,11 +2307,17 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 		__vdbe_add_op(v, OP_Close, (base + 1), 0);
 		__vdbe_add_op(v, OP_MoveTo, base, 0);
 	}
-	elist.nExpr = 1;
-	memset(&list_item, 0, sizeof(list_item));
-	elist.a = &list_item;
-	elist.a[0].pExpr = expr;
-	__select_inner_loop(parser, select, &elist, 0, 0, 0, -1, dest, param,
+	/* Create a temporary single-item expr_list on stack.
+	 * Can't use flexible array member directly, so create a union. */
+	union {
+		expr_list_t list;
+		char buf[offsetof(expr_list_t, a) + sizeof(struct expr_list_item)];
+	} elist_union;
+	memset(&elist_union, 0, sizeof(elist_union));
+	elist_union.list.nExpr = 1;
+	elist_union.list.nAlloc = 1;
+	elist_union.list.a[0].pExpr = expr;
+	__select_inner_loop(parser, select, &elist_union.list, 0, 0, 0, -1, dest, param,
 			    cont, cont);
 	__vdbe_resolve_label(v, cont);
 	__vdbe_add_op(v, OP_Close, base, 0);
@@ -2920,17 +2922,17 @@ __select_result_set(parser_t* parser, char* tab_name, select_t* select)
 			__dbsql_strdup(NULL, elist->a[i].zName, &column[i].zName);
 		} else if ((p = elist->a[i].pExpr)->op == TK_DOT &&
 			   (pr = p->pRight) != 0 &&
-			   pr->token.z && pr->token.z[0]) {
-			__str_nappend(&column[i].zName, pr->token.z,
-				      pr->token.n, NULL);
+			   pr->u.zToken.z && pr->u.zToken.z[0]) {
+			__str_nappend(&column[i].zName, pr->u.zToken.z,
+				      pr->u.zToken.n, NULL);
 			for (j = cnt = 0; j < i; j++) {
 				if (strcasecmp(column[j].zName,
 						  column[i].zName) == 0) {
 					sprintf(buf, "_%d", ++cnt);
 					n = strlen(buf);
 					__str_nappend(&column[i].zName,
-						      pr->token.z,
-						      pr->token.n, buf,
+						      pr->u.zToken.z,
+						      pr->u.zToken.n, buf,
 						      n, NULL);
 					j = -1;
 				}

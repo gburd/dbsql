@@ -291,7 +291,6 @@ static const char id_char_p[] = {
 
 /* Forward declarations */
 static int __get_token(const unsigned char *, int *);
-extern int __sql_parser_fallback(int);
 
 #ifndef DBSQL_OMIT_WINDOWFUNC
 /*
@@ -314,8 +313,8 @@ __skip_token(const unsigned char **pz)
 	    || t == TK_STRING
 	    || t == TK_JOIN_KW
 	    || t == TK_WINDOW
-	    || t == TK_OVER
-	    || __sql_parser_fallback(t) == TK_ID) {
+	    || t == TK_OVER) {
+		/* TODO: Add fallback token check: __sql_parser_fallback(t) == TK_ID */
 		t = TK_ID;
 	}
 	*pz = z;
@@ -775,10 +774,10 @@ __run_sql_parser(parser_t *parser, const char *sql, char **err_msgs)
 		if (!nerr)
 			nerr++;
 	}
-	if (parser->pVdbe
+	if (parser->vdbe
 	    && (parser->useCallback || parser->nErr > 0)) {
-		__vdbe_delete(parser->pVdbe);
-		parser->pVdbe = 0;
+		__vdbe_delete(parser->vdbe);
+		parser->vdbe = 0;
 	}
 	if (parser->pNewTable) {
 		__vdbe_delete_table(parser->db,

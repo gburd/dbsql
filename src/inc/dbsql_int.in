@@ -1797,7 +1797,7 @@ struct parser {
 	/* Core database & VDBE */
 	DBSQL *db;               /* Main database structure */
 	char *zErrMsg;           /* Error message */
-	vdbe_t *pVdbe;           /* Engine for executing database bytecode */
+	vdbe_t *vdbe;           /* Engine for executing database bytecode */
 	int rc;                  /* Return code from execution */
 
 	/* Query optimization & parsing state */
@@ -1826,7 +1826,7 @@ struct parser {
 	bft hasCompound:1;       /* Need convertCompoundSelectToSubquery() */
 	bft bReturning:1;        /* Coding a RETURNING trigger */
 	bft bHasExists:1;        /* Has correlated "EXISTS (SELECT ...)" */
-	bft colNamesSet:1;       /* TRUE after OP_ColumnName issued to pVdbe */
+	bft colNamesSet:1;       /* TRUE after OP_ColumnName issued to vdbe */
 	bft bHasWith:1;          /* Statement contains WITH clause */
 	bft okConstFactor:1;     /* OK to factor out constants */
 	bft checkSchema:1;       /* Force schema cookie check after error */
