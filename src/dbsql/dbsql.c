@@ -1244,8 +1244,12 @@ process_rc(p, path)
 
 	if (path == NULL) {
 		home_dir = find_home_dir();
+		if (!home_dir) {
+			return;  /* No home directory, skip .dbsqlrc */
+		}
 		if ((ret = __os_malloc(g.dbenv, strlen(home_dir) + 15, &buf)) != 0) {
 			fprintf(stderr,"%s: out of memory\n", g.progname);
+			__os_free(g.dbenv, home_dir);
 			exit(1);
 		}
 		sprintf(buf,"%s/.dbsqlrc", home_dir);
