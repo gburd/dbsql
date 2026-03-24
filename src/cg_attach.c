@@ -319,10 +319,10 @@ int __ref_normalize_expr(normctx, expr)
 		if (__ref_normalize_expr_list(normctx, expr->pList)) {
 			return 1;
 		}
-		if (__ref_normalize_expr(normctx, expr->pRight)) {
+		if (__ref_normalize_expr(normctx, expr->right)) {
 			return 1;
 		}
-		expr = expr->pLeft;
+		expr = expr->left;
 	}
 	return 0;
 }

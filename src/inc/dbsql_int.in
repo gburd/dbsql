@@ -1138,13 +1138,13 @@ struct expr {
 
 	/* If EP_TokenOnly is set, no space is allocated below this point. */
 
-	expr_t *pLeft;           /* Left subnode */
-	expr_t *pRight;          /* Right subnode */
+	expr_t *left;            /* Left subnode */
+	expr_t *right;           /* Right subnode */
 	union {
-		expr_list_t *pList;  /* op = IN, EXISTS, SELECT, CASE,
-					FUNCTION, BETWEEN */
-		select_t *pSelect;   /* EP_xIsSelect and op = IN, EXISTS,
-					SELECT */
+		expr_list_t *expr_list;  /* op = IN, EXISTS, SELECT, CASE,
+					     FUNCTION, BETWEEN */
+		select_t *select;        /* EP_xIsSelect and op = IN, EXISTS,
+					     SELECT */
 	} x;
 
 	/* If EP_Reduced is set, no space is allocated below this point. */
@@ -1376,8 +1376,8 @@ struct src_list {
 		char *zAlias;    /* The "B" part of a "A AS B" phrase */
 		table_t *pTab;   /* An SQL table corresponding to zName */
 		union {
-			select_t *pSelect; /* A SELECT statement used in
-					      place of a table name */
+			select_t *select; /* A SELECT statement used in
+					     place of a table name */
 		} x;
 		int jointype;    /* Type of join between this table and the
 				    next */

@@ -254,8 +254,8 @@ __set_join_expr(expr_t* p)
 {
 	while (p) {
 		ExprSetProperty(p, EP_FromJoin);
-		__set_join_expr(p->pLeft);
-		p = p->pRight;
+		__set_join_expr(p->left);
+		p = p->right;
 	} 
 }
 
@@ -1086,8 +1086,8 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 		e = elist->a[k].pExpr;
 		if (e->op == TK_ALL)
 			break;
-		if (e->op == TK_DOT && e->pRight && e->pRight->op == TK_ALL
-		    && e->pLeft && e->pLeft->op == TK_ID)
+		if (e->op == TK_DOT && e->right && e->right->op == TK_ALL
+		    && e->left && e->left->op == TK_ID)
 			break;
 	}
 	rc = 0;
@@ -1103,8 +1103,8 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 		for (k = 0; k < elist->nExpr; k++) {
 			e = a[k].pExpr;
 			if (e->op != TK_ALL && (e->op != TK_DOT ||
-						e->pRight == 0 ||
-						e->pRight->op != TK_ALL)) {
+						e->right == 0 ||
+						e->right->op != TK_ALL)) {
 				/*
 				 * This particular expression does not need
 				 * to be expanded.
@@ -1120,8 +1120,8 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 				 */
 				/* 'name' is the text of name of TABLE */
 				table_seen = 0; /* 1 when TABLE matches */
-				if (e->op == TK_DOT && e->pLeft) {
-					name = &e->pLeft->span;
+				if (e->op == TK_DOT && e->left) {
+					name = &e->left->span;
 				} else {
 					name = 0;
 				}
@@ -1831,17 +1831,17 @@ __subst_expr(expr_t* expr, int table, expr_list_t* elist)
 	    expr->iTable == table &&
 	    expr->iColumn >= 0) {
 		DBSQL_ASSERT(elist != 0 && expr->iColumn < elist->nExpr);
-		DBSQL_ASSERT(expr->pLeft == 0 &&
-		       expr->pRight == 0 &&
+		DBSQL_ASSERT(expr->left == 0 &&
+		       expr->right == 0 &&
 		       expr->pList == 0);
 		new = elist->a[expr->iColumn].pExpr;
 		DBSQL_ASSERT(new != 0);
 		expr->op = new->op;
 		expr->dataType = new->dataType;
-		DBSQL_ASSERT(expr->pLeft == 0);
-		expr->pLeft = __expr_dup(new->pLeft);
-		DBSQL_ASSERT(expr->pRight == 0);
-		expr->pRight = __expr_dup(new->pRight);
+		DBSQL_ASSERT(expr->left == 0);
+		expr->left = __expr_dup(new->left);
+		DBSQL_ASSERT(expr->right == 0);
+		expr->right = __expr_dup(new->right);
 		DBSQL_ASSERT(expr->pList == 0);
 		expr->pList = __expr_list_dup(new->pList);
 		expr->iTable = new->iTable;
@@ -1849,8 +1849,8 @@ __subst_expr(expr_t* expr, int table, expr_list_t* elist)
 		expr->iAgg = new->iAgg;
 		__token_copy(&expr->span, &new->span);
 	} else {
-		__subst_expr(expr->pLeft, table, elist);
-		__subst_expr(expr->pRight, table, elist);
+		__subst_expr(expr->left, table, elist);
+		__subst_expr(expr->right, table, elist);
 		__subst_expr_list(expr->pList, table, elist);
 	}
 }
@@ -2921,7 +2921,7 @@ __select_result_set(parser_t* parser, char* tab_name, select_t* select)
 		if (elist->a[i].zName) {
 			__dbsql_strdup(NULL, elist->a[i].zName, &column[i].zName);
 		} else if ((p = elist->a[i].pExpr)->op == TK_DOT &&
-			   (pr = p->pRight) != 0 &&
+			   (pr = p->right) != 0 &&
 			   pr->u.zToken.z && pr->u.zToken.z[0]) {
 			__str_nappend(&column[i].zName, pr->u.zToken.z,
 				      pr->u.zToken.n, NULL);
