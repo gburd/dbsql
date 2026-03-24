@@ -61,7 +61,7 @@ __parse_begin(parser_t* parser, int explain_flag)
 		int rc = __init_databases(dbp, &parser->zErrMsg);
 		if (rc != DBSQL_SUCCESS) {
 			parser->rc = rc;
-			parser->nErr++;
+			parser->n_errors++;
 		}
 	}
 	for (i = 0; i < dbp->nDb; i++) {
@@ -139,7 +139,7 @@ __parse_exec(parser_t* parser)
 {
 	int rc = DBSQL_SUCCESS;
 	DBSQL *dbp = parser->db;
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	int (*callback)(void*,int,char**,char**);
 
 	if (parser->rc == ENOMEM)
@@ -147,7 +147,7 @@ __parse_exec(parser_t* parser)
 	callback = parser->xCallback;
 	if (callback == 0 && parser->useCallback)
 		callback = __null_callback;
-	if (v && parser->nErr==0) {
+	if (v && parser->n_errors==0) {
 		FILE *trace;
 		if ((dbp->flags & DBSQL_VdbeTrace) != 0) {
 			trace = stdout;
@@ -155,7 +155,7 @@ __parse_exec(parser_t* parser)
 			trace = 0;
 		}
 		__vdbe_trace(v, trace);
-		__vdbe_make_ready(v, parser->nVar, parser->nMem, parser->nTab,
+		__vdbe_make_ready(v, parser->nVar, parser->n_memory, parser->n_tables,
 				  parser->explain);
 		if (parser->useCallback) {
 			if (parser->explain) {
@@ -235,20 +235,20 @@ __parse_exec(parser_t* parser)
 			}
 			rc = __vdbe_finalize(v, &parser->zErrMsg);
 			if (rc)
-				parser->nErr++;
-			parser->vdbe = 0;
+				parser->n_errors++;
+			parser->pVdbe = 0;
 			parser->rc = rc;
 			if (rc)
-				parser->nErr++;
+				parser->n_errors++;
 		} else {
-			parser->rc = parser->nErr ? DBSQL_ERROR : DBSQL_DONE;
+			parser->rc = parser->n_errors ? DBSQL_ERROR : DBSQL_DONE;
 		}
 		parser->colNamesSet = 0;
 	} else if (parser->useCallback == 0) {
 		parser->rc = DBSQL_ERROR;
 	}
-	parser->nTab = 0;
-	parser->nMem = 0;
+	parser->n_tables = 0;
+	parser->n_memory = 0;
 	parser->nSet = 0;
 	parser->nAgg = 0;
 	parser->nVar = 0;
@@ -422,15 +422,15 @@ __delete_index(DBSQL* dbp, index_t* index)
 void
 __unlink_and_delete_index(DBSQL* dbp, index_t* index)
 {
-	if (index->table->first_index == index) {
-		index->table->first_index = index->next_index;
+	if (index->table->pIndex == index) {
+		index->table->pIndex = index->pNext;
 	} else {
-		index_t *i = index->table->first_index;
+		index_t *i = index->table->pIndex;
 		while (i && i->next_index != index) {
-			index = index->next_index;
+			index = index->pNext;
 		}
 		if (i && i->next_index == index) {
-			i->next_index = index->next_index;
+			i->next_index = index->pNext;
 		}
 	}
 	__delete_index(dbp, index);
@@ -564,8 +564,8 @@ __vdbe_delete_table(DBSQL* dbp, table_t* table)
 	/*
 	 * Delete all indices associated with this table.
 	 */
-	for (index = table->first_index; index; index = next) {
-		next = index->next_index;
+	for (index = table->pIndex; index; index = next) {
+		next = index->pNext;
 		DBSQL_ASSERT(index->iDb == table->iDb ||
 		       (table->iDb == 0 && index->iDb == 1));
 		__delete_index(dbp, index);
@@ -586,13 +586,13 @@ __vdbe_delete_table(DBSQL* dbp, table_t* table)
 	/*
 	 * Delete the table_t structure itself.
 	 */
-	for (i = 0; i < table->nCol; i++) {
-		__dbsql_free(dbp, table->columns[i].zName);
-		__dbsql_free(dbp, table->columns[i].zDflt);
-		__dbsql_free(dbp, table->columns[i].zType);
+	for (i = 0; i < table->n_columns; i++) {
+		__dbsql_free(dbp, table->aCol[i].zName);
+		__dbsql_free(dbp, table->aCol[i].zDflt);
+		__dbsql_free(dbp, table->aCol[i].zType);
 	}
 	__dbsql_free(dbp, table->zName);
-	__dbsql_free(dbp, table->columns);
+	__dbsql_free(dbp, table->aCol);
 	__select_delete(table->u.view.pSelect);
 	__dbsql_free(dbp, table);
 }
@@ -755,7 +755,7 @@ void __start_table(parser, start, name, temp, view)
 				     "unable to open a temporary database "
 				     "file for storing temporary tables",
 				     (char*)0);
-			parser->nErr++;
+			parser->n_errors++;
 			return;
 		}
 		if (dbp->flags & DBSQL_InTrans) { /* TODO */
@@ -765,7 +765,7 @@ void __start_table(parser, start, name, temp, view)
 					      "unable to get a write lock on "
 					      "the temporary database file",
 					      NULL);
-				parser->nErr++;
+				parser->n_errors++;
 				return;
 			}
 		}
@@ -785,7 +785,7 @@ void __start_table(parser, start, name, temp, view)
 		__str_nappend(&parser->zErrMsg, "table ", 0, name->z,
 			      name->n, " already exists", 0, NULL);
 		__dbsql_free(dbp, n);
-		parser->nErr++;
+		parser->n_errors++;
 		return;
 	}
 	if ((idx = __find_index(dbp, n, 0)) != 0 &&
@@ -794,7 +794,7 @@ void __start_table(parser, start, name, temp, view)
 			     "there is already an index named ",
 			     n, (char*)0);
 		__dbsql_free(dbp, n);
-		parser->nErr++;
+		parser->n_errors++;
 		return;
 	}
 	if (__dbsql_calloc(dbp, 1, sizeof(table_t), &table) == ENOMEM) {
@@ -802,10 +802,10 @@ void __start_table(parser, start, name, temp, view)
 		return;
 	}
 	table->zName = n;
-	table->nCol = 0;
-	table->columns = 0;
+	table->n_columns = 0;
+	table->aCol = 0;
 	table->iPKey = -1;
-	table->first_index = 0;
+	table->pIndex = 0;
 	table->iDb = idb;
 	if (parser->pNewTable)
 		__vdbe_delete_table(dbp, parser->pNewTable);
@@ -860,26 +860,26 @@ __add_column(parser_t* parser, token_t* name)
 	if (n == 0)
 		return;
 	__str_unquote(n);
-	for (i = 0; i < table->nCol; i++) {
-		if (strcasecmp(n, table->columns[i].zName) == 0) {
+	for (i = 0; i < table->n_columns; i++) {
+		if (strcasecmp(n, table->aCol[i].zName) == 0) {
 			__str_append(&parser->zErrMsg,
 				     "duplicate column name: ", n, (char*)0);
-			parser->nErr++;
+			parser->n_errors++;
 			__dbsql_free(dbp, n);
 			return;
 		}
 	}
-	if ((table->nCol & 0x7) == 0) { /* TODO ?? 0x7 ?? */
+	if ((table->n_columns & 0x7) == 0) { /* TODO ?? 0x7 ?? */
 		if (__dbsql_realloc(dbp,
-				 (table->nCol + 8) * sizeof(table->columns[0]),
-				 &table->columns) == ENOMEM)
+				 (table->n_columns + 8) * sizeof(table->aCol[0]),
+				 &table->aCol) == ENOMEM)
 			return;
 	}
-	col = &table->columns[table->nCol];
-	memset(col, 0, sizeof(table->columns[0]));
+	col = &table->aCol[table->n_columns];
+	memset(col, 0, sizeof(table->aCol[0]));
 	col->zName = n;
 	col->sortOrder = DBSQL_SO_NUM;
-	table->nCol++;
+	table->n_columns++;
 }
 
 /* __add_not_null --
@@ -897,9 +897,9 @@ __add_not_null(parser_t* parser, int on_error)
 	int i;
 	if ((table = parser->pNewTable) == 0)
 		return;
-	i = table->nCol - 1;
+	i = table->n_columns - 1;
 	if (i >= 0)
-		table->columns[i].notNull = on_error;
+		table->aCol[i].notNull = on_error;
 }
 
 /*
@@ -925,10 +925,10 @@ __add_column_type(parser_t* parser, token_t* first, token_t* last)
 
 	if ((table = parser->pNewTable) == 0)
 		return;
-	i = table->nCol - 1;
+	i = table->n_columns - 1;
 	if (i < 0)
 		return;
-	col = &table->columns[i];
+	col = &table->aCol[i];
 	pz = &col->zType;
 	n = last->n + P_TO_UINT32(last->z) - P_TO_UINT32(first->z);
 	__str_nappend(pz, first->z, n, NULL);
@@ -963,10 +963,10 @@ __add_default_value(parser_t* parser, token_t* val, int minus)
 	char **pz;
 	if ((table = parser->pNewTable) == 0)
 		return;
-	i = table->nCol - 1;
+	i = table->n_columns - 1;
 	if (i < 0)
 		return;
-	pz = &table->columns[i].zDflt;
+	pz = &table->aCol[i].zDflt;
 	if (minus) {
 		__str_nappend(pz, "-", 1, val->z, val->n, NULL);
 	} else {
@@ -1010,28 +1010,28 @@ __add_primary_key(parser_t* parser, id_list_t* list, int on_error)
 		__str_append(&parser->zErrMsg, "table \"",
 			     table->zName, "\" has more than one primary key",
 			     (char*)0);
-		parser->nErr++;
+		parser->n_errors++;
 		goto primary_key_exit;
 	}
 	table->hasPrimKey = 1;
 	if (list == 0) {
-		col = table->nCol - 1;
-		table->columns[col].isPrimKey = 1;
+		col = table->n_columns - 1;
+		table->aCol[col].isPrimKey = 1;
 	} else {
 		for (i = 0; i < list->nId; i++) {
-			for (col = 0; col < table->nCol; col++) {
+			for (col = 0; col < table->n_columns; col++) {
 				if (strcasecmp(list->a[i].zName,
-					  table->columns[col].zName) == 0)
+					  table->aCol[col].zName) == 0)
 					break;
 			}
-			if (col < table->nCol)
-				table->columns[col].isPrimKey = 1;
+			if (col < table->n_columns)
+				table->aCol[col].isPrimKey = 1;
 		}
 		if (list->nId > 1)
 			col = -1;
 	}
-	if (col >= 0 && col < table->nCol) {
-		type = table->columns[col].zType;
+	if (col >= 0 && col < table->n_columns) {
+		type = table->aCol[col].zType;
 	}
 	if (type && strcasecmp(type, "INTEGER") == 0) {
 		table->iPKey = col;
@@ -1110,9 +1110,9 @@ __add_collate_type(parser_t* parser, int type)
 	int i;
 	if ((table = parser->pNewTable) == 0)
 		return;
-	i = table->nCol - 1;
+	i = table->n_columns - 1;
 	if (i >= 0)
-		table->columns[i].sortOrder = type;
+		table->aCol[i].sortOrder = type;
 }
 
 /*
@@ -1224,8 +1224,8 @@ __gen_create_table_stmt(table_t* table)
 	char *sep, *sep2, *end;
 
 	n = 0;
-	for (i = 0; i < table->nCol; i++) {
-		n += __ident_length(table->columns[i].zName);
+	for (i = 0; i < table->n_columns; i++) {
+		n += __ident_length(table->aCol[i].zName);
 	}
 	n += __ident_length(table->zName);
 	if (n < 40) {
@@ -1237,18 +1237,18 @@ __gen_create_table_stmt(table_t* table)
 		sep2 = ",\n  ";
 		end = "\n)";
 	}
-	n += 35 + (6 * table->nCol);
+	n += 35 + (6 * table->n_columns);
 	if (__dbsql_malloc(NULL, n, &stmt) == ENOMEM)
 		return 0;
 	strcpy(stmt, table->iDb == 1 ? "CREATE TEMP TABLE " : "CREATE TABLE ");
 	k = strlen(stmt);
 	__ident_put(stmt, &k, table->zName);
 	stmt[k++] = '(';
-	for (i = 0; i < table->nCol; i++) {
+	for (i = 0; i < table->n_columns; i++) {
 		strcpy(&stmt[k], sep);
 		k += strlen(&stmt[k]);
 		sep = sep2;
-		__ident_put(stmt, &k, table->columns[i].zName);
+		__ident_put(stmt, &k, table->aCol[i].zName);
 	}
 	strcpy(&stmt[k], end);
 	return stmt;
@@ -1281,7 +1281,7 @@ __ending_create_table_paren(parser_t* parser, token_t* end, select_t* select)
 	table_t *table;
 	DBSQL *dbp = parser->db;
 
-	if ((end == 0 && select == 0) || parser->nErr || parser->rc == ENOMEM)
+	if ((end == 0 && select == 0) || parser->n_errors || parser->rc == ENOMEM)
 		return;
 
 	table = parser->pNewTable;
@@ -1296,9 +1296,9 @@ __ending_create_table_paren(parser_t* parser, token_t* end, select_t* select)
 		table_t *sel_table = __select_result_set(parser, 0, select);
 		if (sel_table == 0)
 			return;
-		DBSQL_ASSERT(table->columns == 0);
-		table->nCol = sel_table->nCol;
-		table->columns = sel_table->columns;
+		DBSQL_ASSERT(table->aCol == 0);
+		table->n_columns = sel_table->nCol;
+		table->aCol = sel_table->columns;
 		sel_table->nCol = 0;
 		sel_table->columns = 0;
 		__vdbe_delete_table(0, sel_table);
@@ -1374,7 +1374,7 @@ __ending_create_table_paren(parser_t* parser, token_t* end, select_t* select)
 		if (select) {
 			__vdbe_add_op(v, OP_Integer,table->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, 1, 0);
-			parser->nTab = 2;
+			parser->n_tables = 2;
 			__select(parser, select, SRT_Table, 1, 0, 0, 0);
 		}
 		__vdbe_conclude_write(parser);
@@ -1383,7 +1383,7 @@ __ending_create_table_paren(parser_t* parser, token_t* end, select_t* select)
 	/*
 	 * Add the table to the in-memory representation of the database.
 	 */
-	if (parser->explain == 0 && parser->nErr == 0) {
+	if (parser->explain == 0 && parser->n_errors == 0) {
 		table_t *old;
 		foreign_key_t *fkey;
 		old = __hash_insert(&dbp->aDb[table->iDb].tblHash,
@@ -1434,7 +1434,7 @@ void __create_view(parser, begin, name, select, temp)
 
 	__start_table(parser, begin, name, temp, 1);
 	table = parser->pNewTable;
-	if (table == 0 || parser->nErr) {
+	if (table == 0 || parser->n_errors) {
 		__select_delete(select);
 		return;
 	}
@@ -1505,7 +1505,7 @@ __view_get_column_names(parser_t* parser, table_t* table)
 	 * A positive nCol means the columns names for this view are
 	 * already known.
 	 */
-	if (table->nCol > 0)
+	if (table->n_columns > 0)
 		return 0;
 
 	/*
@@ -1519,10 +1519,10 @@ __view_get_column_names(parser_t* parser, table_t* table)
 	 * Actually, this error is caught previously and so the following test
 	 * should always fail.  But we will leave it in place just to be safe.
 	 */
-	if (table->nCol < 0) {
+	if (table->n_columns < 0) {
 		__str_append(&parser->zErrMsg, "view ",
 			     table->zName, " is circularly defined", (char*)0);
-		parser->nErr++;
+		parser->n_errors++;
 		return 1;
 	}
 
@@ -1545,18 +1545,18 @@ __view_get_column_names(parser_t* parser, table_t* table)
 		sel->pEList = elist;
 		return 1;  /* Malloc failed */
 	}
-	table->nCol = -1;
+	table->n_columns = -1;
 	sel_table = __select_result_set(parser, 0, sel);
 	if (sel_table) {
-		DBSQL_ASSERT(table->columns == 0);
-		table->nCol = sel_table->nCol;
-		table->columns = sel_table->columns;
+		DBSQL_ASSERT(table->aCol == 0);
+		table->n_columns = sel_table->nCol;
+		table->aCol = sel_table->columns;
 		sel_table->nCol = 0;
 		sel_table->columns = 0;
 		__vdbe_delete_table(0, sel_table);
 		DB_PROPERTY_SET(parser->db, table->iDb, DBSQL_UNRESET_VIEWS);
 	} else {
-		table->nCol = 0;
+		table->n_columns = 0;
 		nerr++;
 	}
 	__select_unbind(sel);
@@ -1581,16 +1581,16 @@ __view_reset_column_names(table_t* table)
 {
 	int i;
 	if (table == 0 || table->u.view.pSelect==0 ) return;
-	if (table->nCol == 0)
+	if (table->n_columns == 0)
 		return;
-	for (i = 0; i < table->nCol; i++) {
-		__dbsql_free(NULL, table->columns[i].zName);
-		__dbsql_free(NULL, table->columns[i].zDflt);
-		__dbsql_free(NULL, table->columns[i].zType);
+	for (i = 0; i < table->n_columns; i++) {
+		__dbsql_free(NULL, table->aCol[i].zName);
+		__dbsql_free(NULL, table->aCol[i].zDflt);
+		__dbsql_free(NULL, table->aCol[i].zType);
 	}
-	__dbsql_free(NULL, table->columns);
-	table->columns = 0;
-	table->nCol = 0;
+	__dbsql_free(NULL, table->aCol);
+	table->aCol = 0;
+	table->n_columns = 0;
 }
 
 /*
@@ -1635,7 +1635,7 @@ __table_from_token(parser_t* parser, token_t* token)
 	if (table == 0) {
 		__str_nappend(&parser->zErrMsg, "no such table: ",
 			      0, token->z, token->n, NULL);
-		parser->nErr++;
+		parser->n_errors++;
 	}
 	return table;
 }
@@ -1658,7 +1658,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 	DBSQL *dbp = parser->db;
 	int idb;
 
-	if (parser->nErr || parser->rc == ENOMEM)
+	if (parser->n_errors || parser->rc == ENOMEM)
 		return;
 	table = __table_from_token(parser, name);
 	if (table == 0)
@@ -1700,21 +1700,21 @@ __drop_table(parser_t* parser, token_t* name, int view)
 	if (table->readOnly) {
 		__str_append(&parser->zErrMsg, "table ", table->zName,
 			     " may not be dropped", (char*)0);
-		parser->nErr++;
+		parser->n_errors++;
 		return;
 	}
 	if (view && table->u.view.pSelect == 0) {
 		__str_append(&parser->zErrMsg,
 			     "use DROP TABLE to delete table ", table->zName,
 			     (char*)0);
-		parser->nErr++;
+		parser->n_errors++;
 		return;
 	}
 	if (!view && table->u.view.pSelect) {
 		__str_append(&parser->zErrMsg,
 			     "use DROP VIEW to delete view ", table->zName,
 			     (char*)0);
-		parser->nErr++;
+		parser->n_errors++;
 		return;
 	}
 
@@ -1777,7 +1777,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 		__vdbe_add_op(v, OP_Close, 0, 0);
 		if (!view) {
 			__vdbe_add_op(v, OP_Destroy, table->tnum, table->iDb);
-			for (idx = table->first_index; idx; idx = idx->next_index) {
+			for (idx = table->pIndex; idx; idx = idx->next_index) {
 				__vdbe_add_op(v, OP_Destroy, idx->tnum,
 					      idx->iDb);
 			}
@@ -1825,8 +1825,8 @@ __add_idx_key_type(vdbe_t* v, index_t* idx)
 		return;
 	for (i = 0; i < n; i++) {
 		int col = idx->aiColumn[i];
-		DBSQL_ASSERT(col >= 0 && col < table->nCol);
-		if ((table->columns[col].sortOrder & DBSQL_SO_TYPEMASK) ==
+		DBSQL_ASSERT(col >= 0 && col < table->n_columns);
+		if ((table->aCol[col].sortOrder & DBSQL_SO_TYPEMASK) ==
 		    DBSQL_SO_TEXT) {
 			type[i] = 't';
 		} else {
@@ -1879,19 +1879,19 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
 	foreign_key_t *fkey = 0;
 
 	DBSQL_ASSERT(to != 0);
-	if (table == 0 || parser->nErr)
+	if (table == 0 || parser->n_errors)
 		goto fk_end;
 	if (from_col == 0) {
-		int col = table->nCol - 1;
+		int col = table->n_columns - 1;
 		if (col < 0)
 			goto fk_end;
 		if (to_col && to_col->nId!=1 ){
 			__str_nappend(&parser->zErrMsg,
 				      "foreign key on ", -1,
-				      table->columns[col].zName, -1,
+				      table->aCol[col].zName, -1,
 				      " should reference only one column "
 				      "of table ", -1, to->z, to->n, NULL);
-			parser->nErr++;
+			parser->n_errors++;
 			goto fk_end;
 		}
 		ncol = 1;
@@ -1900,7 +1900,7 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
 			     "number of columns in foreign key does not "
 			     "match the number of columns in the referenced "
 			     "table", (char*)0);
-		parser->nErr++;
+		parser->n_errors++;
 		goto fk_end;
 	} else {
 		ncol = from_col->nId;
@@ -1923,25 +1923,25 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
 	fkey->pNextTo = 0;
 	fkey->nCol = ncol;
 	if (from_col == 0) {
-		fkey->aCol[0].iFrom = table->nCol - 1;
+		fkey->aCol[0].iFrom = table->n_columns - 1;
 	} else {
 		for(i = 0; i < ncol; i++) {
 			int j;
-			for(j = 0; j < table->nCol; j++) {
+			for(j = 0; j < table->n_columns; j++) {
 				if (strcasecmp(
-					    table->columns[j].zName,
+					    table->aCol[j].zName,
 					    from_col->a[i].zName) == 0) {
 					fkey->aCol[i].iFrom = j;
 					break;
 				}
 			}
-			if (j >= table->nCol) {
+			if (j >= table->n_columns) {
 				__str_append(&parser->zErrMsg,
 					     "unknown column \"",
 					     from_col->a[i].zName,
 					     "\" in foreign key definition",
 					     (char*)0);
-				parser->nErr++;
+				parser->n_errors++;
 				goto fk_end;
 			}
 		}
@@ -2032,7 +2032,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	int temp;           /* True for a temporary index */
 	DBSQL *dbp = parser->db;
 
-	if (parser->nErr || parser->rc == ENOMEM)
+	if (parser->n_errors || parser->rc == ENOMEM)
 		goto exit_create_index;
 	if (parser->initFlag &&
 	   __ref_normalizer_ctx_init(&normctx, parser, parser->iDb,
@@ -2052,24 +2052,24 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 		DBSQL_ASSERT(token == 0);
 		table =  parser->pNewTable;
 	}
-	if (table == 0 || parser->nErr )
+	if (table == 0 || parser->n_errors )
 		goto exit_create_index;
 	if (table->readOnly) {
 		__str_append(&parser->zErrMsg, "table ", table->zName,
 			     " may not be indexed", (char*)0);
-		parser->nErr++;
+		parser->n_errors++;
 		goto exit_create_index;
 	}
 	if (table->iDb >= 2 && parser->initFlag == 0) {
 		__str_append(&parser->zErrMsg, "table ", table->zName,
 			     " may not have indices added", (char*)0);
-		parser->nErr++;
+		parser->n_errors++;
 		goto exit_create_index;
 	}
 	if (table->u.view.pSelect) {
 		__str_append(&parser->zErrMsg, "views may not be indexed",
 			     (char*)0);
-		parser->nErr++;
+		parser->n_errors++;
 		goto exit_create_index;
 	}
 	temp = (table->iDb == 1);
@@ -2095,20 +2095,20 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 		if ((idx_same_name = __find_index(dbp, name, 0)) != 0) {
 			__str_append(&parser->zErrMsg, "index ", name,
 				     " already exists", (char*)0);
-			parser->nErr++;
+			parser->n_errors++;
 			goto exit_create_index;
 		}
 		if ((tbl_same_name = __find_table(dbp, name, 0)) != 0) {
 			__str_append(&parser->zErrMsg,
 				     "there is already a table named ", name,
 				     (char*)0);
-			parser->nErr++;
+			parser->n_errors++;
 			goto exit_create_index;
 		}
 	} else if (token == 0) {
 		char buf[30]; /* TODO: static buffers are bad */
 		int n = 1;
-		index_t *loop = table->first_index;
+		index_t *loop = table->pIndex;
 		while (loop) {
 			loop = loop->next_index;
 			n++;
@@ -2150,7 +2150,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	 * So create a fake list to simulate this.
 	 */
 	if (list == 0) {
-		null_id.z = table->columns[table->nCol-1].zName;
+		null_id.z = table->aCol[table->n_columns-1].zName;
 		null_id.n = strlen(null_id.z);
 		list = __id_list_append(0, &null_id);
 		if (list == 0)
@@ -2178,17 +2178,17 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	 * if any column is not found.
 	 */
 	for (i = 0; i < list->nId; i++) {
-		for(j = 0; j < table->nCol; j++) {
+		for(j = 0; j < table->n_columns; j++) {
 			if (strcasecmp(list->a[i].zName,
-						  table->columns[j].zName) == 0) {
+						  table->aCol[j].zName) == 0) {
 				break;
 			}
 		}
-		if (j >= table->nCol) {
+		if (j >= table->n_columns) {
 			__str_append(&parser->zErrMsg, "table ",
 				     table->zName, " has no column named ",
 				     list->a[i].zName, (char*)0);
-			parser->nErr++;
+			parser->n_errors++;
 			__dbsql_free(dbp, index);
 			goto exit_create_index;
 		}
@@ -2218,16 +2218,16 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	 * OE_Ignore.  This is necessary for the correct operation of UPDATE
 	 * and INSERT.
 	 */
-	if (on_error != OE_Replace || table->first_index == 0 ||
-	    table->first_index->onError == OE_Replace) {
-		index->next_index = table->first_index;
-		table->first_index = index;
+	if (on_error != OE_Replace || table->pIndex == 0 ||
+	    table->pIndex->onError == OE_Replace) {
+		index->pNext = table->pIndex;
+		table->pIndex = index;
 	} else {
-		index_t *other = table->first_index;
+		index_t *other = table->pIndex;
 		while (other->next_index && other->next_index->onError != OE_Replace) {
 			other = other->next_index;
 		}
-		index->next_index = other->next_index;
+		index->pNext = other->next_index;
 		other->next_index = index;
 	}
 
@@ -2349,7 +2349,7 @@ __drop_index(parser_t* parser, src_list_t* name)
 	vdbe_t *v;
 	DBSQL *dbp = parser->db;
 
-	if (parser->nErr || parser->rc == ENOMEM)
+	if (parser->n_errors || parser->rc == ENOMEM)
 		return;
 	DBSQL_ASSERT(name->nSrc == 1);
 	index = __find_index(dbp, name->a[0].zName, name->a[0].zDatabase);
@@ -2563,7 +2563,7 @@ __src_list_assign_cursors(parser_t* parser, src_list_t* list)
 	int i;
 	for (i = 0; i < list->nSrc; i++) {
 		if (list->a[i].iCursor < 0) {
-			list->a[i].iCursor = parser->nTab++;
+			list->a[i].iCursor = parser->n_tables++;
 		}
 	}
 }
@@ -2668,7 +2668,7 @@ __dbsql_txn_begin(parser_t* parser, int on_error)
 	dbp = parser->db;
 	if (dbp == 0 || dbp->aDb[0].pBt == 0)
 		return;
-	if (parser->nErr || parser->rc == ENOMEM)
+	if (parser->n_errors || parser->rc == ENOMEM)
 		return;
 	if (__auth_check(parser, DBSQL_TRANSACTION, "BEGIN", 0, 0))
 		return;
@@ -2698,7 +2698,7 @@ __dbsql_txn_commit(parser_t* parser)
 	dbp = parser->db;
 	if (dbp == 0 || dbp->aDb[0].pBt==0 )
 		return;
-	if (parser->nErr || parser->rc == ENOMEM)
+	if (parser->n_errors || parser->rc == ENOMEM)
 		return;
 	if (__auth_check(parser, DBSQL_TRANSACTION, "COMMIT", 0, 0))
 		return;
@@ -2729,7 +2729,7 @@ __dbsql_txn_abort(parser_t* parser)
 	dbp = parser->db;
 	if (dbp == 0 || dbp->aDb[0].pBt == 0)
 		return;
-	if (parser->nErr || parser->rc == ENOMEM)
+	if (parser->n_errors || parser->rc == ENOMEM)
 		return;
 	if (__auth_check(parser, DBSQL_TRANSACTION, "ROLLBACK", 0, 0))
 		return;

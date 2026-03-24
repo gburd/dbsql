@@ -633,7 +633,7 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 
 		if (table == 0)
 			continue;
-		DBSQL_ASSERT(table->nCol > 0);
+		DBSQL_ASSERT(table->n_columns > 0);
 		if (table_name) {
 			if (item->zAlias) {
 				char *tname = item->zAlias;
@@ -657,7 +657,7 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 			expr->iTable = item->iCursor;
 			expr->iDb = table->iDb;
 		}
-		for (j = 0, column = table->columns; j < table->nCol;
+		for (j = 0, column = table->aCol; j < table->n_columns;
 		     j++, column++) {
 			if (strcasecmp(column->zName,
 						  col_name) == 0){
@@ -697,10 +697,10 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 		}
 		if(table) {
 			int j;
-			column_t *column = table->columns;
+			column_t *column = table->aCol;
 			expr->iDb = table->iDb;
 			ntables++;
-			for (j = 0; j < table->nCol; j++, column++) {
+			for (j = 0; j < table->n_columns; j++, column++) {
 				if (strcasecmp(column->zName,
 							  col_name) == 0) {
 					cnt++;
@@ -860,7 +860,7 @@ int __expr_resolve_ids(parser, slist, elist, expr)
 		return 0;
 	for (i = 0; i < slist->nSrc; i++) {
 		DBSQL_ASSERT(slist->a[i].iCursor >= 0 &&
-		       slist->a[i].iCursor<parser->nTab);
+		       slist->a[i].iCursor<parser->n_tables);
 	}
 	switch(expr->op) {
 		/*
@@ -946,7 +946,7 @@ int __expr_resolve_ids(parser, slist, elist, expr)
 			 * temporary table has already been put in iTable by
 			 * __expr_resolve_in_select().
 			 */
-			expr->iTable = parser->nTab++;
+			expr->iTable = parser->n_tables++;
 			__vdbe_add_op(v, OP_OpenTemp, expr->iTable, 1);
 			__select(parser, expr->x.select, SRT_Set,
 				 expr->iTable, 0,0,0);
@@ -998,7 +998,7 @@ int __expr_resolve_ids(parser, slist, elist, expr)
 		 * value of this select in a memory cell and record the number
 		 * of the memory cell in iColumn.
 		 */
-		expr->iColumn = parser->nMem++;
+		expr->iColumn = parser->n_memory++;
 		if (__select(parser, expr->x.select, SRT_Mem,
 			     expr->iColumn,0,0,0)) {
 			return 1;
@@ -1127,19 +1127,19 @@ __expr_check(parser_t* parser, expr_t* expr, int agg_allowed, int* agg)
 			__str_nappend(&parser->zErrMsg,
 				      "misuse of aggregate function ", -1,
 				      id, nid, "()", 2, NULL);
-			parser->nErr++;
+			parser->n_errors++;
 			nerr++;
 			is_agg = 0;
 		} else if (no_such_func) {
 			__str_nappend(&parser->zErrMsg,
 				      "no such function: ", -1, id, nid, NULL);
-			parser->nErr++;
+			parser->n_errors++;
 			nerr++;
 		} else if (wrong_num_args) {
 			__str_nappend(&parser->zErrMsg,
 				      "wrong number of arguments to function ",
 				      -1, id, nid, "()", 2, NULL);
-			parser->nErr++;
+			parser->n_errors++;
 			nerr++;
 		}
 		if (is_agg)
@@ -1275,7 +1275,7 @@ __expr_type(expr_t* p)
 		case TK_SELECT:
 			DBSQL_ASSERT(p->x.select);
 			DBSQL_ASSERT(p->x.select->pEList);
-			DBSQL_ASSERT(p->x.select->pEList->nExpr > 0);
+			DBSQL_ASSERT(p->x.select->pEList->n_expressions > 0);
 			p = p->x.select->pEList->a[0].pExpr;
 			break;
 		case TK_CASE:
@@ -1312,7 +1312,7 @@ int
 __get_temp_reg(parser_t* parser)
 {
 	/* Simple allocation: just increment the register counter */
-	return ++parser->nMem;
+	return ++parser->n_memory;
 }
 
 /*
@@ -1326,7 +1326,7 @@ void
 __release_temp_reg(parser_t* parser, int reg)
 {
 	/* For now, no-op.  Future optimization: maintain free list */
-	/* Could track if reg == parser->nMem and decrement, but
+	/* Could track if reg == parser->n_memory and decrement, but
 	 * need to be careful about ordering */
 }
 
@@ -1343,8 +1343,8 @@ __get_temp_range(parser_t* parser, int nreg)
 	int base;
 	if (nreg <= 0)
 		return 0;
-	base = parser->nMem + 1;
-	parser->nMem += nreg;
+	base = parser->n_memory + 1;
+	parser->n_memory += nreg;
 	return base;
 }
 
@@ -1376,7 +1376,7 @@ __release_temp_range(parser_t* parser, int base, int nreg)
 int
 __expr_code_target(parser_t* parser, expr_t* expr, int target)
 {
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	int i, op, dest, nexpr, nid, addr, expr_end_label, jump_inst;
 	int r1, r2;
 	int regFree1 = 0;
@@ -1392,7 +1392,7 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 		return target;
 	}
 
-	DBSQL_ASSERT(target > 0 && target <= parser->nMem);
+	DBSQL_ASSERT(target > 0 && target <= parser->n_memory);
 
 	switch(expr->op) {
 	case TK_PLUS:     op = OP_Add;      break;
@@ -1424,7 +1424,7 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 	case TK_COLUMN:
 		if( parser->useAgg ) {
 			__vdbe_add_op(v, OP_AggGet, 0, expr->iAgg);
-			__vdbe_add_op(v, OP_Dup, parser->nMem - 1, target);
+			__vdbe_add_op(v, OP_Dup, parser->n_memory - 1, target);
 		} else if (expr->iColumn >= 0) {
 			__vdbe_add_op(v, OP_Column, expr->iTable,
 				      expr->iColumn);
@@ -1534,7 +1534,7 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 		break;
 	case TK_AGG_FUNCTION:
 		__vdbe_add_op(v, OP_AggGet, 0, expr->iAgg);
-		__vdbe_add_op(v, OP_Dup, parser->nMem - 1, target);
+		__vdbe_add_op(v, OP_Dup, parser->n_memory - 1, target);
 		break;
 	case TK_GLOB: /* FALLTHROUGH */
 	case TK_LIKE: /* FALLTHROUGH */
@@ -1653,7 +1653,7 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 			__error_msg(parser,
 				    "RAISE() may only be used within a "
 				    "trigger-program");
-			parser->nErr++;
+			parser->n_errors++;
 			return target;
 		}
 		if (expr->iColumn == OE_Rollback ||
@@ -1689,7 +1689,7 @@ __expr_code(parser_t* parser, expr_t* expr)
 	int target;
 	if (expr == 0)
 		return;
-	target = ++parser->nMem;
+	target = ++parser->n_memory;
 	__expr_code_target(parser, expr, target);
 }
 
@@ -1732,7 +1732,7 @@ __expr_code_temp(parser_t* parser, expr_t* expr, int *reg_ptr)
 void
 __expr_if_true(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 {
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	int d2, addr, op = 0;
 
 	if (v == 0 || expr == 0)
@@ -1823,7 +1823,7 @@ __expr_if_true(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 void
 __expr_if_false(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 {
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	int addr, d2, op = 0;
 
 	if (v == 0 || expr == 0)

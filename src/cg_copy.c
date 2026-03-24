@@ -85,8 +85,8 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, 0, table->tnum);
 		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
-		for(i = 1, index = table->first_index; index;
-		    index=index->next_index, i++) {
+		for(i = 1, index = table->pIndex; index;
+		    index=index->pNext, i++) {
 			DBSQL_ASSERT(index->iDb == 1 || index->iDb == table->iDb);
 			__vdbe_add_op(v, OP_Integer, index->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, i, index->tnum);
@@ -97,7 +97,7 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 			__vdbe_add_op(v, OP_Integer, 0, 0);
 		}
 		end = __vdbe_make_label(v);
-		addr = __vdbe_add_op(v, OP_FileRead, table->nCol, end);
+		addr = __vdbe_add_op(v, OP_FileRead, table->n_columns, end);
 		if (delimiter) {
 			__vdbe_change_p4(v, addr, delimiter->z, delimiter->n);
 			__vdbe_dequote_p4(v, addr);
@@ -110,7 +110,7 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 		} else {
 			__vdbe_add_op(v, OP_NewRecno, 0, 0);
 		}
-		for(i = 0; i < table->nCol; i++) {
+		for(i = 0; i < table->n_columns; i++) {
 			if (i == table->iPKey) {
 				/*
 				 * The integer primary key column is filled

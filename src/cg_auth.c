@@ -157,10 +157,10 @@ __auth_read(parser_t* parser, expr_t* expr, src_list_t* tab_list)
 	if (table == 0)
 		return;
 	if (expr->iColumn >= 0) {
-		DBSQL_ASSERT(expr->iColumn < table->nCol);
+		DBSQL_ASSERT(expr->iColumn < table->n_columns);
 		col = table->aCol[expr->iColumn].zName;
 	} else if (table->iPKey >= 0) {
-		DBSQL_ASSERT(table->iPKey < table->nCol);
+		DBSQL_ASSERT(table->iPKey < table->n_columns);
 		col = table->aCol[table->iPKey].zName;
 	} else {
 		col = "ROWID";

@@ -102,7 +102,7 @@ __attach(parser_t* parser, token_t* file, token_t* db)
 	new->zName = databasename;
 	__dbsql_free(dbp, filename);
 	dbp->flags &= ~DBSQL_Initialized;
-	if (parser->nErr)
+	if (parser->n_errors)
 		return;
 	if (rc == DBSQL_SUCCESS) {
 		rc = __init_databases(parser->db, &parser->zErrMsg);
@@ -115,7 +115,7 @@ __attach(parser_t* parser, token_t* file, token_t* db)
 			dbp->aDb[i].pBt = 0;
 		}
 		__reset_internal_schema(dbp, 0);
-		parser->nErr++;
+		parser->n_errors++;
 		parser->rc = DBSQL_ERROR;
 	}
 }

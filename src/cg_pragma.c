@@ -213,23 +213,23 @@ if (strcasecmp(left_name, "table_info") == 0) {
 		__vdbe_add_op(v, OP_ColumnName, 5, 0);
 		__vdbe_change_p4(v, -1, "pk", P4_STATIC);
 		__view_get_column_names(parser, table);
-		for (i = 0; i < table->nCol; i++) {
+		for (i = 0; i < table->n_columns; i++) {
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p4(v, -1, table->columns[i].zName,
+			__vdbe_change_p4(v, -1, table->aCol[i].zName,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_String, 0, 0);
 			__vdbe_change_p4(v, -1, 
-					 table->columns[i].zType ?
-					   table->columns[i].zType :
+					 table->aCol[i].zType ?
+					   table->aCol[i].zType :
 					   "numeric", P3_STATIC);
 			__vdbe_add_op(v, OP_Integer,
-			      table->columns[i].notNull, 0);
+			      table->aCol[i].notNull, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p4(v, -1, table->columns[i].zDflt,
+			__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Integer,
-				      table->columns[i].isPrimKey, 0);
+				      table->aCol[i].isPrimKey, 0);
 			__vdbe_add_op(v, OP_Callback, 6, 0);
 		}
 	}
@@ -256,9 +256,9 @@ if (strcasecmp(left_name, "index_info") == 0) {
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_Integer, cnum, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			DBSQL_ASSERT(table->nCol > cnum);
+			DBSQL_ASSERT(table->n_columns > cnum);
 			__vdbe_change_p4(v, -1,
-					 table->columns[cnum].zName,
+					 table->aCol[cnum].zName,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Callback, 3, 0);
 		}
@@ -273,7 +273,7 @@ if (strcasecmp(left_name, "index_list") == 0) {
 	table = __find_table(dbp, right_name, 0);
 	if (table) {
 		v = __parser_get_vdbe(parser);
-		index = table->first_index;
+		index = table->pIndex;
 	}
 	if (table && index) {
 		int i = 0;
@@ -293,7 +293,7 @@ if (strcasecmp(left_name, "index_list") == 0) {
 				      index->onError != OE_None, 0);
 			__vdbe_add_op(v, OP_Callback, 3, 0);
 			++i;
-			index = index->next_index;
+			index = index->pNext;
 		}
 	}
 } else
@@ -331,7 +331,7 @@ if (strcasecmp(left_name, "foreign_key_list") == 0) {
 						 P3_STATIC);
 				__vdbe_add_op(v, OP_String, 0, 0);
 				__vdbe_change_p4(v, -1,
-				  table->columns[fk->aCol[j].iFrom].zName,
+				  table->aCol[fk->aCol[j].iFrom].zName,
 				  P3_STATIC);
 				__vdbe_add_op(v, OP_String, 0, 0);
 				__vdbe_change_p4(v, -1,

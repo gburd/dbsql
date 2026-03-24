@@ -159,7 +159,7 @@ __join_type(parser_t* parser, token_t* a, token_t* b, token_t* c)
 			      "unknown or unsupported join type: ", 0,
 			      a->z, a->n, sp1, 1, b->z, b->n, sp2, 1, c->z,
 			      c->n, NULL);
-		parser->nErr++;
+		parser->n_errors++;
 		jointype = JT_INNER;
 	} else if (jointype & JT_RIGHT) {
 		__error_msg(parser, 
@@ -182,8 +182,8 @@ __column_index(table, col)
 	const char *col;
 {
 	int i;
-	for (i = 0; i < table->nCol; i++) {
-		if (strcasecmp(table->columns[i].zName, col) == 0)
+	for (i = 0; i < table->n_columns; i++) {
+		if (strcasecmp(table->aCol[i].zName, col) == 0)
 			return i;
 	}
 	return -1;
@@ -299,10 +299,10 @@ __process_join(parser_t* parser, select_t* select)
 				return 1;
 			}
 			table = term->pTab;
-			for (j = 0; j < table->nCol; j++) {
+			for (j = 0; j < table->n_columns; j++) {
 				if (__column_index(other->pTab,
-						  table->columns[j].zName) >= 0) {
-					__add_where_term(table->columns[j].zName,
+						  table->aCol[j].zName) >= 0) {
+					__add_where_term(table->aCol[j].zName,
 							 table, other->pTab,
 							 &select->pWhere);
 				}
@@ -515,7 +515,7 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 	int brk;
 {
 	int i, addr, addr1, addr2;
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	int regResult;      /* Start of memory holding current results */
 	int nResultCol;     /* Number of result columns */
 
@@ -551,8 +551,8 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 	}
 
 	/* Allocate registers for result columns */
-	regResult = parser->nMem + 1;
-	parser->nMem += nResultCol;
+	regResult = parser->n_memory + 1;
+	parser->n_memory += nResultCol;
 
 	/*
 	 * Pull the requested columns into registers.
@@ -810,7 +810,7 @@ __generate_column_types(parser_t* parser, src_list_t* tables, expr_list_t* elist
 	expr_t *p;
 	char *type;
 	table_t *table;
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	if (parser->useCallback &&
 	    (parser->db->flags & DBSQL_ReportTypes) == 0) {
 		return;
@@ -831,11 +831,11 @@ __generate_column_types(parser_t* parser, src_list_t* tables, expr_list_t* elist
 			table = tables->a[j].pTab;
 			if (col < 0)
 				col = table->iPKey;
-			DBSQL_ASSERT(col == -1 || (col >= 0 && col < table->nCol));
+			DBSQL_ASSERT(col == -1 || (col >= 0 && col < table->n_columns));
 			if (col < 0) {
 				type = "INTEGER";
 			} else {
-				type = table->columns[col].zType;
+				type = table->aCol[col].zType;
 			}
 		} else {
 			if (__expr_type(p) == DBSQL_SO_TEXT) {
@@ -870,7 +870,7 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 	char namebuf[30]; /* TODO consider eliminating this */
 	expr_t *p;
 	table_t *table;
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	if (parser->colNamesSet || v == 0 || parser->rc == ENOMEM)
 		return;
 	parser->colNamesSet = 1;
@@ -900,13 +900,13 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 			table = tables->a[j].pTab;
 			if (icol < 0)
 				icol = table->iPKey;
-			DBSQL_ASSERT(icol == -1 ||(icol >= 0 && icol < table->nCol));
+			DBSQL_ASSERT(icol == -1 ||(icol >= 0 && icol < table->n_columns));
 			if (icol < 0) {
 				col = "_ROWID_";
 				type = "INTEGER";
 			} else {
-				col = table->columns[icol].zName;
-				type = table->columns[icol].zType;
+				col = table->aCol[icol].zName;
+				type = table->aCol[icol].zType;
 			}
 			if (p->span.z && p->span.z[0] && !show_full_names) {
 				addr = __vdbe_add_op(v,OP_ColumnName, i, 0);
@@ -1383,9 +1383,9 @@ __match_orderby_to_column(parser, select, orderby_clause, table_idx,
 vdbe_t *
 __parser_get_vdbe(parser_t* parser)
 {
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	if (v == 0) {
-		v = parser->vdbe = __vdbe_create(parser->db);
+		v = parser->pVdbe = __vdbe_create(parser->db);
 	}
 	return v;
 }
@@ -1490,7 +1490,7 @@ __compute_limit_registers(parser_t* parser, select_t* select)
 	 * no rows.
 	 */
 	if (select->iLimit >= 0) {
-		reg = parser->nMem++;
+		reg = parser->n_memory++;
 		v = __parser_get_vdbe(parser);
 		if (v == 0)
 			return;
@@ -1499,7 +1499,7 @@ __compute_limit_registers(parser_t* parser, select_t* select)
 		select->iLimit = reg;
 	}
 	if (select->nOffset > 0) {
-		reg = parser->nMem++;
+		reg = parser->n_memory++;
 		v = __parser_get_vdbe(parser);
 		if (v == 0)
 			return;
@@ -1633,7 +1633,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 			 * We will need to create our own temporary table
 			 * to hold the intermediate results.
 			 */
-			union_tab = parser->nTab++;
+			union_tab = parser->n_tables++;
 			if (select->pOrderBy &&
 			    __match_orderby_to_column(parser, select,
 						      select->pOrderBy,
@@ -1697,7 +1697,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 			__multi_select_sort_order(select, select->pOrderBy);
 			rc = __select_inner_loop(parser, select,
 						 select->pEList, union_tab,
-						 select->pEList->nExpr,
+						 select->pEList->n_expressions,
 						 select->pOrderBy, -1,
 						 dest, param, cont, brk);
 			if (rc)
@@ -1708,7 +1708,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 			__vdbe_add_op(v, OP_Close, union_tab, 0);
 			if (select->pOrderBy) {
 				__generate_sort_tail(select, v,
-						     select->pEList->nExpr,
+						     select->pEList->n_expressions,
 						     dest, param);
 			}
 		}
@@ -1720,8 +1720,8 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 		 * two temporary tables.  Hence it has its own case.  Begin
 		 * by allocating the tables we will need.
 		 */
-		tab1 = parser->nTab++;
-		tab2 = parser->nTab++;
+		tab1 = parser->n_tables++;
+		tab2 = parser->n_tables++;
 		if (select->pOrderBy &&
 		    __match_orderby_to_column(parser, select,
 					      select->pOrderBy, tab1, 1)) {
@@ -1770,7 +1770,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 		__vdbe_add_op(v, OP_NotFound, tab2, cont);
 		__multi_select_sort_order(select, select->pOrderBy);
 		rc = __select_inner_loop(parser, select, select->pEList,
-					 tab1, select->pEList->nExpr,
+					 tab1, select->pEList->n_expressions,
 					 select->pOrderBy, -1, dest, param, 
 					 cont, brk);
 		if (rc)
@@ -1781,13 +1781,13 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 		__vdbe_add_op(v, OP_Close, tab2, 0);
 		__vdbe_add_op(v, OP_Close, tab1, 0);
 		if (select->pOrderBy) {
-			__generate_sort_tail(select, v, select->pEList->nExpr,
+			__generate_sort_tail(select, v, select->pEList->n_expressions,
 					     dest, param);
 		}
 		break;
 	}
 	DBSQL_ASSERT(select->pEList && prior->pEList);
-	if (select->pEList->nExpr != prior->pEList->nExpr) {
+	if (select->pEList->n_expressions != prior->pEList->n_expressions) {
 		__error_msg(parser, "SELECTs to the left and right of %s"
 			    " do not have the same number of result columns",
 			    __select_op_name(select->op));
@@ -1800,7 +1800,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 	if (dest == SRT_Callback &&
 	    (parser->useCallback==0 ||
 	     (parser->db->flags & DBSQL_NullCallback) != 0)) {
-		__vdbe_add_op(v, OP_NullCallback, select->pEList->nExpr, 0);
+		__vdbe_add_op(v, OP_NullCallback, select->pEList->n_expressions, 0);
 	}
 	return 0;
 }
@@ -2218,7 +2218,7 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 		return 0;
 	if (select->pSrc->nSrc != 1)
 		return 0;
-	if (select->pEList->nExpr != 1)
+	if (select->pEList->n_expressions != 1)
 		return 0;
 	expr = select->pEList->a[0].pExpr;
 	if (expr->op != TK_AGG_FUNCTION)
@@ -2250,7 +2250,7 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	if (col < 0) {
 		index = 0;
 	} else {
-		for (index = table->first_index; index; index = index->next_index) {
+		for (index = table->pIndex; index; index = index->pNext) {
 			DBSQL_ASSERT(index->nColumn >= 1);
 			if (index->aiColumn[0] == col)
 				break;
@@ -2290,8 +2290,8 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	__compute_limit_registers(parser, select);
 
 	/* Allocate register for database index */
-	int regDbIdx = parser->nMem + 1;
-	parser->nMem++;
+	int regDbIdx = parser->n_memory + 1;
+	parser->n_memory++;
 	__vdbe_add_op(v, OP_Integer, table->iDb, regDbIdx);
 	__vdbe_add_op(v, OP_OpenRead, base, table->tnum);
 	__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
@@ -2300,8 +2300,8 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 		__vdbe_add_op(v, seek_op, base, 0);
 	} else {
 		/* Allocate register for index database number */
-		int regIdxDb = parser->nMem + 1;
-		parser->nMem++;
+		int regIdxDb = parser->n_memory + 1;
+		parser->n_memory++;
 		__vdbe_add_op(v, OP_Integer, index->iDb, regIdxDb);
 		__vdbe_add_op(v, OP_OpenRead, (base + 1), index->tnum);
 		__vdbe_change_p4(v, -1, index->zName, P3_STATIC);
@@ -2421,7 +2421,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 	int lbl1;
 	int endagg, startagg;
 
-	if (parser->rc == ENOMEM || parser->nErr || select == 0)
+	if (parser->rc == ENOMEM || parser->n_errors || select == 0)
 		return 1;
 	if (__auth_check(parser, DBSQL_SELECT, 0, 0, 0))
 		return 1;
@@ -2452,7 +2452,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 	 * Do not even attempt to generate any code if we have already seen
 	 * errors before this routine starts.
 	 */
-	if (parser->nErr > 0)
+	if (parser->n_errors > 0)
 		goto select_end;
 
 	/*
@@ -2750,7 +2750,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 	 * Open a temporary table to use for the distinct set.
 	 */
 	if (distinct_p) {
-		distinct = parser->nTab++;
+		distinct = parser->n_tables++;
 		__vdbe_add_op(v, OP_OpenTemp, distinct, 1);
 	} else {
 		distinct = -1;
@@ -2781,8 +2781,8 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 		 */
 		if (groupby_clause) {
 			/* Allocate registers for GROUP BY expressions */
-			int regGroupBy = parser->nMem + 1;
-			parser->nMem += groupby_clause->nExpr;
+			int regGroupBy = parser->n_memory + 1;
+			parser->n_memory += groupby_clause->nExpr;
 
 			for (i = 0; i < groupby_clause->nExpr; i++) {
 				__expr_code_target(parser,
@@ -2813,8 +2813,8 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 				}
 			}
 			/* Allocate register for aggregate index */
-			int regAggIdx = parser->nMem + 1;
-			parser->nMem++;
+			int regAggIdx = parser->n_memory + 1;
+			parser->n_memory++;
 			__vdbe_add_op(v, OP_Integer, i, regAggIdx);
 			__vdbe_add_op(v, OP_AggFunc, 0,
 				      (e->expr_list ? e->expr_list->nExpr : 0));
@@ -2915,12 +2915,12 @@ __select_result_set(parser_t* parser, char* tab_name, select_t* select)
 			return 0;
 		}
 	elist = select->pEList;
-	table->nCol = elist->nExpr;
-	DBSQL_ASSERT(table->nCol > 0);
-	__dbsql_calloc(NULL, table->nCol, sizeof(table->columns[0]),
-		       &table->columns);
-	column = table->columns;
-	for (i = 0; i < table->nCol; i++) {
+	table->n_columns = elist->nExpr;
+	DBSQL_ASSERT(table->n_columns > 0);
+	__dbsql_calloc(NULL, table->n_columns, sizeof(table->aCol[0]),
+		       &table->aCol);
+	column = table->aCol;
+	for (i = 0; i < table->n_columns; i++) {
 		if (elist->a[i].zName) {
 			__dbsql_strdup(NULL, elist->a[i].zName, &column[i].zName);
 		} else if ((p = elist->a[i].pExpr)->op == TK_DOT &&
@@ -2941,11 +2941,11 @@ __select_result_set(parser_t* parser, char* tab_name, select_t* select)
 				}
 			}
 		} else if (p->span.z && p->span.z[0]) {
-			__str_nappend(&table->columns[i].zName, p->span.z,
+			__str_nappend(&table->aCol[i].zName, p->span.z,
 				      p->span.n, NULL);
 		} else {
 			sprintf(buf, "column%d", i+1);
-			__dbsql_strdup(NULL, buf, &table->columns[i].zName);
+			__dbsql_strdup(NULL, buf, &table->aCol[i].zName);
 		}
 	}
 	table->iPKey = -1;

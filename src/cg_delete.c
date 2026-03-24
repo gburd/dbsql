@@ -103,7 +103,7 @@ void __delete_from(parser, list, where)
 	int old_idx = -1;   /* Cursor for the OLD table of AFTER triggers */
 
 	context.pParse = 0;
-	if (parser->nErr || parser->rc == ENOMEM) {
+	if (parser->n_errors || parser->rc == ENOMEM) {
 		list = 0;
 		goto delete_from_cleanup;
 	}
@@ -145,14 +145,14 @@ void __delete_from(parser, list, where)
 	 * Allocate a cursor used to store the old.* data for a trigger.
 	 */
 	if (row_triggers_exist) { 
-		old_idx = parser->nTab++;
+		old_idx = parser->n_tables++;
 	}
 
 	/*
 	 * Resolve the column names in all the expressions.
 	 */
 	DBSQL_ASSERT(list->nSrc == 1);
-	cur = list->a[0].iCursor = parser->nTab++;
+	cur = list->a[0].iCursor = parser->n_tables++;
 	if (where) {
 		if (__expr_resolve_ids(parser, list, 0, where)) {
 			goto delete_from_cleanup;
@@ -223,7 +223,7 @@ void __delete_from(parser, list, where)
 		}
 		if (!view) {
 			__vdbe_add_op(v, OP_Clear, table->tnum, table->iDb);
-			for (idx = table->first_index; idx; idx = idx->next_index) {
+			for (idx = table->pIndex; idx; idx = idx->next_index) {
 				__vdbe_add_op(v, OP_Clear, idx->tnum,
 					      idx->iDb);
 			}
@@ -306,13 +306,13 @@ void __delete_from(parser, list, where)
 			 * fires.  If there are no row triggers, the cursors
 			 * are opened only once on the outside the loop.
 			 */
-			parser->nTab = cur + 1;
+			parser->n_tables = cur + 1;
 			__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, cur, table->tnum);
-			for (i = 1, idx = table->first_index; idx;
+			for (i = 1, idx = table->pIndex; idx;
 			     i++, idx = idx->next_index) {
 				__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
-				__vdbe_add_op(v, OP_OpenWrite, parser->nTab++,
+				__vdbe_add_op(v, OP_OpenWrite, parser->n_tables++,
 					      idx->tnum);
 			}
 
@@ -337,7 +337,7 @@ void __delete_from(parser, list, where)
 		 */
 		if (row_triggers_exist) {
 			if (!view) {
-				for(i = 1, idx = table->first_index; idx;
+				for(i = 1, idx = table->pIndex; idx;
 				    i++, idx = idx->next_index) {
 					__vdbe_add_op(v, OP_Close, cur + i,
 						      idx->tnum);
@@ -363,12 +363,12 @@ void __delete_from(parser, list, where)
 		 * triggers.
 		 */
 		if (!row_triggers_exist) {
-			for (i = 1, idx = table->first_index; idx;
+			for (i = 1, idx = table->pIndex; idx;
 			     i++, idx = idx->next_index) {
 				__vdbe_add_op(v, OP_Close, cur + i, idx->tnum);
 			}
 			__vdbe_add_op(v, OP_Close, cur, 0);
-			parser->nTab = cur;
+			parser->n_tables = cur;
 		}
 	}
 	__vdbe_conclude_write(parser);
@@ -469,7 +469,7 @@ void __generate_row_index_delete(dbp, v, table, cur, idx_used)
 	int i;
 	index_t *idx;
 
-	for (i = 1, idx = table->first_index; idx; i++, idx = idx->next_index) {
+	for (i = 1, idx = table->pIndex; idx; i++, idx = idx->next_index) {
 		int j;
 		if (idx_used != 0 && idx_used[i-1] == 0)
 			continue;

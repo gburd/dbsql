@@ -128,13 +128,13 @@ __begin_trigger(parser, trigger, tr_tm, op, columns, tab_name, foreach,
 	if (strncasecmp(table->zName, MASTER_NAME,
 				   strlen(MASTER_NAME)) == 0) {
 		__error_msg(parser, "cannot create trigger on system table");
-		parser->nErr++;
+		parser->n_errors++;
 		goto trigger_cleanup;
 	}
 	if (strncasecmp(table->zName, TEMP_MASTER_NAME,
 				   strlen(TEMP_MASTER_NAME)) == 0) {
 		__error_msg(parser, "cannot create trigger on system table");
-		parser->nErr++;
+		parser->n_errors++;
 		goto trigger_cleanup;
 	}
 	if (table->pSelect && tr_tm != TK_INSTEAD) {
@@ -224,7 +224,7 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 	trigger_t *nt = 0; /* The trigger whose construction is finishing up */
 	DBSQL *dbp = parser->db;
 
-	if (parser->nErr || parser->pNewTrigger == 0)
+	if (parser->n_errors || parser->pNewTrigger == 0)
 		goto triggerfinish_cleanup;
 	nt = parser->pNewTrigger;
 	parser->pNewTrigger = 0;
@@ -771,7 +771,7 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 	trigger_step_t * ts = steplist;
 
 	while (ts) {
-		int saveNTab = parser->nTab;
+		int saveNTab = parser->n_tables;
 		orconf = (orconfin == OE_Default)?ts->orconf:orconfin;
 		parser->trigStack->orconf = orconf;
 		switch(ts->op) {
@@ -786,11 +786,11 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 		case TK_UPDATE: {
 			src_list_t *src;
 			src = targetSrcList(parser, ts);
-			__vdbe_add_op(parser->vdbe, OP_ListPush, 0, 0);
+			__vdbe_add_op(parser->pVdbe, OP_ListPush, 0, 0);
 			__update(parser, src,
 				 __expr_list_dup(ts->pExprList), 
 				 __expr_dup(ts->pWhere), orconf);
-			__vdbe_add_op(parser->vdbe, OP_ListPop, 0, 0);
+			__vdbe_add_op(parser->pVdbe, OP_ListPop, 0, 0);
 			break;
 		}
 		case TK_INSERT: {
@@ -804,16 +804,16 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 		}
 		case TK_DELETE: {
 			src_list_t *src;
-			__vdbe_add_op(parser->vdbe, OP_ListPush, 0, 0);
+			__vdbe_add_op(parser->pVdbe, OP_ListPush, 0, 0);
 			src = targetSrcList(parser, ts);
 			__delete_from(parser, src, __expr_dup(ts->pWhere));
-			__vdbe_add_op(parser->vdbe, OP_ListPop, 0, 0);
+			__vdbe_add_op(parser->pVdbe, OP_ListPop, 0, 0);
 			break;
 		}
 		default:
 			DBSQL_ASSERT(0);
 		} 
-		parser->nTab = saveNTab;
+		parser->n_tables = saveNTab;
 		ts = ts->pNext;
 	}
 	return 0;
@@ -920,7 +920,7 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 			/*
 			 * Code the WHEN clause.
 			 */
-			end_trigger = __vdbe_make_label(parser->vdbe);
+			end_trigger = __vdbe_make_label(parser->pVdbe);
 			when_expr = __expr_dup(trigger->pWhen);
 			if (__expr_resolve_ids(parser, &dummy_tab_list, 0,
 					       when_expr)) {
@@ -942,7 +942,7 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 			__auth_context_pop(&authctx);
 			__dbsql_free(dbp, trig_stack);
 
-			__vdbe_resolve_label(parser->vdbe, end_trigger);
+			__vdbe_resolve_label(parser->pVdbe, end_trigger);
 		}
 		trigger = trigger->pNext;
 	}
