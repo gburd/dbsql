@@ -170,6 +170,10 @@
                       awk '{printf "#define %-30s %3d\n", $1, ++cnt}' >> opcodes.h
 
                     echo "Generated opcodes.h with $(grep -c '^#define OP_' opcodes.h) opcodes"
+
+                    # Copy opcodes.h to src/inc/ where vdbe.h expects to find it
+                    cp opcodes.h ../src/inc/opcodes.h
+                    echo "Copied opcodes.h to src/inc/"
                   '';
 
                   meta = with lib; {
