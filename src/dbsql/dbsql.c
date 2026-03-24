@@ -27,7 +27,7 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 #include "dbsql.h"
 
@@ -1322,6 +1322,7 @@ main(int argc, char* *argv)
 	char *first_cmd = 0;
 	int i;
 	int rc;
+	int exit_code = 0;
 
 	memset(&g, 0, sizeof(struct globals));
 	g.progname = argv[0];
@@ -1366,7 +1367,8 @@ main(int argc, char* *argv)
 		} else if (strcmp(argv[i], "--version") == 0) {
 			int major, minor, patch;
 			printf("%s\n", dbsql_version(&major, &minor, &patch));
-			return 0;
+			exit_code = 0;
+			goto cleanup;
 		} else if (strcmp(argv[i], "--help") == 0) {
 			usage(1);
 		}
@@ -1425,12 +1427,14 @@ main(int argc, char* *argv)
 		} else if (strcmp(z, "--version") == 0) {
 			int major, minor, patch;
 			printf("%s\n", dbsql_version(&major, &minor, &patch));
-			return 1;
+			exit_code = 0;
+			goto cleanup;
 		} else {
 			fprintf(stderr,"%s: unknown option: %s\n",
 				g.progname, z);
 			fprintf(stderr,"Use --help for a list of options.\n");
-			return 1;
+			exit_code = 1;
+			goto cleanup;
 		}
 	}
 
@@ -1440,7 +1444,8 @@ main(int argc, char* *argv)
 		 */
 		if (first_cmd[0] == '.') {
 			do_meta_command(first_cmd, &data);
-			exit(0);
+			exit_code = 0;
+			goto cleanup;
 		} else {
 			int rc;
 			open_db(&data);
@@ -1448,7 +1453,8 @@ main(int argc, char* *argv)
 					&data, &err_msgs);
 			if (rc != 0 && err_msgs != 0) {
 				fprintf(stderr,"SQL error: %s\n", err_msgs);
-				exit(1);
+				exit_code = 1;
+				goto cleanup;
 			}
 		}
 	} else {
@@ -1481,6 +1487,8 @@ main(int argc, char* *argv)
 			process_input(&data, stdin);
 		}
 	}
+
+cleanup:
 	set_table_name(&data, 0);
 	if (g.dbp) {
 		g.dbp->close(g.dbp);
@@ -1489,7 +1497,7 @@ main(int argc, char* *argv)
 		/* We created a minimal dbenv but never opened a database */
 		g.dbenv->close(g.dbenv, 0);
 	}
-	return 0;
+	return exit_code;
 }
 
 
