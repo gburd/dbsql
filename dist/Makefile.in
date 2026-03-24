@@ -109,11 +109,11 @@ libso_major=		$(libdbsql_base)-$(LIBMAJOR)@SOSUFFIX@
 ##################################################
 
 C_FILES=\
-	$(srcdir)/api.c $(srcdir)/api_table.c $(srcdir)/cg_attach.c \
+	$(srcdir)/api.c $(srcdir)/api_table.c \
 	$(srcdir)/cg_auth.c $(srcdir)/cg_build.c $(srcdir)/cg_copy.c \
 	$(srcdir)/cg_date.c $(srcdir)/cg_delete_CONVERTED.c $(srcdir)/cg_expr.c \
 	$(srcdir)/cg_insert_CONVERTED.c $(srcdir)/cg_pragma.c $(srcdir)/cg_select.c \
-	$(srcdir)/cg_trigger.c $(srcdir)/cg_update.c $(srcdir)/cg_where.c \
+	$(srcdir)/cg_where.c \
 	$(srcdir)/clib/xvprintf.c $(srcdir)/dbsql/dbsql.c \
 	$(srcdir)/sm.c $(srcdir)/common/hash.c $(srcdir)/lemon/lemon.c \
 	$(srcdir)/lemon/lempar.c $(srcdir)/os/os.c $(srcdir)/clib/random.c \
@@ -130,10 +130,10 @@ C_FILES=\
 # Object and utility lists.
 ##################################################
 
-C_OBJS= cg_attach@o@ cg_insert@o@ sql_tokenize@o@ cg_auth@o@ \
+C_OBJS= cg_insert@o@ sql_tokenize@o@ cg_auth@o@ \
 	cg_copy@o@ api_table@o@ cg_date@o@ api@o@ xvprintf@o@ \
-	cg_pragma@o@ cg_where@o@ cg_trigger@o@ cg_build@o@ \
-	sql_fns@o@ random@o@ cg_update@o@ cg_delete@o@ hash@o@ \
+	cg_pragma@o@ cg_where@o@ cg_build@o@ \
+	sql_fns@o@ random@o@ cg_delete@o@ hash@o@ \
 	cg_expr@o@ opcodes@o@ sql_parser@o@ cg_vacuum@o@ \
 	vdbe@o@ vdbe_method@o@ sm@o@ snprintf@o@ dbsql_err@o@ \
 	dbsql_fop@o@ cg_select@o@ os_sleep@o@ os_jtime@o@ memcmp@o@ \
