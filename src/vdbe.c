@@ -655,12 +655,19 @@ __vdbe_exec(vdbe_t* p)
 	/*
 	 * Stack compatibility: For legacy stack-based opcodes that haven't been
 	 * fully converted to register-based model, initialize pTos to point to
-	 * the last register. This allows opcodes like OP_MakeRecord to use
-	 * pTos[1-N] to access registers.
+	 * a position that allows for stack growth.
+	 *
+	 * CRITICAL: pTos starts at -1 (one BEFORE the first register) because
+	 * legacy push opcodes do pTos++ BEFORE writing. This means the first
+	 * push writes to aMem[0], second to aMem[1], etc.
+	 *
+	 * We allocated extra space (nMem includes +5 from vdbe_method.c) to
+	 * allow pushes beyond the parser-calculated register count.
+	 *
 	 * TODO: Remove once all opcodes are converted to pure register-based.
 	 */
 	if (p->nMem > 0) {
-		pTos = &aMem[p->nMem - 1];
+		pTos = &aMem[-1];  /* Start one BEFORE first register */
 	}
 
 	/* Note: popStack logic removed - not needed in register-based VDBE */
@@ -834,37 +841,64 @@ case OP_Halt: {
 	}
 }
 
-/* Opcode: Integer P1 * P3
+/* Opcode: Integer P1 P2 *
 **
-** The integer value P1 is pushed onto the stack.  If P3 is not zero
-** then it is assumed to be a string representation of the same integer.
+** Register-based: Store integer value P1 into register P2.
+** P2 specifies the destination register (0-based).
+**
+** Old stack-based: The integer value P1 is pushed onto the stack.
+** To support both modes, if P2==0, use legacy stack mode (push).
+** Otherwise use register mode (store to aMem[P2]).
 */
 case OP_Integer: {
-	pTos++;
-	pTos->u.i = pOp->p1;
-	pTos->flags = MEM_Int;
-	if (pOp->p3) {
-		pTos->z = pOp->p3;
-		pTos->flags |= MEM_Str | MEM_Static;
-		pTos->n = strlen(pOp->p3) + 1;
+	if (pOp->p2 > 0) {
+		/* Register-based mode: store to register P2 */
+		mem_t *pOut = &aMem[pOp->p2];
+		pOut->u.i = pOp->p1;
+		pOut->flags = MEM_Int;
+	} else {
+		/* Legacy stack-based mode */
+		pTos++;
+		pTos->u.i = pOp->p1;
+		pTos->flags = MEM_Int;
+		if (pOp->p3) {
+			pTos->z = pOp->p3;
+			pTos->flags |= MEM_Str | MEM_Static;
+			pTos->n = strlen(pOp->p3) + 1;
+		}
 	}
 	break;
 }
 
-/* Opcode: String * * P3
+/* Opcode: String * P2 P3
 **
-** The string value P3 is pushed onto the stack.  If P3==0 then a
-** NULL is pushed onto the stack.
+** Store the string value P3 into register P2. If P3==0 then store NULL.
+** If P2==0, use legacy stack mode (push).
+**
+** Register-based: The string is stored in aMem[P2].
 */
 case OP_String: {
 	char *z = pOp->p3;
-	pTos++;
-	if( z==0 ){
-		pTos->flags = MEM_Null;
+	if (pOp->p2 > 0) {
+		/* Register-based mode */
+		mem_t *pOut = &aMem[pOp->p2];
+		if( z==0 ){
+			pOut->flags = MEM_Null;
+		} else {
+			pOut->z = z;
+			pOut->n = strlen(z) + 1;
+			pOut->flags = MEM_Str | MEM_Static;
+		}
 	} else {
-		pTos->z = z;
-		pTos->n = strlen(z) + 1;
-		pTos->flags = MEM_Str | MEM_Static;
+		/* Legacy stack-based mode */
+		pTos++;
+		if( z==0 ){
+			pTos->flags = MEM_Null;
+		} else {
+			pTos->z = z;
+			pTos->n = strlen(z) + 1;
+			pTos->flags = MEM_Str | MEM_Static;
+		}
 	}
 	break;
 }
@@ -3262,12 +3296,14 @@ case OP_NotExists: {
 	break;
 }
 
-/* Opcode: NewRecno P1 * *
+/* Opcode: NewRecno P1 P2 *
 **
 ** Get a new integer record number to be used as the key to a table.
 ** The record number is not previously used as a key in the database
-** table that cursor P1 points to.  The new record number is pushed
-** onto the stack.
+** table that cursor P1 points to. The new record number is stored
+** in register P2. If P2==0, use legacy stack mode (push).
+**
+** Register-based: Result is stored in aMem[P2].
 */
 case OP_NewRecno: {
 	static struct drand48_data rand;
@@ -3364,9 +3400,17 @@ case OP_NewRecno: {
 		/* TODO: Legacy field removed */ /* pC->recnoIsValid = 0; */
 		pC->deferredMoveto = 0;
 	}
-	pTos++;
-	pTos->u.i = v;
-	pTos->flags = MEM_Int;
+	if (pOp->p2 > 0) {
+		/* Register-based mode */
+		mem_t *pOut = &aMem[pOp->p2];
+		pOut->u.i = v;
+		pOut->flags = MEM_Int;
+	} else {
+		/* Legacy stack-based mode */
+		pTos++;
+		pTos->u.i = v;
+		pTos->flags = MEM_Int;
+	}
 	break;
 }
 
@@ -3548,12 +3592,17 @@ case OP_RowData: {
 	break;
 }
 
-/* Opcode: Column P1 P2 *
+/* Opcode: Column P1 P2 P3 *
 **
 ** Interpret the data that cursor P1 points to as
 ** a structure built using the MakeRecord instruction.
 ** (See the MakeRecord opcode for additional information about
 ** the format of the data.)
+**
+** REGISTER MODE (P3 > 0):
+** Store the value of the P2-th column into register P3.
+**
+** STACK MODE (P3 == 0):
 ** Push onto the stack the value of the P2-th column contained
 ** in the data.
 **
@@ -3571,14 +3620,26 @@ case OP_Column: {
 	int amt, offset, end, payloadSize;
 	int i = pOp->p1;
 	int p2 = pOp->p2;
+	int regOut = pOp->p3;
 	VdbeCursor *pC;
+	mem_t *pDest;
 	char *zRec;
 	sm_cursor_t *pCrsr;
 	int idxWidth;
 	unsigned char aHdr[10];
 
+	/* Determine output destination */
+	if (regOut > 0) {
+		/* REGISTER MODE: write to register */
+		DBSQL_ASSERT(regOut > 0 && regOut <= p->nMem);
+		pDest = &aMem[regOut];
+	} else {
+		/* STACK MODE: push to stack */
+		pTos++;
+		pDest = pTos;
+	}
+
 	DBSQL_ASSERT(i < p->nCursor);
-	pTos++;
 	if (i < 0) {
 		/* Note: aStack assertion removed - register-based VDBE */
 		DBSQL_ASSERT(pTos[i].flags & MEM_Str);
@@ -3610,7 +3671,7 @@ case OP_Column: {
 	 * data begins.
 	 */
 	if (payloadSize == 0) {
-		pTos->flags = MEM_Null;
+		pDest->flags = MEM_Null;
 		break;
 	} else if (payloadSize < 256) {
 		idxWidth = 1;
@@ -3652,27 +3713,27 @@ case OP_Column: {
 
 	/*
 	 * 'amt' and 'offset' now hold the offset to the start of data and the
-	 * amount of data.  Go get the data and put it on the stack.
+	 * amount of data.  Go get the data and put it in pDest.
 	 */
-	pTos->n = amt;
+	pDest->n = amt;
 	if (amt == 0) {
-		pTos->flags = MEM_Null;
+		pDest->flags = MEM_Null;
 	} else if (zRec) {
-		pTos->flags = MEM_Str | MEM_Ephem;
-		pTos->z = &zRec[offset];
+		pDest->flags = MEM_Str | MEM_Ephem;
+		pDest->z = &zRec[offset];
 	} else {
 		if (amt <= NBFS) {
-			pTos->flags = MEM_Str;
-			pTos->z = pTos->z;
+			pDest->flags = MEM_Str;
+			pDest->z = pDest->z;
 		} else {
-			if (__dbsql_calloc(NULL, 1, amt, &pTos->z) == ENOMEM)
+			if (__dbsql_calloc(NULL, 1, amt, &pDest->z) == ENOMEM)
 				goto no_mem;
-			pTos->flags = MEM_Str | MEM_Dyn;
+			pDest->flags = MEM_Str | MEM_Dyn;
 		}
 		if (!pC->isTable) {  /* Index cursor (was keyAsData) */
-			__sm_key(pCrsr, offset, amt, pTos->z);
+			__sm_key(pCrsr, offset, amt, pDest->z);
 		} else {
-			__sm_data(pCrsr, offset, amt, pTos->z);
+			__sm_data(pCrsr, offset, amt, pDest->z);
 		}
 	}
 	break;
@@ -4822,6 +4883,182 @@ case OP_Vacuum: {
 	rc = __execute_vacuum(&p->zErrMsg, db);
 	if (__safety_on(db))
 		goto abort_due_to_misuse;
+	break;
+}
+
+/* Legacy Opcode: ColumnName
+**
+** Legacy opcode for setting column names. In Phase 2, this is a no-op
+** as column names are handled differently. Added for backward compatibility
+** with code generators not yet converted to Phase 2.
+*/
+case OP_ColumnName: {
+	/* No-op in Phase 2 - column names handled via p->azColName */
+	break;
+}
+
+/* Legacy Opcode: Callback P1 * *
+**
+** Legacy callback opcode. In Phase 2, delegates to OP_ResultRow.
+** P1 is the number of columns. Data should already be on stack or in registers.
+** This is a compatibility shim for code generators not yet converted to Phase 2.
+*/
+case OP_Callback: {
+	/* Convert to OP_ResultRow behavior */
+	/* Assume data is on stack (Phase 1 style), need to convert to register output */
+	/* For now, this is an error - code generators must be updated */
+	__str_append(&p->zErrMsg,
+		"OP_Callback is deprecated - use OP_ResultRow with registers", (char*)0);
+	rc = DBSQL_INTERNAL;
+	break;
+}
+
+/* Legacy Opcode: Copy P1 P2 *
+**
+** Copy the value from memory location P1 to P2.
+** Legacy opcode - in Phase 2, use direct register access.
+*/
+case OP_Copy: {
+	/* For backward compatibility with unconverted code generators */
+	int from = pOp->p1;
+	int to = pOp->p2;
+	DBSQL_ASSERT(from >= 0 && from < p->nMem);
+	DBSQL_ASSERT(to >= 0 && to < p->nMem);
+	memcpy(&p->registers[to], &p->registers[from], sizeof(mem_t));
+	break;
+}
+
+/* OP_Insert P1 P2 P3
+**
+** Register-based INSERT opcode.
+** P1: Cursor index for the table
+** P2: Register containing the record data
+** P3: Register containing the rowid (key)
+**
+** If P3 > 0, this is REGISTER MODE:
+**   - Get rowid from register P3
+**   - Get record from register P2
+**   - Insert into table at cursor P1
+**
+** If P3 == 0, this is INDEX MODE (for index inserts):
+**   - P2 contains both key and data
+**   - Used by OP_IdxInsert behavior
+*/
+case OP_Insert:
+case OP_IdxInsert: {
+	int iCur = pOp->p1;           /* Cursor index */
+	int iDataReg = pOp->p2;       /* Data register */
+	int iKeyReg = pOp->p3;        /* Key register (if > 0) */
+
+	VdbeCursor *pC;
+	mem_t *pData, *pKey;
+	i64 iKey;
+	int rc_insert;
+
+	/* Validate cursor index */
+	DBSQL_ASSERT(iCur >= 0 && iCur < p->nCursor);
+	if (iCur < 0 || iCur >= p->nCursor) {
+		rc = DBSQL_ERROR;
+		break;
+	}
+
+	pC = p->cursors[iCur];
+	if (pC == NULL) {
+		rc = DBSQL_ERROR;
+		break;
+	}
+
+	/* Validate data register */
+	DBSQL_ASSERT(iDataReg > 0 && iDataReg <= p->nMem);
+	if (iDataReg <= 0 || iDataReg > p->nMem) {
+		rc = DBSQL_ERROR;
+		break;
+	}
+
+	pData = &p->registers[iDataReg];
+
+	if (iKeyReg > 0) {
+		/* REGISTER MODE - Get rowid from register */
+		DBSQL_ASSERT(iKeyReg > 0 && iKeyReg <= p->nMem);
+		if (iKeyReg <= 0 || iKeyReg > p->nMem) {
+			rc = DBSQL_ERROR;
+			break;
+		}
+
+		pKey = &p->registers[iKeyReg];
+
+		/* Extract rowid from key register */
+		if (pKey->flags & MEM_Int) {
+			iKey = pKey->u.i;
+		} else {
+			__str_append(&p->zErrMsg,
+				"OP_Insert: key register must contain an integer", (char*)0);
+			rc = DBSQL_ERROR;
+			break;
+		}
+
+		/* Verify data is valid (blob or string) */
+		if ((pData->flags & (MEM_Blob | MEM_Str)) == 0) {
+			__str_append(&p->zErrMsg,
+				"OP_Insert: data register must contain blob or string", (char*)0);
+			rc = DBSQL_ERROR;
+			break;
+		}
+
+		/* Perform the insert via cursor */
+		if (pC->uc.pCursor != NULL) {
+			rc_insert = __sm_insert(pC->uc.pCursor,
+				(char *)&iKey, sizeof(i64),
+				pData->z, pData->n);
+			if (rc_insert != 0) {
+				__str_append(&p->zErrMsg,
+					"OP_Insert: insert failed", (char*)0);
+				rc = DBSQL_ERROR;
+			}
+		} else {
+			__str_append(&p->zErrMsg,
+				"OP_Insert: cursor not properly initialized", (char*)0);
+			rc = DBSQL_ERROR;
+		}
+	} else {
+		/* INDEX MODE - P2 contains both key and data */
+		/* For index inserts, P2 contains a composite record */
+		if ((pData->flags & (MEM_Blob | MEM_Str)) == 0) {
+			__str_append(&p->zErrMsg,
+				"OP_IdxInsert: data register must contain blob or string", (char*)0);
+			rc = DBSQL_ERROR;
+			break;
+		}
+
+		/* For index inserts, use empty key (indices handle their own keys) */
+		if (pC->uc.pCursor != NULL) {
+			rc_insert = __sm_insert(pC->uc.pCursor,
+				"", 0,
+				pData->z, pData->n);
+			if (rc_insert != 0) {
+				__str_append(&p->zErrMsg,
+					"OP_IdxInsert: insert failed", (char*)0);
+				rc = DBSQL_ERROR;
+			}
+		} else {
+			__str_append(&p->zErrMsg,
+				"OP_IdxInsert: cursor not properly initialized", (char*)0);
+			rc = DBSQL_ERROR;
+		}
+	}
+	break;
+}
+
+/* Legacy Opcode: Function P1 P2 P3
+**
+** Legacy function call opcode.
+** In Phase 2, functions are handled differently.
+** Added for backward compatibility.
+*/
+case OP_Function: {
+	__str_append(&p->zErrMsg,
+		"OP_Function is deprecated - update code generator", (char*)0);
+	rc = DBSQL_INTERNAL;
 	break;
 }
 
