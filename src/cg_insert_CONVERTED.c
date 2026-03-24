@@ -241,7 +241,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		cleanup = __vdbe_make_label(v);
 		__vdbe_add_op(v, OP_Goto, 0, cleanup);
 		DBSQL_ASSERT(select->pEList);
-		ncol = select->pEList->nExpr;
+		ncol = select->pEList->n_expressions;
 
 		/*
 		 * Set use_temp_table to TRUE if the result of the SELECT
@@ -303,8 +303,8 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		src_tab = -1;
 		use_temp_table = 0;
 		DBSQL_ASSERT(vlist);
-		ncol = vlist->nExpr;
-		dummy.nSrc = 0;
+		ncol = vlist->n_expressions;
+		dummy.n_sources = 0;
 		for(i = 0; i < ncol; i++) {
 			if (__expr_resolve_ids(parser, &dummy, 0,
 					       vlist->a[i].pExpr)) {
@@ -326,9 +326,9 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			    "were supplied", tlist, 0, table->n_columns, ncol);
 		goto insert_cleanup;
 	}
-	if (column != 0 && ncol != column->nId) {
+	if (column != 0 && ncol != column->n_identifiers) {
 		__error_msg(parser, "%d values for %d columns", ncol,
-			    column->nId);
+			    column->n_identifiers);
 		goto insert_cleanup;
 	}
 
@@ -345,10 +345,10 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	 * key in the original table is table->iPKey.)
 	 */
 	if (column) {
-		for(i = 0; i < column->nId; i++) {
+		for(i = 0; i < column->n_identifiers; i++) {
 			column->a[i].idx = -1;
 		}
-		for(i = 0; i < column->nId; i++) {
+		for(i = 0; i < column->n_identifiers; i++) {
 			for(j = 0; j < table->n_columns; j++) {
 				if (strcasecmp(column->a[i].zName,
 					  table->aCol[j].zName) == 0) {
@@ -486,12 +486,12 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			if (column == 0) {
 				j = i;
 			} else {
-				for (j = 0; j < column->nId; j++) {
+				for (j = 0; j < column->n_identifiers; j++) {
 					if (column->a[j].idx == i)
 						break;
 				}
 			}
-			if (column && j >= column->nId) {
+			if (column && j >= column->n_identifiers) {
 				/* Use DEFAULT value */
 				__vdbe_add_op(v, OP_String, 0, regData + i);
 				__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
@@ -586,12 +586,12 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			if (column == 0) {
 				j = i;
 			} else {
-				for (j = 0; j < column->nId; j++) {
+				for (j = 0; j < column->n_identifiers; j++) {
 					if (column->a[j].idx == i)
 						break;
 				}
 			}
-			if (column && j >= column->nId) {
+			if (column && j >= column->n_identifiers) {
 				/* Use DEFAULT value */
 				__vdbe_add_op(v, OP_String, 0, regData + i);
 				__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
