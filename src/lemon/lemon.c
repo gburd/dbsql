@@ -28,13 +28,9 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <unistd.h>
 
-extern void qsort();
-extern double strtod();
-extern long strtol();
-extern void free();
-extern int access();
-extern int atoi();
+/* Removed old-style extern declarations - use stdlib.h instead */
 
 #ifndef __WIN32__
 #   if defined(_WIN32) || defined(WIN32)
