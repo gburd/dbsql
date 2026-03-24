@@ -185,9 +185,6 @@ $(libdbsql): $(DEF_LIB)
 		(test -f $(libdbsql_version) &&
 			$(ln) -s $(libdbsql_version) $@)
 
-# Make all C object files depend on opcodes.h since many include vdbe.h
-$(C_OBJS): opcodes.h
-
 # Real static C library.
 $(libdbsql_version): dbsql_int.h db_int.h sql_parser.h opcodes.h $(C_OBJS)
 	$(ar) cr $@ $(C_OBJS)

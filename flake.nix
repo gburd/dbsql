@@ -109,6 +109,20 @@
                     configureScript=../dist/configure
                   '';
 
+                  # Generate opcodes.h before the build starts
+                  # This must happen after configure but before make
+                  postConfigure = ''
+                    # Generate opcodes.h by extracting case statements from vdbe.c
+                    # The Makefile has a rule for this but it doesn't work well with parallel builds
+                    echo '/* Automatically generated file.  Do not edit */' > opcodes.h
+                    grep 'case OP_' ../src/vdbe.c | \
+                      sed 's/:.*//' | \
+                      awk '{for(i=1;i<=NF;i++) if($i~/^OP_/) print $i}' | \
+                      sort -u | \
+                      awk '{printf "#define %-30s %3d\n", $1, ++cnt}' >> opcodes.h
+                    echo "Generated opcodes.h with $(grep -c '^#define OP_' opcodes.h) opcodes in postConfigure"
+                  '';
+
                   # Generate opcodes.h and opcodes.c before building
                   preBuild = ''
                     # Build the lemon parser generator
