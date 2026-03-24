@@ -17,7 +17,7 @@
  */
 
 #include "dbsql.h"
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "db_int.h"
 
 #include <string.h>

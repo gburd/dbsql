@@ -60,118 +60,98 @@
 - [ ] Save file
 - [ ] **Test:** `cd build_unix && make 2>&1 | grep "has no member 'i'"` = much lower
 
-### ✓ Fix #4: Update __api_step() (20 min) - COMPLETED
-- [x] Lines 156-169: Replace `azColName`/`azResColumn` logic (see VDBE_IMMEDIATE_FIXES.md)
-- [x] Add Mem* → char** conversion
-- [x] Save file
-- [x] **Test:** `cd build_unix && make 2>&1 | grep "azColName\|azResColumn"` = 0
+### ✓ Fix #4: Update __api_step() (20 min)
+- [ ] Lines 156-169: Replace `azColName`/`azResColumn` logic (see VDBE_IMMEDIATE_FIXES.md)
+- [ ] Add Mem* → char** conversion
+- [ ] Save file
+- [ ] **Test:** `cd build_unix && make 2>&1 | grep "azColName\|azResColumn"` = 0
 
-### ✓ Fix #5: Update __vdbe_exec() (30 min) - COMPLETED
-- [x] Line 670: Change `mem_t *pTos;` → `Mem *aMem;`
-- [x] Line 690: Remove `pTos = p->pTos;`
-- [x] Lines 691-693: Remove popStack logic
-- [x] After removals, add: `aMem = p->registers;`
-- [x] Line 697: Remove aStack assertion
-- [x] Line 5944: Remove `p->pTos = pTos;`
-- [x] Save file
-- [x] **Test:** `cd build_unix && make 2>&1 | grep "pTos\|popStack\|aStack"` = much lower
+### ✓ Fix #5: Update __vdbe_exec() (30 min)
+- [ ] Line 670: Change `mem_t *pTos;` → `Mem *aMem;`
+- [ ] Line 690: Remove `pTos = p->pTos;`
+- [ ] Lines 691-693: Remove popStack logic
+- [ ] After removals, add: `aMem = p->aMem;`
+- [ ] Line 697: Remove aStack assertion
+- [ ] Line 5944: Remove `p->pTos = pTos;`
+- [ ] Save file
+- [ ] **Test:** `cd build_unix && make 2>&1 | grep "pTos\|popStack\|aStack"` = much lower
 
-### ✓ Fix #6: Fix OP_Variable (10 min) - COMPLETED
-- [x] Lines 909-920: Rewrite to use `p->variables` (Mem* array) and register addressing
-- [x] See VDBE_IMMEDIATE_FIXES.md for complete code
-- [x] Save file
-- [x] **Test:** `cd build_unix && make 2>&1 | grep "azVar"` = 0
+### ✓ Fix #6: Fix OP_Variable (10 min)
+- [ ] Lines 909-920: Rewrite to use `p->aVar` (Mem* array) and register addressing
+- [ ] See VDBE_IMMEDIATE_FIXES.md for complete code
+- [ ] Save file
+- [ ] **Test:** `cd build_unix && make 2>&1 | grep "azVar"` = 0
 
-### ✓ Fix #7: Fix OP_Gosub and OP_Return (15 min) - COMPLETED
-- [x] Lines 801-812 (OP_Gosub): Use register P1 to store return address
-- [x] Lines 820-830 (OP_Return): Read return address from register P1
-- [x] See VDBE_IMMEDIATE_FIXES.md for complete code
-- [x] Save file
-- [x] **Test:** `cd build_unix && make 2>&1 | grep "returnStack\|returnDepth"` = 0
+### ✓ Fix #7: Fix OP_Gosub and OP_Return (15 min)
+- [ ] Lines 801-812 (OP_Gosub): Use register P1 to store return address
+- [ ] Lines 820-830 (OP_Return): Read return address from register P1
+- [ ] See VDBE_IMMEDIATE_FIXES.md for complete code
+- [ ] Save file
+- [ ] **Test:** `cd build_unix && make 2>&1 | grep "returnStack\|returnDepth"` = 0
 
-### ✓ Fix #8: Remove aStack Assertions (10 min) - COMPLETED
-- [x] Run: `grep -n "aStack" src/vdbe.c`
-- [x] For each line found, comment out or remove assertion
-- [x] All ~45 aStack assertions removed/commented
-- [x] Save file
-- [x] **Test:** `cd build_unix && make 2>&1 | grep "aStack"` = 0
+### ✓ Fix #8: Remove aStack Assertions (10 min)
+- [ ] Run: `grep -n "aStack" src/vdbe.c`
+- [ ] For each line found, comment out or remove assertion
+- [ ] Common lines: 697, 929, 1167
+- [ ] Save file
+- [ ] **Test:** `cd build_unix && make 2>&1 | grep "aStack"` = 0
 
 ---
 
 ## Phase 1 Complete Check
-- [x] **Error count:** `cd build_unix && make 2>&1 | grep -c "error:"` = 20 (target: <50) ✓
-- [x] **Reduction:** 90% (200 → 20 errors) (target: >75%) ✓
-- [x] **vdbe.c status:** NO compilation errors in vdbe.c! ✓
-- [x] **Remaining errors:** All 20 errors are in cg_pragma.c (unrelated to VDBE fixes)
-- [x] **Ready for Phase 2:** YES - vdbe.c compiles cleanly, ready for opcode conversion
+- [ ] **Error count:** `cd build_unix && make 2>&1 | grep -c "error:"` = ______ (target: <50)
+- [ ] **Reduction:** ______% (target: >75%)
+- [ ] **Ready for Phase 2:** If error count is ~50 or less, proceed to opcode conversion
 
 ---
 
 ## Phase 2: Opcode Conversion (20-40 hours)
 
 ### Setup
-- [x] Create tracking file: `VDBE_PHASE2_PROGRESS.md` ✓
-- [x] List all opcodes: Analyzed 148 opcodes in vdbe.c ✓
+- [ ] Create tracking file: `echo "# Opcode Conversion Progress" > OPCODES_DONE.txt`
+- [ ] List all opcodes: `awk '/^case OP_/{print $2}' src/vdbe.c | sed 's/://' > OPCODES_LIST.txt`
 
-### Group 1: Simple Data Opcodes (2 hours) - COMPLETE ✓
+### Group 1: Simple Data Opcodes (2 hours)
 Convert these opcodes to register-based:
 
-- [x] **OP_Integer** (line 905) ✓
+- [ ] **OP_Integer** (line ~870)
   - Pattern: `pTos++` → `aMem[pOp->p2]`, `pTos->i` → `pOut->u.i`
-- [x] **OP_String** (line 922) ✓
-- [x] **OP_Pop** (line 971) - converted to no-op ✓
-- [x] **OP_Dup** (line 998) ✓
-- [x] **OP_Pull** (line 1034) ✓
-- [x] **OP_Push** (line 1070) ✓
-- [x] Test compile after group ✓ (0 errors in vdbe.c)
+- [ ] **OP_String** (line ~887)
+- [ ] **OP_Null** (if exists)
+- [ ] **OP_Not** (if exists)
+- [ ] **OP_Blob** (if exists)
+- [ ] Test compile after group
 
-### Group 2: Arithmetic Opcodes (2 hours) - COMPLETE ✓
-- [x] **OP_Add** (line 1302) - already converted ✓
-  - Pattern: Uses `p->registers[pOp->p1]`, `p->registers[pOp->p2]`, result → `p->registers[pOp->p3]`
-- [x] **OP_Subtract** (line 1302) - already converted ✓
-- [x] **OP_Multiply** (line 1302) - already converted ✓
-- [x] **OP_Divide** (line 1302) - already converted ✓
-- [x] **OP_Remainder** (line 1302) - already converted ✓
-- [x] **OP_AddImm** (line 1521) ✓
-- [x] **OP_ForceInt** (line 1539) ✓
-- [x] **OP_MustBeInt** (line 1576) ✓
-- [x] **OP_Negative** (line 2029) ✓
-- [x] **OP_AbsValue** (line 2029) ✓
-- [x] Test compile after group ✓ (0 errors)
+### Group 2: Arithmetic Opcodes (2 hours)
+- [ ] **OP_Add**
+  - Pattern: `pTos[-1]` → `aMem[pOp->p1]`, `pTos` → `aMem[pOp->p2]`, result → `aMem[pOp->p3]`
+- [ ] **OP_Subtract**
+- [ ] **OP_Multiply**
+- [ ] **OP_Divide**
+- [ ] **OP_Remainder**
+- [ ] Test compile after group
 
-### Group 3: Comparison Opcodes (2 hours) - COMPLETE ✓
-- [x] **OP_Eq** (line 1733) ✓
-- [x] **OP_Ne** (line 1733) ✓
-- [x] **OP_Lt** (line 1733) ✓
-- [x] **OP_Le** (line 1733) ✓
-- [x] **OP_Gt** (line 1733) ✓
-- [x] **OP_Ge** (line 1733) ✓
-- [x] Test compile after group ✓ (0 errors)
+### Group 3: Comparison Opcodes (2 hours)
+- [ ] **OP_Eq**
+- [ ] **OP_Ne**
+- [ ] **OP_Lt**
+- [ ] **OP_Le**
+- [ ] **OP_Gt**
+- [ ] **OP_Ge**
+- [ ] Test compile after group
 
-### Group 4: Logic Opcodes (1 hour) - COMPLETE ✓
-- [x] **OP_And** (line 1982) ✓
-- [x] **OP_Or** (line 1982) ✓
-- [x] **OP_Not** (line 2063) ✓
-- [x] **OP_BitNot** (line 2079) ✓
-- [x] **OP_BitAnd** (line 1483) - already converted ✓
-- [x] **OP_BitOr** (line 1483) - already converted ✓
-- [x] **OP_ShiftLeft** (line 1483) - already converted ✓
-- [x] **OP_ShiftRight** (line 1483) - already converted ✓
-- [x] Test compile after group ✓ (0 errors)
+### Group 4: Logic Opcodes (1 hour)
+- [ ] **OP_And**
+- [ ] **OP_Or**
+- [ ] **OP_Not**
+- [ ] Test compile after group
 
-### Group 5: Stack Operations to Remove (1 hour) - COMPLETE ✓
+### Group 5: Stack Operations to Remove (1 hour)
 These opcodes are stack-specific and may need removal or complete rewrite:
-- [x] **OP_Pop** (line 971) - converted to no-op ✓
-- [x] **OP_Dup** (line 998) - converted to register copy ✓
-- [x] **OP_Pull** (line 1034) - converted to register move ✓
-- [x] **OP_Push** (line 1070) - converted to register copy with release ✓
-- [x] Test compile after group ✓ (0 errors)
-
-### Group 5.5: NULL Checks and String Operations - COMPLETE ✓
-- [x] **OP_IsNull** (line 2153) ✓
-- [x] **OP_NotNull** (line 2178) ✓
-- [x] **OP_Concat** (line 1197) ✓
-- [x] Test compile after group ✓ (0 errors)
+- [ ] **OP_Pop** - Remove or convert to no-op
+- [ ] **OP_Dup** - Convert to register copy
+- [ ] **OP_Pull** - Convert to register move
+- [ ] Test compile after group
 
 ### Group 6: Control Flow (2 hours)
 - [ ] **OP_Goto** (probably already correct)

@@ -1,185 +1,35 @@
-/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=compile gcc -c -I. -I../dist/../src  -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT  -DCONFIG_TEST -g ../dist/../src/lemon/lemon.c
-libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -DCONFIG_TEST -g ../dist/../src/lemon/lemon.c  -fPIC -DPIC -o .libs/lemon.o
-libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -DCONFIG_TEST -g ../dist/../src/lemon/lemon.c -o lemon.o >/dev/null 2>&1
-/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=link gcc -o lemon  \
-    lemon.lo -lm
-libtool: link: gcc -o lemon .libs/lemon.o  -lm 
-/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=execute true lemon
-cp ../dist/../src/lemon/lempar.c .
-/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=compile gcc -c -I. -I../dist/../src  -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT  -DCONFIG_TEST -g ../dist/../src/cg_attach.c
-libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -DCONFIG_TEST -g ../dist/../src/cg_attach.c  -fPIC -DPIC -o .libs/cg_attach.o
-In file included from ../dist/../src/cg_attach.c:27:
-./dbsql_int.h:1665:19: error: field ‘retTrig’ has incomplete type
- 1665 |         trigger_t retTrig;       /* Transient trigger implementing RETURNING */
-      |                   ^~~~~~~
-./dbsql_int.h:1666:24: error: field ‘retTStep’ has incomplete type
- 1666 |         trigger_step_t retTStep; /* The trigger step */
-      |                        ^~~~~~~~
-./dbsql_int.h:2173:8: error: redefinition of ‘struct autoinc_info’
- 2173 | struct autoinc_info {
-      |        ^~~~~~~~~~~~
-./dbsql_int.h:1599:8: note: originally defined here
- 1599 | struct autoinc_info {
-      |        ^~~~~~~~~~~~
-./dbsql_int.h:2294:8: error: redefinition of ‘struct returning’
- 2294 | struct returning {
-      |        ^~~~~~~~~
-./dbsql_int.h:1662:8: note: originally defined here
- 1662 | struct returning {
-      |        ^~~~~~~~~
-./dbsql_int.h:2384:8: error: redefinition of ‘struct parse_cleanup’
- 2384 | struct parse_cleanup {
-      |        ^~~~~~~~~~~~~
-./dbsql_int.h:1652:8: note: originally defined here
- 1652 | struct parse_cleanup {
-      |        ^~~~~~~~~~~~~
-./dbsql_int.h:2532:8: error: redefinition of ‘struct trigger_prg’
- 2532 | struct trigger_prg {
-      |        ^~~~~~~~~~~
-./dbsql_int.h:1616:8: note: originally defined here
- 1616 | struct trigger_prg {
-      |        ^~~~~~~~~~~
-./dbsql_int.h:2544:8: error: redefinition of ‘struct indexed_expr’
- 2544 | struct indexed_expr {
-      |        ^~~~~~~~~~~~
-./dbsql_int.h:1634:8: note: originally defined here
- 1634 | struct indexed_expr {
-      |        ^~~~~~~~~~~~
-./dbsql_int.h:2562:23: error: ‘DBSQL_FUNC_HASH_SZ’ undeclared here (not in a function)
- 2562 |         func_def_t *a[DBSQL_FUNC_HASH_SZ];  /* Hash table for functions */
-      |                       ^~~~~~~~~~~~~~~~~~
-In file included from ./dbsql_int.h:50:
-../dist/../src/inc/dbsql_ext.h:198:30: error: unknown type name ‘mem_t’
-  198 | void __vdbe_mem_release __P((mem_t *));
-      |                              ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:199:31: error: unknown type name ‘mem_t’
-  199 | void __vdbe_mem_set_null __P((mem_t *));
-      |                               ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:200:32: error: unknown type name ‘mem_t’
-  200 | void __vdbe_mem_set_int64 __P((mem_t *, int64_t));
-      |                                ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:201:33: error: unknown type name ‘mem_t’
-  201 | void __vdbe_mem_set_double __P((mem_t *, double));
-      |                                 ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:202:29: error: unknown type name ‘mem_t’
-  202 | int __vdbe_mem_set_str __P((mem_t *, const char *, int, u8, void(*)(void*)));
-      |                             ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:203:35: error: unknown type name ‘mem_t’
-  203 | int __vdbe_mem_make_writable __P((mem_t *));
-      |                                   ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:204:32: error: unknown type name ‘mem_t’
-  204 | int __vdbe_mem_integerify __P((mem_t *));
-      |                                ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:205:31: error: unknown type name ‘mem_t’
-  205 | int __vdbe_mem_realpathy __P((mem_t *));
-      |                               ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:206:30: error: unknown type name ‘mem_t’
-  206 | int __vdbe_mem_numerify __P((mem_t *));
-      |                              ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:207:31: error: unknown type name ‘mem_t’
-  207 | int __vdbe_mem_stringify __P((mem_t *, u8, u8));
-      |                               ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:208:26: error: unknown type name ‘mem_t’
-  208 | int __vdbe_mem_copy __P((mem_t *, const mem_t *));
-      |                          ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:208:41: error: unknown type name ‘mem_t’
-  208 | int __vdbe_mem_copy __P((mem_t *, const mem_t *));
-      |                                         ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:209:27: error: unknown type name ‘mem_t’
-  209 | void __vdbe_mem_move __P((mem_t *, mem_t *));
-      |                           ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:209:36: error: unknown type name ‘mem_t’
-  209 | void __vdbe_mem_move __P((mem_t *, mem_t *));
-      |                                    ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:210:35: error: unknown type name ‘mem_t’
-  210 | int __vdbe_mem_compare __P((const mem_t *, const mem_t *, const coll_seq_t *));
-      |                                   ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:210:50: error: unknown type name ‘mem_t’
-  210 | int __vdbe_mem_compare __P((const mem_t *, const mem_t *, const coll_seq_t *));
-      |                                                  ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:219:40: error: unknown type name ‘VdbeCursor’
-  219 | void __vdbe_free_cursor __P((vdbe_t *, VdbeCursor *));
-      |                                        ^~~~~~~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:226:37: error: unknown type name ‘mem_t’
-  226 | int64_t __vdbe_int_value __P((const mem_t *));
-      |                                     ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:227:37: error: unknown type name ‘mem_t’
-  227 | double __vdbe_real_value __P((const mem_t *));
-      |                                     ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:228:26: error: unknown type name ‘mem_t’
-  228 | int __vdbe_mem_grow __P((mem_t *, int, int));
-      |                          ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/inc/dbsql_ext.h:229:38: error: unknown type name ‘mem_t’
-  229 | int __vdbe_mem_clear_and_resize __P((mem_t *, int));
-      |                                      ^~~~~
-./dbsql.h:41:30: note: in definition of macro ‘__P’
-   41 | #define      __P(protos)     protos
-      |                              ^~~~~~
-../dist/../src/cg_attach.c: In function ‘__ref_normalize_expr’:
-../dist/../src/cg_attach.c:318:57: error: ‘expr_t’ {aka ‘struct expr’} has no member named ‘pSelect’
-  318 |                 if (__ref_normalize_select(normctx, expr->pSelect)) {
-      |                                                         ^~
-../dist/../src/cg_attach.c:321:60: error: ‘expr_t’ {aka ‘struct expr’} has no member named ‘pList’
-  321 |                 if (__ref_normalize_expr_list(normctx, expr->pList)) {
-      |                                                            ^~
-make: *** [Makefile:364: cg_attach.lo] Error 1
+this derivation will be built:
+  /nix/store/wcn4pq1p1040g3lvw7p9pqhans5kvvy8-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/wcn4pq1p1040g3lvw7p9pqhans5kvvy8-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/wcn4pq1p1040g3lvw7p9pqhans5kvvy8-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/q4cm6pgqzgbbai6kclqdgp48fkqibqhx-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       >   153 | #define OP_SortCallback                150  /* Legacy: use OP_ResultRow */
+       >       |
+       > ./opcodes.h:119: note: this is the location of the previous definition
+       >   119 | #define OP_SortCallback                118
+       >       |
+       > ./opcodes.h:154: warning: "OP_NullCallback" redefined
+       >   154 | #define OP_NullCallback                151  /* Legacy: use OP_ResultRow */
+       >       |
+       > ./opcodes.h:16: note: this is the location of the previous definition
+       >    16 | #define OP_NullCallback                 15
+       >       |
+       > ../dist/../src/cg_where.c: In function '__where_begin':
+       > ../dist/../src/cg_where.c:503:21: error: 'where_info_t' {aka 'struct where_info'} has no member named 'parser'; did you mean 'pParse'?
+       >   503 |         where_info->parser = parser;
+       >       |                     ^~~~~~
+       >       |                     pParse
+       > ../dist/../src/cg_where.c:804:26: error: 'table_t' {aka 'struct table'} has no member named 'isTransient'
+       >   804 |                 if (table->isTransient || table->pSelect )
+       >       |                          ^~
+       > ../dist/../src/cg_where.c: In function '__where_end':
+       > ../dist/../src/cg_where.c:1389:28: error: 'where_info_t' {aka 'struct where_info'} has no member named 'parser'; did you mean 'pParse'?
+       >  1389 |         vdbe_t *v = winfo->parser->pVdbe;
+       >       |                            ^~~~~~
+       >       |                            pParse
+       > make: *** [Makefile:388: cg_where.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/wcn4pq1p1040g3lvw7p9pqhans5kvvy8-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv

@@ -20,7 +20,7 @@
  * This file contains code used to implement the VACUUM command.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 #if !defined(DBSQL_OMIT_VACUUM) || DBSQL_OMIT_VACUUM

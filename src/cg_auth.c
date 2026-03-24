@@ -23,7 +23,7 @@
  * with '--disable-auth'.  Then recompile the entire library.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 #ifndef DBSQL_OMIT_AUTHORIZATION

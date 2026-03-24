@@ -28,7 +28,7 @@
  * JSON pointer operators.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 
 #ifndef NO_SYSTEM_INCLUDES
 #include <ctype.h>

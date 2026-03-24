@@ -20,7 +20,7 @@
  * Utility functions for DBSQL
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 #include <ctype.h>
 #include <string.h>

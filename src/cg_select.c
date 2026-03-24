@@ -21,7 +21,7 @@
  * to handle SELECT statements.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 /* __select_new --
@@ -1042,7 +1042,7 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 			if (table == 0) {
 				return 1;
 			}
-			if (table->select) {
+			if (table->pSelect) {
 				/*
 				 * We reach here if the named table is a
 				 * really a view.
@@ -1059,7 +1059,7 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 				 */
 				if (tables->a[i].pSelect == 0) {
 					tables->a[i].pSelect =
-						__select_dup(table->select);
+						__select_dup(table->pSelect);
 				}
 			}
 		}

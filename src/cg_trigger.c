@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 /*
@@ -137,13 +137,13 @@ __begin_trigger(parser, trigger, tr_tm, op, columns, tab_name, foreach,
 		parser->nErr++;
 		goto trigger_cleanup;
 	}
-	if (table->select && tr_tm != TK_INSTEAD) {
+	if (table->pSelect && tr_tm != TK_INSTEAD) {
 		__error_msg(parser, "cannot create %s trigger on view: %S", 
 			    ((tr_tm == TK_BEFORE) ? "BEFORE" : "AFTER"),
 			    tab_name, 0);
 		goto trigger_cleanup;
 	}
-	if (!table->select && tr_tm == TK_INSTEAD) {
+	if (!table->pSelect && tr_tm == TK_INSTEAD) {
 		__error_msg(parser, "cannot create INSTEAD OF"
 			    " trigger on table: %S", tab_name, 0);
 		goto trigger_cleanup;

@@ -39,7 +39,7 @@
  *
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 /*

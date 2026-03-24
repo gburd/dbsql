@@ -21,7 +21,7 @@
  * This file contains code used to implement the COPY command.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 /*

@@ -21,7 +21,7 @@
  * for generating VDBE code that evaluates expressions in SQLite.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 
 #ifndef NO_SYSTEM_INCLUDES
 #include <ctype.h>
@@ -105,7 +105,11 @@ __expr_function(expr_list_t* list, token_t* token)
 {
 	expr_t *new;
 	if (__dbsql_calloc(NULL, 1, sizeof(expr_t), &new) == ENOMEM) {
-#if 0  /* TODO Leak pList when malloc fails */
+#if 0  /* KNOWN ISSUE: Memory leak when malloc fails
+        * pList is not freed here because __expr_list_delete may also fail.
+        * In OOM conditions, we prioritize failing fast over cleanup.
+        * TODO: Implement proper error handling with cleanup on malloc failure.
+        */
 		__expr_list_delete(list);
 #endif
 		return 0;

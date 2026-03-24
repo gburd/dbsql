@@ -20,7 +20,7 @@
  * This file contains routines that handle WHERE statements.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 /*
@@ -799,7 +799,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 */
 	for (i = 0; i < tab_list->nSrc; i++) {
 		table = tab_list->a[i].pTab;
-		if ((table->tabFlags & TF_Ephemeral) || table->select )
+		if ((table->tabFlags & TF_Ephemeral) || table->pSelect )
 			continue;
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenRead, tab_list->a[i].iCursor,
@@ -1415,7 +1415,7 @@ __where_end(where_info_t* winfo)
 	for (i = 0; i < tab_list->nSrc; i++) {
 		table = tab_list->a[i].pTab;
 		DBSQL_ASSERT(table != 0);
-		if ((table->tabFlags & TF_Ephemeral) || table->select)
+		if ((table->tabFlags & TF_Ephemeral) || table->pSelect)
 			continue;
 		level = &winfo->a[i];
 		__vdbe_add_op(v, OP_Close, tab_list->a[i].iCursor, 0);
@@ -1423,7 +1423,11 @@ __where_end(where_info_t* winfo)
 			__vdbe_add_op(v, OP_Close, level->iCur, 0);
 		}
 	}
-#if 0  /* NOTE: Never reuse a cursor */
+#if 0  /* DESIGN NOTE: Never reuse a cursor
+        * This code would restore nTab to savedNTab, but cursor reuse
+        * is intentionally disabled as a design decision.
+        * Reusing cursors can lead to subtle bugs with nested queries.
+        */
 	if( winfo->pParse->nTab==winfo->peakNTab ){
 		winfo->pParse->nTab = winfo->savedNTab;
 	}
