@@ -22,7 +22,6 @@
 
 #include <string.h>
 #include <errno.h>
-#include <stdlib.h>
 
 
 /*
@@ -142,13 +141,7 @@ __dbsql_calloc(dbp, num, size, storep)
 	size_t num, size;
 	void *storep;
 {
-	/* If dbp is NULL, use standard calloc to avoid BerkeleyDB issues */
-	if (dbp == NULL) {
-		void **result = (void **)storep;
-		*result = calloc(num, size);
-		return (*result == NULL) ? ENOMEM : 0;
-	}
-	return (__os_calloc(dbp->dbenv, num, size, storep));
+	return (__os_calloc((dbp ? dbp->dbenv : NULL), num, size, storep));
 }
 
 /*
@@ -160,13 +153,7 @@ __dbsql_calloc(dbp, num, size, storep)
 int
 __dbsql_malloc(DBSQL* dbp, size_t size, void* storep)
 {
-	/* If dbp is NULL, use standard malloc to avoid BerkeleyDB issues */
-	if (dbp == NULL) {
-		void **result = (void **)storep;
-		*result = malloc(size);
-		return (*result == NULL) ? ENOMEM : 0;
-	}
-	return (__os_malloc(dbp->dbenv, size, storep));
+	return (__os_malloc((dbp ? dbp->dbenv : NULL), size, storep));
 }
 
 /*
@@ -178,13 +165,7 @@ __dbsql_malloc(DBSQL* dbp, size_t size, void* storep)
 int
 __dbsql_realloc(DBSQL* dbp, size_t size, void* storep)
 {
-	/* If dbp is NULL, use standard realloc to avoid BerkeleyDB issues */
-	if (dbp == NULL) {
-		void **result = (void **)storep;
-		*result = realloc(*result, size);
-		return (*result == NULL) ? ENOMEM : 0;
-	}
-	return (__os_realloc(dbp->dbenv, size, storep));
+	return (__os_realloc((dbp ? dbp->dbenv : NULL), size, storep));
 }
 
 /*
@@ -196,10 +177,5 @@ __dbsql_realloc(DBSQL* dbp, size_t size, void* storep)
 void
 __dbsql_free(DBSQL* dbp, void* ptr)
 {
-	/* If dbp is NULL, use standard free to avoid BerkeleyDB issues */
-	if (dbp == NULL) {
-		free(ptr);
-		return;
-	}
-	__os_free(dbp->dbenv, ptr);
+	__os_free((dbp ? dbp->dbenv : NULL), ptr);
 }

@@ -83,9 +83,9 @@ extern int isatty();
 
 /*
  * This routine reads a line of text from standard input, stores
- * the text in memory obtained from malloc() and returns a pointer
- * to the text.  NULL is returned at end of file, or if malloc()
- * fails.
+ * the text in memory obtained from __os_malloc and returns a pointer
+ * to the text.  NULL is returned at end of file, or if memory
+ * allocation fails.
  * The interface is like "readline" but no command-line editing
  * is done.
  */
@@ -96,27 +96,26 @@ local_getline(char* prompt, FILE* in)
 	int len;
 	int n;
 	int eol;
+	int ret;
 
 	if (prompt && *prompt) {
 		printf("%s", prompt);
 		fflush(stdout);
 	}
 	len = 100;
-	line = malloc(len);
-	if (line == 0)
+	if ((ret = __os_malloc(g.dbenv, len, &line)) != 0)
 		return 0;
 	n = 0;
 	eol = 0;
 	while(!eol) {
 		if (n + 100 > len) {
 			len = (len * 2) + 100;
-			line = realloc(line, len);
-			if (line == 0)
+			if ((ret = __os_realloc(g.dbenv, len, &line)) != 0)
 				return 0;
 		}
 		if (fgets(&line[n], len - n, in) == 0) {
 			if (n == 0) {
-				free(line);
+				__os_free(g.dbenv, line);
 				return 0;
 			}
 			line[n] = 0;
@@ -132,7 +131,8 @@ local_getline(char* prompt, FILE* in)
 			eol = 1;
 		}
 	}
-	line = realloc(line, n + 1);
+	if ((ret = __os_realloc(g.dbenv, n + 1, &line)) != 0)
+		return 0;
 	return line;
 }
 
@@ -459,9 +459,10 @@ set_table_name(p, name)
 	int i, n;
 	int needQuote;
 	char *z;
+	int ret;
 
 	if (p->dest_table) {
-		free(p->dest_table);
+		__os_free(g.dbenv, p->dest_table);
 		p->dest_table = 0;
 	}
 	if (name == 0)
@@ -476,11 +477,11 @@ set_table_name(p, name)
 	}
 	if (needQuote)
 		n += 2;
-	z = p->dest_table = malloc(n + 1);
-	if (z == 0) {
+	if ((ret = __os_malloc(g.dbenv, n + 1, &z)) != 0) {
 		fprintf(stderr,"Out of memory!\n");
 		exit(1);
 	}
+	p->dest_table = z;
 	n = 0;
 	if (needQuote)
 		z[n++] = '\'';
@@ -581,6 +582,7 @@ open_db(p)
 			exit(1);
 		}
 		g.dbp = p->db;
+		/* Update g.dbenv to the one from the actual database */
 		g.dbenv = p->db->get_dbenv(p->db);
 		p->db->set_errfile(p->db, g.errfp);
 		p->db->set_errpfx(p->db, g.progname);
@@ -590,7 +592,7 @@ open_db(p)
 				fprintf(stderr,
 					"Unable to open database \"%s\": %s\n",
 					p->db_filename, err_msgs);
-				free(err_msgs);
+				__os_free(g.dbenv, err_msgs);
 			} else {
 				fprintf(stderr,
 					"Unable to open database \"%s\"\n",
@@ -662,7 +664,7 @@ do_meta_command(line, p)
 			    &data, &err_msgs);
 		if (err_msgs) {
 			fprintf(stderr, "Error: %s\n", err_msgs);
-			free(err_msgs);
+			__os_free(g.dbenv, err_msgs);
 		}
 	} else if(c == 'd' && strncmp(args[0], "dump", n) == 0) {
 		char *err_msgs = 0;
@@ -687,7 +689,7 @@ do_meta_command(line, p)
 		}
 		if (err_msgs) {
 			fprintf(stderr, "Error: %s\n", err_msgs);
-			free(err_msgs);
+			__os_free(g.dbenv, err_msgs);
 		} else {
 			fprintf(p->out, "COMMIT;\n");
 		}
@@ -787,7 +789,7 @@ do_meta_command(line, p)
 				  callback, &data, &err_msgs, args[1],args[1]);
 		if (err_msgs) {
 			fprintf(stderr, "Error: %s\n", err_msgs);
-			free(err_msgs);
+			__os_free(g.dbenv, err_msgs);
 		}
 	} else if (c == 'm' && strncmp(args[0], "mode", n) == 0 &&
 		   num_args >= 2) {
@@ -849,7 +851,7 @@ do_meta_command(line, p)
 		if (p->db) {
 			p->db->close(p->db);
 		}
-		free(line);
+		__os_free(g.dbenv, line);
 		g.dbenv->close(g.dbenv, 0);
 		exit(0);
 	} else if (c == 'r' && strncmp(args[0], "read", n) == 0 &&
@@ -921,7 +923,7 @@ do_meta_command(line, p)
 		}
 		if (err_msgs) {
 			fprintf(stderr, "Error: %s\n", err_msgs);
-			free(err_msgs);
+			__os_free(g.dbenv, err_msgs);
 		}
 	} else if (c == 's' && strncmp(args[0], "separator", n) == 0 &&
 		   num_args == 2) {
@@ -974,7 +976,7 @@ do_meta_command(line, p)
 		}
 		if( err_msgs ) {
 			fprintf(stderr,"Error: %s\n", err_msgs);
-			free(err_msgs);
+			__os_free(g.dbenv, err_msgs);
 		}
 		if (rc == DBSQL_SUCCESS) {
 			int len, maxlen = 0;
@@ -1121,7 +1123,7 @@ process_input(p, in)
 			int rc = do_meta_command(line, p);
 			if (rc)
 				break;
-			free(line);
+			__os_free(g.dbenv, line);
 			continue;
 		}
 		if (_is_command_terminator(line)) {
@@ -1132,13 +1134,16 @@ process_input(p, in)
 			for(i = 0; line[i] && isspace(line[i]); i++) {}
 			if (line[i] != 0) {
 				line_len = strlen(line);
-				sql = malloc(line_len + 1);
+				if ((rc = __os_malloc(g.dbenv, line_len + 1, &sql)) != 0) {
+					fprintf(stderr,"%s: out of memory!\n",
+						g.progname);
+					exit(1);
+				}
 				strcpy(sql, line);
 			}
 		} else {
 			int len = strlen(line);
-			sql = realloc(sql, line_len + len + 2 );
-			if (sql == 0) {
+			if ((rc = __os_realloc(g.dbenv, line_len + len + 2, &sql)) != 0) {
 				fprintf(stderr,"%s: out of memory!\n",
 					g.progname);
 				exit(1);
@@ -1147,7 +1152,7 @@ process_input(p, in)
 			strcpy(&sql[line_len], line);
 			line_len += len;
 		}
-		free(line);
+		__os_free(g.dbenv, line);
 		if (sql && _ends_with_semicolon(sql, line_len) &&
 		    dbsql_complete_stmt(sql)) {
 			p->cnt = 0;
@@ -1158,14 +1163,14 @@ process_input(p, in)
 					printf("%s\n",sql);
 				if (err_msgs != 0) {
 					printf("SQL error: %s\n", err_msgs);
-					free(err_msgs);
+					__os_free(g.dbenv, err_msgs);
 					err_msgs = 0;
 				} else {
 					printf("SQL error: %s\n",
 					       dbsql_strerror(rc));
 				}
 			}
-			free(sql);
+			__os_free(g.dbenv, sql);
 			sql = 0;
 			line_len = 0;
 		}
@@ -1173,20 +1178,21 @@ process_input(p, in)
 	if (sql) {
 		if (!_all_whitespace(sql))
 			printf("Incomplete SQL: %s\n", sql);
-		free(sql);
+		__os_free(g.dbenv, sql);
 	}
 }
 
 /*
  * Return a pathname which is the user's home directory.  A
  * NULL return indicates an error of some kind.  Space to hold the
- * resulting string is obtained from malloc().  The calling
- * function should free the result.
+ * resulting string is obtained from __os_malloc.  The calling
+ * function should free the result using __os_free.
  */
 static char *
 find_home_dir(void)
 {
 	char *home_dir = NULL;
+	int ret;
 
 #if !defined(_WIN32) && !defined(WIN32)
 	struct passwd *pwent;
@@ -1210,10 +1216,13 @@ find_home_dir(void)
 #endif
 
 	if (home_dir) {
-		char *z = malloc(strlen(home_dir) + 1);
-		if (z)
+		char *z;
+		if ((ret = __os_malloc(g.dbenv, strlen(home_dir) + 1, &z)) == 0) {
 			strcpy(z, home_dir);
-		home_dir = z;
+			home_dir = z;
+		} else {
+			home_dir = NULL;
+		}
 	}
 	return home_dir;
 }
@@ -1229,18 +1238,18 @@ process_rc(p, path)
 					   NULL to use default '~/.dbsqlrc' */
 {
 	char *home_dir = NULL;
-	char *buf;
+	char *buf = NULL;
 	FILE *in = NULL;
+	int ret;
 
 	if (path == NULL) {
 		home_dir = find_home_dir();
-		buf = malloc(strlen(home_dir) + 15);
-		if (buf == NULL) {
+		if ((ret = __os_malloc(g.dbenv, strlen(home_dir) + 15, &buf)) != 0) {
 			fprintf(stderr,"%s: out of memory\n", g.progname);
 			exit(1);
 		}
 		sprintf(buf,"%s/.dbsqlrc", home_dir);
-		free(home_dir);
+		__os_free(g.dbenv, home_dir);
 		path = (const char*)buf;
 	}
 	in = fopen(path, "r");
@@ -1251,8 +1260,8 @@ process_rc(p, path)
 		process_input(p, in);
 		fclose(in);
 	}
-	if (buf == path)
-		free(buf);
+	if (buf)
+		__os_free(g.dbenv, buf);
 	return;
 }
 
@@ -1312,11 +1321,22 @@ main(int argc, char* *argv)
 	const char *init_file = 0;
 	char *first_cmd = 0;
 	int i;
+	int rc;
 
 	memset(&g, 0, sizeof(struct globals));
 	g.progname = argv[0];
 	g.errfp = stderr;
 	main_init(&data);
+
+	/*
+	 * Initialize a minimal DB environment early for memory management.
+	 * This ensures ALL memory allocations use Berkeley DB's allocators.
+	 */
+	if ((rc = db_env_create(&g.dbenv, 0)) != 0) {
+		fprintf(stderr, "%s: db_env_create: %s\n",
+			g.progname, db_strerror(rc));
+		return 1;
+	}
 
 	/*
 	 * Make sure we have a valid signal handler early, before anything
@@ -1341,10 +1361,8 @@ main(int argc, char* *argv)
 			i++;
 			init_file = argv[i];
 		} else if (strcmp(argv[i], "--key") ==0 ){
-			char new[1024];
 			i++;
-			snprintf(new, sizeof(new), "%s", argv[i]);
-			__dbsql_strdup(NULL, data.crypt_key, new);
+			__dbsql_strdup(NULL, argv[i], &data.crypt_key);
 		} else if (strcmp(argv[i], "--version") == 0) {
 			int major, minor, patch;
 			printf("%s\n", dbsql_version(&major, &minor, &patch));
@@ -1445,12 +1463,11 @@ main(int argc, char* *argv)
 			       dbsql_version(&major, &minor, &patch));
 			home = find_home_dir();
 			if (home) {
-				history = malloc(strlen(home) + 20);
-				if (history) {
+				if ((rc = __os_malloc(g.dbenv, strlen(home) + 20, &history)) == 0) {
 					sprintf(history, "%s/.dbsql_history",
 						home);
 				}
-				free(home);
+				__os_free(g.dbenv, home);
 			}
 			if (history)
 				read_history(history);
@@ -1458,6 +1475,7 @@ main(int argc, char* *argv)
 			if (history) {
 				stifle_history(100);
 				write_history(history);
+				__os_free(g.dbenv, history);
 			}
 		} else {
 			process_input(&data, stdin);
@@ -1465,8 +1483,11 @@ main(int argc, char* *argv)
 	}
 	set_table_name(&data, 0);
 	if (g.dbp) {
-		g.dbenv->close(g.dbenv, 0);
 		g.dbp->close(g.dbp);
+		/* dbenv is closed by dbp->close() */
+	} else if (g.dbenv) {
+		/* We created a minimal dbenv but never opened a database */
+		g.dbenv->close(g.dbenv, 0);
 	}
 	return 0;
 }
