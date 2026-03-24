@@ -173,8 +173,8 @@
                       awk '{printf "#define %-30s %3d\n", $1, ++cnt}' >> opcodes.h
 
                     # Add legacy opcodes
-                    echo '' >> opcodes.h
-                    echo '/* Legacy DBSQL compatibility opcodes */' >> opcodes.h
+                    echo "" >> opcodes.h
+                    echo "/* Legacy DBSQL compatibility opcodes */" >> opcodes.h
                     COUNT=$(grep -c '^#define OP_' opcodes.h)
                     echo "#define OP_Copy                        $((COUNT + 1))  /* Copy register value */" >> opcodes.h
                     echo "#define OP_SortCallback                $((COUNT + 2))  /* Legacy: use OP_ResultRow */" >> opcodes.h
