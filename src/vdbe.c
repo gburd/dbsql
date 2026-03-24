@@ -4483,11 +4483,11 @@ case OP_CreateTable: {
 ** Write the integer on the top of the stack
 ** into the temporary storage list.
 */
-#if 0  /* DISABLED - keylistStack/x.pList removed, use RowSet instead */
+#if 0  /* DISABLED - keylistStack/x.expr_list removed, use RowSet instead */
 case OP_ListWrite: {
 	keylist_t *pKeylist;
 	/* Note: aStack assertion removed - register-based VDBE */
-	pKeylist = p->x.pList;
+	pKeylist = p->x.expr_list;
 	if (pKeylist == 0 || pKeylist->nUsed >= pKeylist->nKey) {
 		if (__dbsql_calloc(NULL, 1, sizeof(keylist_t) +
 				(999 * sizeof(pKeylist->aKey[0])),
@@ -4496,8 +4496,8 @@ case OP_ListWrite: {
 		pKeylist->nKey = 1000;
 		pKeylist->nRead = 0;
 		pKeylist->nUsed = 0;
-		pKeylist->pNext = p->x.pList;
-		p->x.pList = pKeylist;
+		pKeylist->pNext = p->x.expr_list;
+		p->x.expr_list = pKeylist;
 	}
 	__entity_to_int(pTos);
 	pKeylist->aKey[pKeylist->nUsed++] = pTos->u.i;
@@ -4525,7 +4525,7 @@ case OP_ListRewind: {
 case OP_ListRead: {
 	keylist_t *pKeylist;
 	CHECK_FOR_INTERRUPT;
-	pKeylist = p->x.pList;
+	pKeylist = p->x.expr_list;
 	if (pKeylist != 0) {
 		DBSQL_ASSERT(pKeylist->nRead >= 0);
 		DBSQL_ASSERT(pKeylist->nRead < pKeylist->nUsed);
@@ -4534,7 +4534,7 @@ case OP_ListRead: {
 		pTos->u.i = pKeylist->aKey[pKeylist->nRead++];
 		pTos->flags = MEM_Int;
 		if (pKeylist->nRead >= pKeylist->nUsed) {
-			p->x.pList = pKeylist->pNext;
+			p->x.expr_list = pKeylist->pNext;
 			__dbsql_free(NULL, pKeylist);
 		}
 	} else {
@@ -4548,9 +4548,9 @@ case OP_ListRead: {
 ** Reset the temporary storage buffer so that it holds nothing.
 */
 case OP_ListReset: {
-	if (p->x.pList) {
-		__vdbe_keylist_free(p->x.pList);
-		p->x.pList = 0;
+	if (p->x.expr_list) {
+		__vdbe_keylist_free(p->x.expr_list);
+		p->x.expr_list = 0;
 	}
 	break;
 }
@@ -4566,8 +4566,8 @@ case OP_ListPush: {
 	if (__dbsql_realloc(NULL, sizeof(keylist_t *) * p->keylistStackDepth,
 			 &p->keylistStack) == ENOMEM)
 		goto no_mem;
-	p->keylistStack[p->keylistStackDepth - 1] = p->x.pList;
-	p->x.pList = 0;
+	p->keylistStack[p->keylistStackDepth - 1] = p->x.expr_list;
+	p->x.expr_list = 0;
 	break;
 }
 
@@ -4579,8 +4579,8 @@ case OP_ListPush: {
 case OP_ListPop: {
 	DBSQL_ASSERT(p->keylistStackDepth > 0);
 	p->keylistStackDepth--;
-	__vdbe_keylist_free(p->x.pList);
-	p->x.pList = p->keylistStack[p->keylistStackDepth];
+	__vdbe_keylist_free(p->x.expr_list);
+	p->x.expr_list = p->keylistStack[p->keylistStackDepth];
 	p->keylistStack[p->keylistStackDepth] = 0;
 	if (p->keylistStackDepth == 0) {
 		__dbsql_free(NULL, p->keylistStack);
@@ -5968,7 +5968,7 @@ case OP_Vacuum: {
 /* Any other opcode is illegal...
 */
 default: {
-	snprintf(zBuf, sizeof(zBuf), "%d", pOp->opcode);
+	snprintf(zBuf, sizeof(zBuf), "%d (pc=%d, nOp=%d)", pOp->opcode, pc, p->nOp);
 	__str_append(&p->zErrMsg, "unknown opcode ", zBuf, (char*)0);
 	rc = DBSQL_INTERNAL;
 	break;
