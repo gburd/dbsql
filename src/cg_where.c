@@ -299,7 +299,7 @@ static index_t *__find_sorting_index(table, base, orderby_clause,
 	 * check for a matching index.
 	 */
 	match = 0;
-	for (idx = table->pIndex; idx; idx = idx->pNext) {
+	for (idx = table->first_index; idx; idx = idx->pNext) {
 		num_expr = orderby_clause->nExpr;
 		if (idx->nColumn < num_eq_col || idx->nColumn < num_expr)
 			continue;
@@ -650,7 +650,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		  * of the WHERE clause cannot be used in conjunction with the
 		  * IN operator to help satisfy other columns of the index.
 		  */
-		 for(idx = table->pIndex; idx; idx = idx->pNext) {
+		 for(idx = table->first_index; idx; idx = idx->pNext) {
 			 eq_mask = 0;
 			 lt_mask = 0;
 			 gt_mask = 0;

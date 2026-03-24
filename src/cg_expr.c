@@ -653,7 +653,7 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 			expr->iTable = item->iCursor;
 			expr->iDb = table->iDb;
 		}
-		for (j = 0, column = table->aCol; j < table->nCol;
+		for (j = 0, column = table->columns; j < table->nCol;
 		     j++, column++) {
 			if (strcasecmp(column->zName,
 						  col_name) == 0){
@@ -693,7 +693,7 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 		}
 		if(table) {
 			int j;
-			column_t *column = table->aCol;
+			column_t *column = table->columns;
 			expr->iDb = table->iDb;
 			ntables++;
 			for (j = 0; j < table->nCol; j++, column++) {

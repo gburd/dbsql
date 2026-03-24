@@ -111,6 +111,51 @@
 
                   # Generate opcodes.h and opcodes.c before building
                   preBuild = ''
+                    # Build the lemon parser generator
+                    echo "Building lemon parser generator..."
+                    gcc -o lemon ../src/lemon/lemon.c
+                    cp ../src/lemon/lempar.c .
+
+                    # Generate sql_parser.c from sql_parser.y
+                    echo "Generating sql_parser.c..."
+                    cp ../src/sql_parser.y .
+                    ./lemon sql_parser.y
+
+                    # Apply sed transformations to rename functions
+                    cp ./sql_parser.c ./_sql_parser.c
+                    sed -e 's/dbsql_parserAlloc/__sql_parser_alloc/g' \
+                        -e 's/dbsql_parserFree/__sql_parser_free/g' \
+                        -e 's/dbsql_parserTrace/__sql_parser_trace/g' \
+                        -e 's/dbsql_parserFallback/__sql_parser_fallback/g' \
+                        -e 's/ParseFallback/__sql_parser_fallback/g' \
+                        -e 's/dbsql_parser(/__sql_parser(/g' \
+                        -e 's/__set_stringn/__str_nappend/g' \
+                        -e 's/__set_string/__str_append/g' \
+                        ./_sql_parser.c > ./sql_parser.c
+                    rm -f ./_sql_parser.c ./sql_parser.y
+
+                    # Verify the sed replacement worked
+                    if grep -q "__sql_parser_fallback" ./sql_parser.c; then
+                      echo "Successfully renamed fallback function"
+                      # Show the function definition for debugging
+                      echo "Fallback function in sql_parser.c:"
+                      grep -A3 "^int __sql_parser_fallback" ./sql_parser.c || echo "NOT FOUND AS FUNCTION DEF"
+                      # Check if YYFALLBACK is defined
+                      if grep -q "^#define YYFALLBACK" ./sql_parser.c; then
+                        echo "YYFALLBACK is defined in sql_parser.c"
+                      else
+                        echo "WARNING: YYFALLBACK is NOT defined in sql_parser.c"
+                      fi
+                    else
+                      echo "WARNING: Fallback function not found after sed"
+                    fi
+
+                    # Add fallback function declaration to sql_parser.h
+                    echo "int __sql_parser_fallback(int);" >> sql_parser.h
+                    echo "Added fallback declaration to sql_parser.h"
+
+                    echo "Generated sql_parser.c and sql_parser.h"
+
                     # Generate opcodes.h by extracting OP_* case statements from vdbe.c
                     echo '/* Automatically generated file.  Do not edit */' > opcodes.h
                     grep '^case OP_' ../src/vdbe.c | \

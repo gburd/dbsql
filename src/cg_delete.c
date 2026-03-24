@@ -119,9 +119,9 @@ void __delete_from(parser, list, where)
 	table = __src_list_lookup(parser, list);
 	if (table == 0)
 		goto delete_from_cleanup;
-	before_triggers = __triggers_exist(parser, table->pTrigger,
+	before_triggers = __triggers_exist(parser, table->first_trigger,
 					   TK_DELETE, TK_BEFORE, TK_ROW, 0);
-	after_triggers = __triggers_exist(parser, table->pTrigger,
+	after_triggers = __triggers_exist(parser, table->first_trigger,
 					  TK_DELETE, TK_AFTER, TK_ROW, 0);
 	row_triggers_exist = (before_triggers || after_triggers);
 	view = (table->u.view.pSelect != 0);
@@ -223,7 +223,7 @@ void __delete_from(parser, list, where)
 		}
 		if (!view) {
 			__vdbe_add_op(v, OP_Clear, table->tnum, table->iDb);
-			for (idx = table->pIndex; idx; idx = idx->pNext) {
+			for (idx = table->first_index; idx; idx = idx->pNext) {
 				__vdbe_add_op(v, OP_Clear, idx->tnum,
 					      idx->iDb);
 			}
@@ -309,7 +309,7 @@ void __delete_from(parser, list, where)
 			parser->nTab = cur + 1;
 			__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, cur, table->tnum);
-			for (i = 1, idx = table->pIndex; idx;
+			for (i = 1, idx = table->first_index; idx;
 			     i++, idx = idx->pNext) {
 				__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
 				__vdbe_add_op(v, OP_OpenWrite, parser->nTab++,
@@ -337,7 +337,7 @@ void __delete_from(parser, list, where)
 		 */
 		if (row_triggers_exist) {
 			if (!view) {
-				for(i = 1, idx = table->pIndex; idx;
+				for(i = 1, idx = table->first_index; idx;
 				    i++, idx = idx->pNext) {
 					__vdbe_add_op(v, OP_Close, cur + i,
 						      idx->tnum);
@@ -363,7 +363,7 @@ void __delete_from(parser, list, where)
 		 * triggers.
 		 */
 		if (!row_triggers_exist) {
-			for (i = 1, idx = table->pIndex; idx;
+			for (i = 1, idx = table->first_index; idx;
 			     i++, idx = idx->pNext) {
 				__vdbe_add_op(v, OP_Close, cur + i, idx->tnum);
 			}
@@ -469,7 +469,7 @@ void __generate_row_index_delete(dbp, v, table, cur, idx_used)
 	int i;
 	index_t *idx;
 
-	for (i = 1, idx = table->pIndex; idx; i++, idx = idx->pNext) {
+	for (i = 1, idx = table->first_index; idx; i++, idx = idx->pNext) {
 		int j;
 		if (idx_used != 0 && idx_used[i-1] == 0)
 			continue;

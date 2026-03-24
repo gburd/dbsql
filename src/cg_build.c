@@ -320,10 +320,10 @@ __delete_index(DBSQL* dbp, index_t* index)
 void
 __unlink_and_delete_index(DBSQL* dbp, index_t* index)
 {
-	if (index->pTable->pIndex == index) {
-		index->pTable->pIndex = index->pNext;
+	if (index->pTable->first_index == index) {
+		index->pTable->first_index = index->pNext;
 	} else {
-		index_t *i = index->pTable->pIndex;
+		index_t *i = index->pTable->first_index;
 		while (i && i->pNext != index) {
 			index = index->pNext;
 		}
@@ -462,7 +462,7 @@ __vdbe_delete_table(DBSQL* dbp, table_t* table)
 	/*
 	 * Delete all indices associated with this table.
 	 */
-	for (index = table->pIndex; index; index = next) {
+	for (index = table->first_index; index; index = next) {
 		next = index->pNext;
 		DBSQL_ASSERT(index->iDb == table->iDb ||
 		       (table->iDb == 0 && index->iDb == 1));
@@ -485,12 +485,12 @@ __vdbe_delete_table(DBSQL* dbp, table_t* table)
 	 * Delete the table_t structure itself.
 	 */
 	for (i = 0; i < table->nCol; i++) {
-		__dbsql_free(dbp, table->aCol[i].zName);
-		__dbsql_free(dbp, table->aCol[i].zDflt);
-		__dbsql_free(dbp, table->aCol[i].zType);
+		__dbsql_free(dbp, table->columns[i].zName);
+		__dbsql_free(dbp, table->columns[i].zDflt);
+		__dbsql_free(dbp, table->columns[i].zType);
 	}
 	__dbsql_free(dbp, table->zName);
-	__dbsql_free(dbp, table->aCol);
+	__dbsql_free(dbp, table->columns);
 	__select_delete(table->u.view.pSelect);
 	__dbsql_free(dbp, table);
 }
@@ -701,9 +701,9 @@ void __start_table(parser, start, name, temp, view)
 	}
 	table->zName = n;
 	table->nCol = 0;
-	table->aCol = 0;
+	table->columns = 0;
 	table->iPKey = -1;
-	table->pIndex = 0;
+	table->first_index = 0;
 	table->iDb = idb;
 	if (parser->pNewTable)
 		__vdbe_delete_table(dbp, parser->pNewTable);
@@ -759,7 +759,7 @@ __add_column(parser_t* parser, token_t* name)
 		return;
 	__str_unquote(n);
 	for (i = 0; i < table->nCol; i++) {
-		if (strcasecmp(n, table->aCol[i].zName) == 0) {
+		if (strcasecmp(n, table->columns[i].zName) == 0) {
 			__str_append(&parser->zErrMsg,
 				     "duplicate column name: ", n, (char*)0);
 			parser->nErr++;
@@ -769,12 +769,12 @@ __add_column(parser_t* parser, token_t* name)
 	}
 	if ((table->nCol & 0x7) == 0) { /* TODO ?? 0x7 ?? */
 		if (__dbsql_realloc(dbp,
-				 (table->nCol + 8) * sizeof(table->aCol[0]),
-				 &table->aCol) == ENOMEM)
+				 (table->nCol + 8) * sizeof(table->columns[0]),
+				 &table->columns) == ENOMEM)
 			return;
 	}
-	col = &table->aCol[table->nCol];
-	memset(col, 0, sizeof(table->aCol[0]));
+	col = &table->columns[table->nCol];
+	memset(col, 0, sizeof(table->columns[0]));
 	col->zName = n;
 	col->sortOrder = DBSQL_SO_NUM;
 	table->nCol++;
@@ -797,7 +797,7 @@ __add_not_null(parser_t* parser, int on_error)
 		return;
 	i = table->nCol - 1;
 	if (i >= 0)
-		table->aCol[i].notNull = on_error;
+		table->columns[i].notNull = on_error;
 }
 
 /*
@@ -826,7 +826,7 @@ __add_column_type(parser_t* parser, token_t* first, token_t* last)
 	i = table->nCol - 1;
 	if (i < 0)
 		return;
-	col = &table->aCol[i];
+	col = &table->columns[i];
 	pz = &col->zType;
 	n = last->n + P_TO_UINT32(last->z) - P_TO_UINT32(first->z);
 	__str_nappend(pz, first->z, n, NULL);
@@ -864,7 +864,7 @@ __add_default_value(parser_t* parser, token_t* val, int minus)
 	i = table->nCol - 1;
 	if (i < 0)
 		return;
-	pz = &table->aCol[i].zDflt;
+	pz = &table->columns[i].zDflt;
 	if (minus) {
 		__str_nappend(pz, "-", 1, val->z, val->n, NULL);
 	} else {
@@ -914,22 +914,22 @@ __add_primary_key(parser_t* parser, id_list_t* list, int on_error)
 	table->hasPrimKey = 1;
 	if (list == 0) {
 		col = table->nCol - 1;
-		table->aCol[col].isPrimKey = 1;
+		table->columns[col].isPrimKey = 1;
 	} else {
 		for (i = 0; i < list->nId; i++) {
 			for (col = 0; col < table->nCol; col++) {
 				if (strcasecmp(list->a[i].zName,
-					  table->aCol[col].zName) == 0)
+					  table->columns[col].zName) == 0)
 					break;
 			}
 			if (col < table->nCol)
-				table->aCol[col].isPrimKey = 1;
+				table->columns[col].isPrimKey = 1;
 		}
 		if (list->nId > 1)
 			col = -1;
 	}
 	if (col >= 0 && col < table->nCol) {
-		type = table->aCol[col].zType;
+		type = table->columns[col].zType;
 	}
 	if (type && strcasecmp(type, "INTEGER") == 0) {
 		table->iPKey = col;
@@ -1010,7 +1010,7 @@ __add_collate_type(parser_t* parser, int type)
 		return;
 	i = table->nCol - 1;
 	if (i >= 0)
-		table->aCol[i].sortOrder = type;
+		table->columns[i].sortOrder = type;
 }
 
 /*
@@ -1123,7 +1123,7 @@ __gen_create_table_stmt(table_t* table)
 
 	n = 0;
 	for (i = 0; i < table->nCol; i++) {
-		n += __ident_length(table->aCol[i].zName);
+		n += __ident_length(table->columns[i].zName);
 	}
 	n += __ident_length(table->zName);
 	if (n < 40) {
@@ -1146,7 +1146,7 @@ __gen_create_table_stmt(table_t* table)
 		strcpy(&stmt[k], sep);
 		k += strlen(&stmt[k]);
 		sep = sep2;
-		__ident_put(stmt, &k, table->aCol[i].zName);
+		__ident_put(stmt, &k, table->columns[i].zName);
 	}
 	strcpy(&stmt[k], end);
 	return stmt;
@@ -1194,11 +1194,11 @@ __ending_create_table_paren(parser_t* parser, token_t* end, select_t* select)
 		table_t *sel_table = __select_result_set(parser, 0, select);
 		if (sel_table == 0)
 			return;
-		DBSQL_ASSERT(table->aCol == 0);
+		DBSQL_ASSERT(table->columns == 0);
 		table->nCol = sel_table->nCol;
-		table->aCol = sel_table->aCol;
+		table->columns = sel_table->columns;
 		sel_table->nCol = 0;
-		sel_table->aCol = 0;
+		sel_table->columns = 0;
 		__vdbe_delete_table(0, sel_table);
 	}
 
@@ -1446,11 +1446,11 @@ __view_get_column_names(parser_t* parser, table_t* table)
 	table->nCol = -1;
 	sel_table = __select_result_set(parser, 0, sel);
 	if (sel_table) {
-		DBSQL_ASSERT(table->aCol == 0);
+		DBSQL_ASSERT(table->columns == 0);
 		table->nCol = sel_table->nCol;
-		table->aCol = sel_table->aCol;
+		table->columns = sel_table->columns;
 		sel_table->nCol = 0;
-		sel_table->aCol = 0;
+		sel_table->columns = 0;
 		__vdbe_delete_table(0, sel_table);
 		DB_PROPERTY_SET(parser->db, table->iDb, DBSQL_UNRESET_VIEWS);
 	} else {
@@ -1482,12 +1482,12 @@ __view_reset_column_names(table_t* table)
 	if (table->nCol == 0)
 		return;
 	for (i = 0; i < table->nCol; i++) {
-		__dbsql_free(NULL, table->aCol[i].zName);
-		__dbsql_free(NULL, table->aCol[i].zDflt);
-		__dbsql_free(NULL, table->aCol[i].zType);
+		__dbsql_free(NULL, table->columns[i].zName);
+		__dbsql_free(NULL, table->columns[i].zDflt);
+		__dbsql_free(NULL, table->columns[i].zType);
 	}
-	__dbsql_free(NULL, table->aCol);
-	table->aCol = 0;
+	__dbsql_free(NULL, table->columns);
+	table->columns = 0;
 	table->nCol = 0;
 }
 
@@ -1639,7 +1639,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 		/*
 		 * Drop all triggers associated with the table being dropped.
 		 */
-		trigger = table->pTrigger;
+		trigger = table->first_trigger;
 		while (trigger) {
 			DBSQL_ASSERT(trigger->iDb == table->iDb ||
 			       trigger->iDb == 1);
@@ -1647,7 +1647,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 			if (parser->explain) {
 				trigger = trigger->pNext;
 			} else {
-				trigger = table->pTrigger;
+				trigger = table->first_trigger;
 			}
 		}
 
@@ -1675,7 +1675,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 		__vdbe_add_op(v, OP_Close, 0, 0);
 		if (!view) {
 			__vdbe_add_op(v, OP_Destroy, table->tnum, table->iDb);
-			for (idx = table->pIndex; idx; idx = idx->pNext) {
+			for (idx = table->first_index; idx; idx = idx->pNext) {
 				__vdbe_add_op(v, OP_Destroy, idx->tnum,
 					      idx->iDb);
 			}
@@ -1724,7 +1724,7 @@ __add_idx_key_type(vdbe_t* v, index_t* idx)
 	for (i = 0; i < n; i++) {
 		int col = idx->aiColumn[i];
 		DBSQL_ASSERT(col >= 0 && col < table->nCol);
-		if ((table->aCol[col].sortOrder & DBSQL_SO_TYPEMASK) ==
+		if ((table->columns[col].sortOrder & DBSQL_SO_TYPEMASK) ==
 		    DBSQL_SO_TEXT) {
 			type[i] = 't';
 		} else {
@@ -1786,7 +1786,7 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
 		if (to_col && to_col->nId!=1 ){
 			__str_nappend(&parser->zErrMsg,
 				      "foreign key on ", -1,
-				      table->aCol[col].zName, -1,
+				      table->columns[col].zName, -1,
 				      " should reference only one column "
 				      "of table ", -1, to->z, to->n, NULL);
 			parser->nErr++;
@@ -1827,7 +1827,7 @@ void __create_foreign_key(parser, from_col, to, to_col, flags)
 			int j;
 			for(j = 0; j < table->nCol; j++) {
 				if (strcasecmp(
-					    table->aCol[j].zName,
+					    table->columns[j].zName,
 					    from_col->a[i].zName) == 0) {
 					fkey->aCol[i].iFrom = j;
 					break;
@@ -2006,7 +2006,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	} else if (token == 0) {
 		char buf[30]; /* TODO: static buffers are bad */
 		int n = 1;
-		index_t *loop = table->pIndex;
+		index_t *loop = table->first_index;
 		while (loop) {
 			loop = loop->pNext;
 			n++;
@@ -2048,7 +2048,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	 * So create a fake list to simulate this.
 	 */
 	if (list == 0) {
-		null_id.z = table->aCol[table->nCol-1].zName;
+		null_id.z = table->columns[table->nCol-1].zName;
 		null_id.n = strlen(null_id.z);
 		list = __id_list_append(0, &null_id);
 		if (list == 0)
@@ -2078,7 +2078,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	for (i = 0; i < list->nId; i++) {
 		for(j = 0; j < table->nCol; j++) {
 			if (strcasecmp(list->a[i].zName,
-						  table->aCol[j].zName) == 0) {
+						  table->columns[j].zName) == 0) {
 				break;
 			}
 		}
@@ -2116,12 +2116,12 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	 * OE_Ignore.  This is necessary for the correct operation of UPDATE
 	 * and INSERT.
 	 */
-	if (on_error != OE_Replace || table->pIndex == 0 ||
-	    table->pIndex->onError == OE_Replace) {
-		index->pNext = table->pIndex;
-		table->pIndex = index;
+	if (on_error != OE_Replace || table->first_index == 0 ||
+	    table->first_index->onError == OE_Replace) {
+		index->pNext = table->first_index;
+		table->first_index = index;
 	} else {
-		index_t *other = table->pIndex;
+		index_t *other = table->first_index;
 		while (other->pNext && other->pNext->onError != OE_Replace) {
 			other = other->pNext;
 		}

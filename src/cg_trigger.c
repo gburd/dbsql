@@ -282,8 +282,8 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 		table = __locate_table(parser, nt->table,
 				       dbp->aDb[nt->iTabDb].zName);
 		DBSQL_ASSERT(table != 0);
-		nt->pNext = table->pTrigger;
-		table->pTrigger = nt;
+		nt->pNext = table->first_trigger;
+		table->first_trigger = nt;
 		nt = 0;
 	}
 
@@ -612,10 +612,10 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 	if (!parser->explain) {
 		const char *name = trigger->name;
 		int len = strlen(name);
-		if (table->pTrigger == trigger) {
-			table->pTrigger = trigger->pNext;
+		if (table->first_trigger == trigger) {
+			table->first_trigger = trigger->pNext;
 		} else {
-			trigger_t *cc = table->pTrigger;
+			trigger_t *cc = table->first_trigger;
 			while(cc) { 
 				if (cc->pNext == trigger) {
 					cc->pNext = cc->pNext->pNext;
@@ -872,7 +872,7 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 
 	DBSQL_ASSERT(new_idx != -1 || old_idx != -1);
 
-	trigger = table->pTrigger;
+	trigger = table->first_trigger;
 	while(trigger) {
 		int fire_this = 0;
 

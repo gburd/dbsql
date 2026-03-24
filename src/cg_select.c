@@ -183,7 +183,7 @@ __column_index(table, col)
 {
 	int i;
 	for (i = 0; i < table->nCol; i++) {
-		if (strcasecmp(table->aCol[i].zName, col) == 0)
+		if (strcasecmp(table->columns[i].zName, col) == 0)
 			return i;
 	}
 	return -1;
@@ -301,8 +301,8 @@ __process_join(parser_t* parser, select_t* select)
 			table = term->pTab;
 			for (j = 0; j < table->nCol; j++) {
 				if (__column_index(other->pTab,
-						  table->aCol[j].zName) >= 0) {
-					__add_where_term(table->aCol[j].zName,
+						  table->columns[j].zName) >= 0) {
+					__add_where_term(table->columns[j].zName,
 							 table, other->pTab,
 							 &select->pWhere);
 				}
@@ -835,7 +835,7 @@ __generate_column_types(parser_t* parser, src_list_t* tables, expr_list_t* elist
 			if (col < 0) {
 				type = "INTEGER";
 			} else {
-				type = table->aCol[col].zType;
+				type = table->columns[col].zType;
 			}
 		} else {
 			if (__expr_type(p) == DBSQL_SO_TEXT) {
@@ -902,8 +902,8 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 				col = "_ROWID_";
 				type = "INTEGER";
 			} else {
-				col = table->aCol[icol].zName;
-				type = table->aCol[icol].zType;
+				col = table->columns[icol].zName;
+				type = table->columns[icol].zType;
 			}
 			if (p->span.z && p->span.z[0] && !show_full_names) {
 				addr = __vdbe_add_op(v,OP_ColumnName, i, 0);
@@ -1142,7 +1142,7 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 					}
 					table_seen = 1;
 					for (j = 0; j < tab->nCol; j++) {
-					    jname = tab->aCol[j].zName;
+					    jname = tab->columns[j].zName;
 
 					    if (i > 0 &&
 						(tables->a[i-1].jointype &
@@ -2247,7 +2247,7 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	if (col < 0) {
 		index = 0;
 	} else {
-		for (index = table->pIndex; index; index = index->pNext) {
+		for (index = table->first_index; index; index = index->pNext) {
 			DBSQL_ASSERT(index->nColumn >= 1);
 			if (index->aiColumn[0] == col)
 				break;
@@ -2914,9 +2914,9 @@ __select_result_set(parser_t* parser, char* tab_name, select_t* select)
 	elist = select->pEList;
 	table->nCol = elist->nExpr;
 	DBSQL_ASSERT(table->nCol > 0);
-	__dbsql_calloc(NULL, table->nCol, sizeof(table->aCol[0]),
-		       &table->aCol);
-	column = table->aCol;
+	__dbsql_calloc(NULL, table->nCol, sizeof(table->columns[0]),
+		       &table->columns);
+	column = table->columns;
 	for (i = 0; i < table->nCol; i++) {
 		if (elist->a[i].zName) {
 			__dbsql_strdup(NULL, elist->a[i].zName, &column[i].zName);
@@ -2938,11 +2938,11 @@ __select_result_set(parser_t* parser, char* tab_name, select_t* select)
 				}
 			}
 		} else if (p->span.z && p->span.z[0]) {
-			__str_nappend(&table->aCol[i].zName, p->span.z,
+			__str_nappend(&table->columns[i].zName, p->span.z,
 				      p->span.n, NULL);
 		} else {
 			sprintf(buf, "column%d", i+1);
-			__dbsql_strdup(NULL, buf, &table->aCol[i].zName);
+			__dbsql_strdup(NULL, buf, &table->columns[i].zName);
 		}
 	}
 	table->iPKey = -1;

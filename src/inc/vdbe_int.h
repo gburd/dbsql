@@ -506,7 +506,7 @@ struct vdbe {
 	u8 usesStmtJournal;      /* True if uses a statement journal */
 	u8 readOnly;             /* True for statements that do not write */
 	u8 bIsReader;            /* True for statements that read */
-	u32 aCounter[9];         /* Counters used by stmt_status() */
+	u32 counters[9];         /* Counters used by stmt_status() */
 	char *zSql;              /* Text of the SQL statement that generated
 				  * this */
 	void *free_context;      /* Free this when deleting the vdbe */

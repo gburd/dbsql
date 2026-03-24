@@ -1,0 +1,35 @@
+this derivation will be built:
+  /nix/store/gsb7sxw2vzqjlfd3h75ivif08gwjnb0q-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/gsb7sxw2vzqjlfd3h75ivif08gwjnb0q-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/gsb7sxw2vzqjlfd3h75ivif08gwjnb0q-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/pmzdmrbg9bphan9nnxzsvxz8y64y56vw-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       >   171 | #define OP_SetFirst                    170
+       >       |
+       > ./opcodes.h:177: warning: "OP_SetNext" redefined
+       >   177 | #define OP_SetNext                     176
+       >       |
+       > ./opcodes.h:172: note: this is the location of the previous definition
+       >   172 | #define OP_SetNext                     171
+       >       |
+       > ./opcodes.h:182: warning: "OP_SortCallback" redefined
+       >   182 | #define OP_SortCallback                179  /* Legacy: use OP_ResultRow */
+       >       |
+       > ./opcodes.h:132: note: this is the location of the previous definition
+       >   132 | #define OP_SortCallback                131
+       >       |
+       > ./opcodes.h:183: warning: "OP_NullCallback" redefined
+       >   183 | #define OP_NullCallback                180  /* Legacy: use OP_ResultRow */
+       >       |
+       > ./opcodes.h:17: note: this is the location of the previous definition
+       >    17 | #define OP_NullCallback                 16
+       >       |
+       > ../dist/../src/safety.c: In function '__safety_check':
+       > ../dist/../src/safety.c:98:16: error: 'DBSQL' {aka 'struct __dbsql'} has no member named 'vdbe'
+       >    98 |         if (dbp->vdbe != 0) {
+       >       |                ^~
+       > make: *** [Makefile:430: safety.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/gsb7sxw2vzqjlfd3h75ivif08gwjnb0q-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
