@@ -767,7 +767,7 @@ __generate_constraint_checks(parser, table, base, used_indicies,
 
 	v = __parser_get_vdbe(parser);
 	DBSQL_ASSERT(v != 0);
-	DBSQL_ASSERT(table->pSelect == 0);  /* This table is not a VIEW */
+	DBSQL_ASSERT(table->select == 0);  /* This table is not a VIEW */
 	num_col = table->nCol;
 
 	/*
@@ -1041,7 +1041,7 @@ void __complete_insertion(parser, table, base, used_indicies,
 
 	v = __parser_get_vdbe(parser);
 	DBSQL_ASSERT(v != 0);
-	DBSQL_ASSERT(table->pSelect == 0);  /* This table is not a VIEW */
+	DBSQL_ASSERT(table->select == 0);  /* This table is not a VIEW */
 	idx = 0;
 	index = table->first_index;
 	while (index) {

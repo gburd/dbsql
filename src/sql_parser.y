@@ -644,56 +644,56 @@ expr(A) ::= PLUS(B) expr(X). [UPLUS] {
 }
 expr(A) ::= LP(B) select(X) RP(E). {
   A = __expr(TK_SELECT, 0, 0, 0);
-  if( A ) A->pSelect = X;
+  if( A ) A->select = X;
   __expr_span(A,&B,&E);
 }
 expr(A) ::= expr(W) BETWEEN expr(X) AND expr(Y). {
   expr_list_t *pList = __expr_list_append(0, X, 0);
   pList = __expr_list_append(pList, Y, 0);
   A = __expr(TK_BETWEEN, W, 0, 0);
-  if( A ) A->pList = pList;
+  if( A ) A->expr_list = pList;
   __expr_span(A,&W->span,&Y->span);
 }
 expr(A) ::= expr(W) NOT BETWEEN expr(X) AND expr(Y). {
   expr_list_t *pList = __expr_list_append(0, X, 0);
   pList = __expr_list_append(pList, Y, 0);
   A = __expr(TK_BETWEEN, W, 0, 0);
-  if( A ) A->pList = pList;
+  if( A ) A->expr_list = pList;
   A = __expr(TK_NOT, A, 0, 0);
   __expr_span(A,&W->span,&Y->span);
 }
 expr(A) ::= expr(X) IN LP exprlist(Y) RP(E).  {
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->pList = Y;
+  if( A ) A->expr_list = Y;
   __expr_span(A,&X->span,&E);
 }
 expr(A) ::= expr(X) IN LP select(Y) RP(E).  {
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->pSelect = Y;
+  if( A ) A->select = Y;
   __expr_span(A,&X->span,&E);
 }
 expr(A) ::= expr(X) NOT IN LP exprlist(Y) RP(E).  {
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->pList = Y;
+  if( A ) A->expr_list = Y;
   A = __expr(TK_NOT, A, 0, 0);
   __expr_span(A,&X->span,&E);
 }
 expr(A) ::= expr(X) NOT IN LP select(Y) RP(E).  {
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->pSelect = Y;
+  if( A ) A->select = Y;
   A = __expr(TK_NOT, A, 0, 0);
   __expr_span(A,&X->span,&E);
 }
 expr(A) ::= expr(X) IN nm(Y) dbnm(D). {
   src_list_t *pSrc = __src_list_append(0, &Y, &D);
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->pSelect = __select_new(0,pSrc,0,0,0,0,0,-1,0);
+  if( A ) A->select = __select_new(0,pSrc,0,0,0,0,0,-1,0);
   __expr_span(A,&X->span,D.z?&D:&Y);
 }
 expr(A) ::= expr(X) NOT IN nm(Y) dbnm(D). {
   src_list_t *pSrc = __src_list_append(0, &Y, &D);
   A = __expr(TK_IN, X, 0, 0);
-  if( A ) A->pSelect = __select_new(0,pSrc,0,0,0,0,0,-1,0);
+  if( A ) A->select = __select_new(0,pSrc,0,0,0,0,0,-1,0);
   A = __expr(TK_NOT, A, 0, 0);
   __expr_span(A,&X->span,D.z?&D:&Y);
 }
@@ -702,7 +702,7 @@ expr(A) ::= expr(X) NOT IN nm(Y) dbnm(D). {
 /* CASE expressions */
 expr(A) ::= CASE(C) case_operand(X) case_exprlist(Y) case_else(Z) END(E). {
   A = __expr(TK_CASE, X, Z, 0);
-  if( A ) A->pList = Y;
+  if( A ) A->expr_list = Y;
   __expr_span(A, &C, &E);
 }
 %type case_exprlist {expr_list_t*}

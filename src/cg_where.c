@@ -148,10 +148,10 @@ __expr_table_usage(expr_mask_set_t* mask_set, expr_t* p)
 	if (p->left) {
 		mask |= __expr_table_usage(mask_set, p->left);
 	}
-	if (p->pList) {
-		for(i = 0; i < p->pList->nExpr; i++) {
+	if (p->expr_list) {
+		for(i = 0; i < p->expr_list->nExpr; i++) {
 			mask |= __expr_table_usage(mask_set,
-						   p->pList->a[i].pExpr);
+						   p->expr_list->a[i].pExpr);
 		}
 	}
 	return mask;
@@ -799,7 +799,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 */
 	for (i = 0; i < tab_list->nSrc; i++) {
 		table = tab_list->a[i].pTab;
-		if ((table->tabFlags & TF_Ephemeral) || table->pSelect )
+		if ((table->tabFlags & TF_Ephemeral) || table->select )
 			continue;
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenRead, tab_list->a[i].iCursor,
@@ -857,14 +857,14 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 				if (ex->op != TK_IN) {
 					__expr_code(parser,
 						    wc_exprs[k].p->right);
-				} else if (ex->pList) {
+				} else if (ex->expr_list) {
 					__vdbe_add_op(v, OP_SetFirst,
 						      ex->iTable, brk);
 					level->inOp = OP_SetNext;
 					level->inP1 = ex->iTable;
 					level->inP2 = __vdbe_current_addr(v);
 				} else {
-					DBSQL_ASSERT(ex->pSelect);
+					DBSQL_ASSERT(ex->select);
 					__vdbe_add_op(v, OP_Rewind,
 						      ex->iTable, brk);
 					__vdbe_add_op(v, OP_KeyAsData,
@@ -912,13 +912,13 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 						}
 						if (ex->op == TK_IN &&
 						    col_num == 1) {
-							if (ex->pList) {
+							if (ex->expr_list) {
 								__vdbe_add_op(v, OP_SetFirst, ex->iTable, brk);
 								level->inOp = OP_SetNext;
 								level->inP1 = ex->iTable;
 								level->inP2 = __vdbe_current_addr(v);
 							} else {
-								DBSQL_ASSERT(ex->pSelect);
+								DBSQL_ASSERT(ex->select);
 								__vdbe_add_op(v, OP_Rewind, ex->iTable, brk);
 								__vdbe_add_op(v, OP_KeyAsData, ex->iTable, 1);
 								level->inP2 = __vdbe_add_op(v, OP_FullKey, ex->iTable, 0);
@@ -1415,7 +1415,7 @@ __where_end(where_info_t* winfo)
 	for (i = 0; i < tab_list->nSrc; i++) {
 		table = tab_list->a[i].pTab;
 		DBSQL_ASSERT(table != 0);
-		if ((table->tabFlags & TF_Ephemeral) || table->pSelect)
+		if ((table->tabFlags & TF_Ephemeral) || table->select)
 			continue;
 		level = &winfo->a[i];
 		__vdbe_add_op(v, OP_Close, tab_list->a[i].iCursor, 0);

@@ -1187,8 +1187,8 @@ struct expr {
 	/* Legacy DBSQL compatibility shims */
 	int dataType;            /* Legacy: data type of expression result */
 	int iDb;                 /* Legacy: database index */
-	expr_list_t *pList;      /* Legacy: alias for x.pList */
-	select_t *pSelect;        /* Legacy: alias for x.pSelect */
+	expr_list_t *expr_list;  /* Legacy: alias for x.expr_list */
+	select_t *select;        /* Legacy: alias for x.select */
 	token_t span;             /* Legacy: source text span */
 };
 
@@ -1386,7 +1386,7 @@ struct src_list {
 		Bitmask colUsed; /* Bit N set if column N of pTab is used */
 		expr_t *pOn;     /* The ON clause of a join */
 		id_list_t *pUsing; /* The USING clause of a join */
-		select_t *pSelect;    /* Legacy: alias for x.pSelect */
+		select_t *select;     /* Legacy: alias for x.select */
 	} a[FLEXARRAY];          /* One entry for each identifier on the
 				    list */
 };

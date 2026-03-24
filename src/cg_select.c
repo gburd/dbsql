@@ -1042,7 +1042,7 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 			if (table == 0) {
 				return 1;
 			}
-			if (table->pSelect) {
+			if (table->select) {
 				/*
 				 * We reach here if the named table is a
 				 * really a view.
@@ -1059,7 +1059,7 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 				 */
 				if (tables->a[i].pSelect == 0) {
 					tables->a[i].pSelect =
-						__select_dup(table->pSelect);
+						__select_dup(table->select);
 				}
 			}
 		}
@@ -1833,7 +1833,7 @@ __subst_expr(expr_t* expr, int table, expr_list_t* elist)
 		DBSQL_ASSERT(elist != 0 && expr->iColumn < elist->nExpr);
 		DBSQL_ASSERT(expr->left == 0 &&
 		       expr->right == 0 &&
-		       expr->pList == 0);
+		       expr->expr_list == 0);
 		new = elist->a[expr->iColumn].pExpr;
 		DBSQL_ASSERT(new != 0);
 		expr->op = new->op;
@@ -1842,8 +1842,8 @@ __subst_expr(expr_t* expr, int table, expr_list_t* elist)
 		expr->left = __expr_dup(new->left);
 		DBSQL_ASSERT(expr->right == 0);
 		expr->right = __expr_dup(new->right);
-		DBSQL_ASSERT(expr->pList == 0);
-		expr->pList = __expr_list_dup(new->pList);
+		DBSQL_ASSERT(expr->expr_list == 0);
+		expr->expr_list = __expr_list_dup(new->expr_list);
 		expr->iTable = new->iTable;
 		expr->iColumn = new->iColumn;
 		expr->iAgg = new->iAgg;
@@ -1851,7 +1851,7 @@ __subst_expr(expr_t* expr, int table, expr_list_t* elist)
 	} else {
 		__subst_expr(expr->left, table, elist);
 		__subst_expr(expr->right, table, elist);
-		__subst_expr_list(expr->pList, table, elist);
+		__subst_expr_list(expr->expr_list, table, elist);
 	}
 }
 
@@ -2220,7 +2220,7 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	expr = select->pEList->a[0].pExpr;
 	if (expr->op != TK_AGG_FUNCTION)
 		return 0;
-	if (expr->pList == 0 || expr->pList->nExpr != 1)
+	if (expr->expr_list == 0 || expr->expr_list->nExpr != 1)
 		return 0;
 	if (expr->u.zToken.n != 3)
 		return 0;
@@ -2231,7 +2231,7 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	} else {
 		return 0;
 	}
-	expr = expr->pList->a[0].pExpr;
+	expr = expr->expr_list->a[0].pExpr;
 	if (expr->op != TK_COLUMN)
 		return 0;
 	col = expr->iColumn;
@@ -2803,10 +2803,10 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 				continue;
 			e = parser->aAgg[i].pExpr;
 			DBSQL_ASSERT(e->op == TK_AGG_FUNCTION);
-			if (e->pList) {
-				for(j = 0; j < e->pList->nExpr; j++) {
+			if (e->expr_list) {
+				for(j = 0; j < e->expr_list->nExpr; j++) {
 					__expr_code(parser,
-						    e->pList->a[j].pExpr);
+						    e->expr_list->a[j].pExpr);
 				}
 			}
 			/* Allocate register for aggregate index */
@@ -2814,7 +2814,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 			parser->nMem++;
 			__vdbe_add_op(v, OP_Integer, i, regAggIdx);
 			__vdbe_add_op(v, OP_AggFunc, 0,
-				      (e->pList ? e->pList->nExpr : 0));
+				      (e->expr_list ? e->expr_list->nExpr : 0));
 			DBSQL_ASSERT(parser->aAgg[i].pFunc != 0);
 			DBSQL_ASSERT(parser->aAgg[i].pFunc->xStep != 0);
 			__vdbe_change_p4(v, -1, (char*)parser->aAgg[i].pFunc,
