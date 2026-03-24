@@ -243,7 +243,7 @@ if (strcasecmp(left_name, "index_info") == 0) {
 	index = __find_index(dbp, right_name, 0);
 	if (index) {
 		int i;
-		table = index->pTable;
+		table = index->table;
 		/* Add column names dynamically (can't use static initializer with p4 strings) */
 		__vdbe_add_op(v, OP_ColumnName, 0, 0);
 		__vdbe_change_p4(v, -1, "seqno", P4_STATIC);
@@ -293,7 +293,7 @@ if (strcasecmp(left_name, "index_list") == 0) {
 				      index->onError != OE_None, 0);
 			__vdbe_add_op(v, OP_Callback, 3, 0);
 			++i;
-			index = index->pNext;
+			index = index->next_index;
 		}
 	}
 } else

@@ -52,31 +52,32 @@ $ grep -r 'dbp->pVdbe' src | wc -l
 9  # All in correct context (vdbe_method.c, api.c, safety.c)
 ```
 
-#### ⏸️ vdbe_t struct fields (DEFERRED)
+#### ✅ vdbe_t struct fields (COMPLETE)
 
-**Target fields** (from plan):
-- `aMem` → `registers`
-- `aOp` → `opcodes`
-- `apCsr` → `cursors`
+**Status**: Already completed in Phase 1 (commit 365d78b)
+- `aMem` → `registers` ✅
+- `aOp` → `opcodes` ✅
+- `apCsr` → `cursors` ✅
+- `aVar` → `variables` ✅
+- `aLabel` → `labels` ✅
+- `aCounter` → `counters` ✅ (completed in feb94f2)
 
-**Status**: Deferred to next session
-**Reason**: Requires detailed analysis of vdbe_int.h and vdbe.c
-**Estimated effort**: 15-20 hours
+All vdbe_t fields now follow snake_case convention.
 
-**Current state**:
-- Some instances of `registers` already exist (inconsistent)
-- `cursors` field already correctly named in struct
-- Need systematic review of all VDBE array field naming
+#### ✅ table_t struct fields (COMPLETE)
 
-#### ⏸️ Other structure fields (NOT STARTED)
+**Commit**: feb94f2 - "Phase 2.1: Fix table_t structure naming violations"
 
-**table_t struct**:
-- `pIndex` → `first_index`
-- `pTrigger` → `first_trigger`
-- `pNext` → `next_table`
+**Changes**:
+- `aCol` → `columns` (79 usages) ✅
+- `pIndex` → `first_index` (49 usages) ✅
+- `pTrigger` → `first_trigger` (21 usages) ✅
+- `pCheck` → `check_constraints` (~15 usages) ✅
+- `u.tab.pFKey` → `u.tab.foreign_keys` (~10 usages) ✅
 
-**Status**: Not started
-**Estimated effort**: 10-15 hours
+**Status**: Complete, build verified ✅
+**Effort**: ~4 hours actual (initial estimate: 10-15 hours)
+**Files modified**: 14 source files + 2 headers
 
 ### Phase 3: Local Variable Renames (NOT STARTED)
 

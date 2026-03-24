@@ -389,7 +389,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, base, table->tnum);
 		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
-		for (dx = 1, idx = table->first_index; idx; idx = idx->pNext, dx++){
+		for (dx = 1, idx = table->first_index; idx; idx = idx->next_index, dx++){
 			__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, (dx + base), idx->tnum);
 			__vdbe_change_p4(v, -1, idx->zName, P3_STATIC);
@@ -486,7 +486,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, base, table->tnum);
 		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
-		for (dx = 1, idx = table->first_index; idx; idx = idx->pNext, dx++){
+		for (dx = 1, idx = table->first_index; idx; idx = idx->next_index, dx++){
 			__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, (dx + base), idx->tnum);
 			__vdbe_change_p4(v, -1, idx->zName, P3_STATIC);
@@ -586,7 +586,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		if (!view_p) {
 			__vdbe_add_op(v, OP_Close, base, 0);
 			for(dx = 1, idx = table->first_index; idx;
-			    idx = idx->pNext, dx++) {
+			    idx = idx->next_index, dx++) {
 				__vdbe_add_op(v, OP_Close, (dx + base), 0);
 			}
 		}
@@ -615,7 +615,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	if (!row_triggers_p) {
 		/* Close all tables opened */
 		__vdbe_add_op(v, OP_Close, base, 0);
-		for(dx = 1, idx = table->first_index; idx; idx = idx->pNext, dx++){
+		for(dx = 1, idx = table->first_index; idx; idx = idx->next_index, dx++){
 			__vdbe_add_op(v, OP_Close, (dx + base), 0);
 		}
 	}
@@ -890,7 +890,7 @@ __generate_constraint_checks(parser, table, base, used_indicies,
 	 */
 	extra = -1;
 	for (cur = 0, index = table->first_index; index;
-	     index = index->pNext, cur++) {
+	     index = index->next_index, cur++) {
 		if (used_indicies && used_indicies[cur] == 0)
 			continue;  /* Skip unused indices */
 		extra++;
@@ -1045,7 +1045,7 @@ void __complete_insertion(parser, table, base, used_indicies,
 	idx = 0;
 	index = table->first_index;
 	while (index) {
-		index = index->pNext;
+		index = index->next_index;
 		idx++;
 	}
 	for (i = (idx - 1); i >= 0; i--) {

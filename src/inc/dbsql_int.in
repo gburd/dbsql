@@ -1017,15 +1017,15 @@ struct index {
 				    1st is 0 */
 	LogEst *aiRowLogEst;     /* From ANALYZE: est. rows selected by each
 				    column */
-	table_t *pTable;         /* The SQL table being indexed */
+	table_t *table;         /* The SQL table being indexed */
 	char *zColAff;           /* String defining the affinity of each col */
-	index_t *pNext;          /* The next index associated with the same
+	index_t *next_index;          /* The next index associated with the same
 				    table */
-	schema_t *pSchema;       /* Schema containing this index */
+	schema_t *schema;        /* Schema containing this index */
 	u8 *aSortOrder;          /* For each column: True==DESC, False==ASC */
 	const char **azColl;     /* Array of collation sequence names */
-	expr_t *pPartIdxWhere;   /* WHERE clause for partial indices */
-	expr_list_t *aColExpr;   /* Column expressions */
+	expr_t *partial_index_where; /* WHERE clause for partial indices */
+	expr_list_t *column_expressions; /* Column expressions */
 	Pgno tnum;               /* Storage handle for root of this index */
 	LogEst szIdxRow;         /* Estimated average row size in bytes */
 	u16 nKeyCol;             /* Number of columns forming the key */

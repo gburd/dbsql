@@ -320,15 +320,15 @@ __delete_index(DBSQL* dbp, index_t* index)
 void
 __unlink_and_delete_index(DBSQL* dbp, index_t* index)
 {
-	if (index->pTable->first_index == index) {
-		index->pTable->first_index = index->pNext;
+	if (index->table->first_index == index) {
+		index->table->first_index = index->next_index;
 	} else {
-		index_t *i = index->pTable->first_index;
-		while (i && i->pNext != index) {
-			index = index->pNext;
+		index_t *i = index->table->first_index;
+		while (i && i->next_index != index) {
+			index = index->next_index;
 		}
-		if (i && i->pNext == index) {
-			i->pNext = index->pNext;
+		if (i && i->next_index == index) {
+			i->next_index = index->next_index;
 		}
 	}
 	__delete_index(dbp, index);
@@ -463,7 +463,7 @@ __vdbe_delete_table(DBSQL* dbp, table_t* table)
 	 * Delete all indices associated with this table.
 	 */
 	for (index = table->first_index; index; index = next) {
-		next = index->pNext;
+		next = index->next_index;
 		DBSQL_ASSERT(index->iDb == table->iDb ||
 		       (table->iDb == 0 && index->iDb == 1));
 		__delete_index(dbp, index);
@@ -1675,7 +1675,7 @@ __drop_table(parser_t* parser, token_t* name, int view)
 		__vdbe_add_op(v, OP_Close, 0, 0);
 		if (!view) {
 			__vdbe_add_op(v, OP_Destroy, table->tnum, table->iDb);
-			for (idx = table->first_index; idx; idx = idx->pNext) {
+			for (idx = table->first_index; idx; idx = idx->next_index) {
 				__vdbe_add_op(v, OP_Destroy, idx->tnum,
 					      idx->iDb);
 			}
@@ -1716,8 +1716,8 @@ __add_idx_key_type(vdbe_t* v, index_t* idx)
 	table_t *table;
 	int i, n;
 
-	DBSQL_ASSERT(idx != 0 && idx->pTable != 0);
-	table = idx->pTable;
+	DBSQL_ASSERT(idx != 0 && idx->table != 0);
+	table = idx->table;
 	n = idx->nColumn;
 	if (__dbsql_malloc(NULL, n + 1, &type) == ENOMEM)
 		return;
@@ -2008,7 +2008,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 		int n = 1;
 		index_t *loop = table->first_index;
 		while (loop) {
-			loop = loop->pNext;
+			loop = loop->next_index;
 			n++;
 		}
 		sprintf(buf,"%d)", n);
@@ -2064,7 +2064,7 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	index->aiColumn = (int*)&index[1];
 	index->zName = (char*)&index->aiColumn[list->nId];
 	strcpy(index->zName, name);
-	index->pTable = table;
+	index->table = table;
 	index->nColumn = list->nId;
 	index->onError = on_error;
 	index->autoIndex = (token == 0);
@@ -2118,15 +2118,15 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	 */
 	if (on_error != OE_Replace || table->first_index == 0 ||
 	    table->first_index->onError == OE_Replace) {
-		index->pNext = table->first_index;
+		index->next_index = table->first_index;
 		table->first_index = index;
 	} else {
 		index_t *other = table->first_index;
-		while (other->pNext && other->pNext->onError != OE_Replace) {
-			other = other->pNext;
+		while (other->next_index && other->next_index->onError != OE_Replace) {
+			other = other->next_index;
 		}
-		index->pNext = other->pNext;
-		other->pNext = index;
+		index->next_index = other->next_index;
+		other->next_index = index;
 	}
 
 	if (parser->initFlag && sltable != 0) {
@@ -2261,7 +2261,7 @@ __drop_index(parser_t* parser, src_list_t* name)
 		goto exit_drop_index;
 	}
 	{
-		int iDb = __schema_to_index(dbp, index->pSchema);
+		int iDb = __schema_to_index(dbp, index->schema);
 		if (iDb > 1) {
 			__error_msg(parser, "cannot alter schema of attached "
 				    "databases", 0);
@@ -2271,8 +2271,8 @@ __drop_index(parser_t* parser, src_list_t* name)
 #ifndef DBSQL_NO_AUTH
 	{
 		int code = DBSQL_DROP_INDEX;
-		table_t *table = index->pTable;
-		int iDb = __schema_to_index(dbp, index->pSchema);
+		table_t *table = index->table;
+		int iDb = __schema_to_index(dbp, index->schema);
 		const char *db_name = dbp->aDb[iDb].zName;
 		const char *table_name = SCHEMA_TABLE(iDb);
 		if (__auth_check(parser, DBSQL_DELETE, table_name, 0,
@@ -2305,7 +2305,7 @@ __drop_index(parser_t* parser, src_list_t* name)
 			{ OP_Delete,     0, 0,       0}, /* 8 */
 		};
 		int base;
-		int iDb = __schema_to_index(dbp, index->pSchema);
+		int iDb = __schema_to_index(dbp, index->schema);
 
 		__vdbe_prepare_write(parser, 0, iDb);
 		__open_master_table(v, iDb);
