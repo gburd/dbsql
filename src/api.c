@@ -1237,17 +1237,22 @@ dbsql_create_env(DBSQL **dbpp, const char *dir, const char *crypt, int mode, u_i
 	} else {
 		if (__dbsql_exists(NULL, dir, &dir_p) == 0) {
 			if (dir_p) {
+				/* Directory exists - check for existing DB environment */
 				char buf[1024];
-				snprintf(buf, 1024, "%s%s%s", dir,
-					 PATH_SEPARATOR, dir);
-				if (__dbsql_exists(NULL, buf, &dir_p) == 0)
+				snprintf(buf, 1024, "%s%s__db.001", dir,
+					 PATH_SEPARATOR);
+				if (__dbsql_exists(NULL, buf, &dir_p) == 0) {
+					/* Environment files exist, join it */
 					env_open_flags = DB_JOINENV;
+				}
+				/* Else: directory exists but no environment, will create */
 			} else {
 				__dbsql_err(NULL,
 				       "Environment must be a directory.");
 				return DBSQL_INVALID_NAME;
 			}
 		} else {
+			/* Directory doesn't exist, create it */
 			mode = mode == 0 ? __dbsql_omode(NULL, "rwxrwxrwx") : mode;
 			if (__dbsql_mkdir(NULL, dir, mode) != 0)
 				return errno;
