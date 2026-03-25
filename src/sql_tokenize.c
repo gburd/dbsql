@@ -789,10 +789,10 @@ __run_sql_parser(parser_t *parser, const char *sql, char **err_msgs)
 		if (!nerr)
 			nerr++;
 	}
-	if (parser->pVdbe
+	if (parser->vdbe
 	    && (parser->useCallback || parser->n_errors > 0)) {
-		__vdbe_delete(parser->pVdbe);
-		parser->pVdbe = 0;
+		__vdbe_delete(parser->vdbe);
+		parser->vdbe = 0;
 	}
 	if (parser->pNewTable) {
 		__vdbe_delete_table(parser->db,
