@@ -562,14 +562,46 @@ open_db(p)
 {
 	int rc;
 	char *err_msgs = 0;
-	const char *filename;
+	const char *envdir;
+	const char *dbname;
+	char dirbuf[1024];
 	int flags = DBSQL_THREAD; /* TODO | DBSQL_TEMP_INMEM; */
 
 	if (p->db == 0) {
-		filename = p->db_filename;
-		if (!strcmp(p->db_filename, ":memory:"))
-			filename = 0;
-		rc = dbsql_create_env(&p->db, filename,
+		/* Separate environment directory from database filename */
+		if (!strcmp(p->db_filename, ":memory:")) {
+			/* In-memory database - no directory needed */
+			envdir = 0;
+			dbname = 0;
+		} else {
+			/* Extract directory and base filename */
+			char *last_sep = strrchr(p->db_filename, '/');
+#if defined(_WIN32) || defined(WIN32)
+			char *last_backslash = strrchr(p->db_filename, '\\');
+			if (last_backslash && (!last_sep || last_backslash > last_sep))
+				last_sep = last_backslash;
+#endif
+			if (last_sep) {
+				/* Path contains directory component */
+				size_t dirlen = last_sep - p->db_filename;
+				if (dirlen >= sizeof(dirbuf)) {
+					fprintf(g.errfp,
+						"Database path too long\n");
+					exit(1);
+				}
+				memcpy(dirbuf, p->db_filename, dirlen);
+				dirbuf[dirlen] = '\0';
+				envdir = dirbuf;
+				dbname = last_sep + 1;
+			} else {
+				/* No directory - use current directory */
+				envdir = ".";
+				dbname = p->db_filename;
+			}
+		}
+
+		/* Create Berkeley DB environment with directory */
+		rc = dbsql_create_env(&p->db, envdir,
 				      p->crypt_key, 0, flags);
 		switch (rc) {
 		case DB_RUNRECOVERY:
@@ -586,7 +618,9 @@ open_db(p)
 		g.dbenv = p->db->get_dbenv(p->db);
 		p->db->set_errfile(p->db, g.errfp);
 		p->db->set_errpfx(p->db, g.progname);
-		if ((rc = p->db->open(p->db, p->db_filename, 0664,
+
+		/* Open database with base filename */
+		if ((rc = p->db->open(p->db, dbname, 0664,
 				      &err_msgs)) != 0) {
 			if (err_msgs) {
 				fprintf(stderr,
