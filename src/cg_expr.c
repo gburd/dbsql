@@ -160,33 +160,33 @@ __expr_delete(expr_t* p)
  *	be deleted (by being passed to their respective XXX_delete() routines)
  *	without effecting the originals.
  *	The expression list, ID, and source lists return by __expr_list_dup(),
- *	__id_list_dup(), and __src_list_dup() can not be further expanded 
+ *	__id_list_dup(), and __src_list_dup() can not be further expanded
  *	by subsequent calls to DBSQL* __XXX_list_append() routines.
  *	Any tables that the src_list_t might point to are not duplicated.
  *
- * PUBLIC: expr_t *__expr_dup __P((expr_t *));
+ * PUBLIC: expr_t *__expr_dup __P((DBSQL *, expr_t *));
  */
 expr_t *
-__expr_dup(expr_t* p)
+__expr_dup(DBSQL* dbp, expr_t* p)
 {
 	expr_t *new;
 	if (p == 0)
 		return 0;
-	if (__dbsql_calloc(NULL, 1, sizeof(*p), &new) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(*p), &new) == ENOMEM)
 		return 0;
 	memcpy(new, p, sizeof(*new));
 	if (p->u.zToken.z != 0) {
-		__dbsql_strdup(NULL, p->u.zToken.z, &new->u.zToken.z);
+		__dbsql_strdup(dbp, p->u.zToken.z, &new->u.zToken.z);
 		new->u.zToken.n = p->u.zToken.n;
 		/* Note: no dyn field in anonymous struct */
 	} else {
 		DBSQL_ASSERT(new->u.zToken.z == 0);
 	}
 	new->span.z = 0;
-	new->pLeft = __expr_dup(p->pLeft);
-	new->pRight = __expr_dup(p->pRight);
-	new->x.pList = __expr_list_dup(p->x.pList);
-	new->x.pSelect = __select_dup(p->x.pSelect);
+	new->pLeft = __expr_dup(dbp, p->pLeft);
+	new->pRight = __expr_dup(dbp, p->pRight);
+	new->x.pList = __expr_list_dup(dbp, p->x.pList);
+	new->x.pSelect = __select_dup(dbp, p->x.pSelect);
 	return new;
 }
 
@@ -214,25 +214,25 @@ __token_copy(token_t* to, token_t* from)
  * __expr_list_dup --
  *	Copy a expr_list_t.
  *
- * PUBLIC: expr_list_t *__expr_list_dup __P((expr_list_t *));
+ * PUBLIC: expr_list_t *__expr_list_dup __P((DBSQL *, expr_list_t *));
  */
 expr_list_t *
-__expr_list_dup(expr_list_t* p)
+__expr_list_dup(DBSQL* dbp, expr_list_t* p)
 {
 	expr_list_t *new;
 	int i;
 
 	if (p == 0)
 		return 0;
-	if (__dbsql_calloc(NULL, 1, sizeof(*new), &new) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(*new), &new) == ENOMEM)
 		return 0;
 	new->n_expressions = new->n_allocated = p->n_expressions;
-	if (__dbsql_calloc(NULL, p->n_expressions, sizeof(p->a[0]), &new->a) == ENOMEM)
+	if (__dbsql_calloc(dbp, p->n_expressions, sizeof(p->a[0]), &new->a) == ENOMEM)
 		return 0;
 	for (i = 0; i < p->n_expressions; i++) {
 		expr_t *new_expr, *old_expr;
 		new->a[i].pExpr = new_expr =
-			__expr_dup(old_expr = p->a[i].pExpr);
+			__expr_dup(dbp, old_expr = p->a[i].pExpr);
 		if (old_expr->span.z!=0 && new_expr) {
 			/*
 			 * Always make a copy of the span for top-level
@@ -246,7 +246,7 @@ __expr_list_dup(expr_list_t* p)
 		DBSQL_ASSERT(new_expr == 0 || new_expr->span.z != 0 ||
 			     old_expr->span.z == 0);
 		if (p->a[i].zName)
-			__dbsql_strdup(NULL, p->a[i].zName, &new->a[i].zName);
+			__dbsql_strdup(dbp, p->a[i].zName, &new->a[i].zName);
 		new->a[i].sortOrder = p->a[i].sortOrder;
 		new->a[i].isAgg = p->a[i].isAgg;
 		new->a[i].fg.done = 0;
@@ -258,10 +258,10 @@ __expr_list_dup(expr_list_t* p)
  * __src_list_dup --
  *	Copy a src_list_t.
  *
- * PUBLIC: src_list_t *__src_list_dup __P((src_list_t *));
+ * PUBLIC: src_list_t *__src_list_dup __P((DBSQL *, src_list_t *));
  */
 src_list_t *
-__src_list_dup(src_list_t* p)
+__src_list_dup(DBSQL* dbp, src_list_t* p)
 {
 	src_list_t *new;
 	int i;
@@ -270,21 +270,21 @@ __src_list_dup(src_list_t* p)
 		return 0;
 	bytes = sizeof(*p) + ((p->n_sources > 0) ?
 			      (sizeof(p->a[0]) * (p->n_sources - 1)) : 0);
-	if (__dbsql_calloc(NULL, 1, bytes, &new) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, bytes, &new) == ENOMEM)
 		return 0;
 	new->n_sources = new->n_allocated = p->n_sources;
 	for (i = 0; i < p->n_sources; i++) {
 		struct src_list_item *new_item = &new->a[i];
 		struct src_list_item *old_item = &p->a[i];
-		__dbsql_strdup(NULL, old_item->zDatabase, &new_item->zDatabase);
-		__dbsql_strdup(NULL, old_item->zName, &new_item->zName);
-		__dbsql_strdup(NULL, old_item->zAlias, &new_item->zAlias);
+		__dbsql_strdup(dbp, old_item->zDatabase, &new_item->zDatabase);
+		__dbsql_strdup(dbp, old_item->zName, &new_item->zName);
+		__dbsql_strdup(dbp, old_item->zAlias, &new_item->zAlias);
 		new_item->jointype = old_item->jointype;
 		new_item->iCursor = old_item->iCursor;
 		new_item->pTab = 0;
-		new_item->x.pSelect = __select_dup(old_item->x.pSelect);
-		new_item->pOn = __expr_dup(old_item->pOn);
-		new_item->pUsing = __id_list_dup(old_item->pUsing);
+		new_item->x.pSelect = __select_dup(dbp, old_item->x.pSelect);
+		new_item->pOn = __expr_dup(dbp, old_item->pOn);
+		new_item->pUsing = __id_list_dup(dbp, old_item->pUsing);
 	}
 	return new;
 }
@@ -293,24 +293,24 @@ __src_list_dup(src_list_t* p)
  * __id_list_dup --
  *	Copy a id_list_t.
  *
- * PUBLIC: id_list_t *__id_list_dup __P((id_list_t *));
+ * PUBLIC: id_list_t *__id_list_dup __P((DBSQL *, id_list_t *));
  */
 id_list_t *
-__id_list_dup(id_list_t* p)
+__id_list_dup(DBSQL* dbp, id_list_t* p)
 {
 	id_list_t *new;
 	int i;
 	if (p == 0)
 		return 0;
-	if (__dbsql_calloc(NULL, 1, sizeof(*new), &new) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(*new), &new) == ENOMEM)
 		return 0;
 	new->n_identifiers = new->n_allocated = p->n_identifiers;
-	if (__dbsql_calloc(NULL, p->n_identifiers, sizeof(p->a[0]), &new->a) == ENOMEM)
+	if (__dbsql_calloc(dbp, p->n_identifiers, sizeof(p->a[0]), &new->a) == ENOMEM)
 		return 0;
 	for (i = 0; i < p->n_identifiers; i++) {
 		struct id_list_item *new_item = &new->a[i];
 		struct id_list_item *old_item = &p->a[i];
-		__dbsql_strdup(NULL, old_item->zName, &new_item->zName);
+		__dbsql_strdup(dbp, old_item->zName, &new_item->zName);
 		new_item->idx = old_item->idx;
 	}
 	return new;
@@ -320,25 +320,25 @@ __id_list_dup(id_list_t* p)
  * __select_dup --
  *	Copy a select_t.
  *
- * PUBLIC: select_t *__select_dup __P((select_t *));
+ * PUBLIC: select_t *__select_dup __P((DBSQL *, select_t *));
  */
 select_t *
-__select_dup(select_t* p)
+__select_dup(DBSQL* dbp, select_t* p)
 {
 	select_t *new;
 	if (p == 0)
 		return 0;
-	if (__dbsql_calloc(NULL, 1, sizeof(*p), &new) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(*p), &new) == ENOMEM)
 		return 0;
 	new->isDistinct = p->isDistinct;
-	new->pEList = __expr_list_dup(p->pEList);
-	new->pSrc = __src_list_dup(p->pSrc);
-	new->pWhere = __expr_dup(p->pWhere);
-	new->pGroupBy = __expr_list_dup(p->pGroupBy);
-	new->pHaving = __expr_dup(p->pHaving);
-	new->pOrderBy = __expr_list_dup(p->pOrderBy);
+	new->pEList = __expr_list_dup(dbp, p->pEList);
+	new->pSrc = __src_list_dup(dbp, p->pSrc);
+	new->pWhere = __expr_dup(dbp, p->pWhere);
+	new->pGroupBy = __expr_list_dup(dbp, p->pGroupBy);
+	new->pHaving = __expr_dup(dbp, p->pHaving);
+	new->pOrderBy = __expr_list_dup(dbp, p->pOrderBy);
 	new->op = p->op;
-	new->pPrior = __select_dup(p->pPrior);
+	new->pPrior = __select_dup(dbp, p->pPrior);
 	new->iLimit = p->iLimit;
 	new->iOffset = p->iOffset;
 	new->zSelect = 0;
@@ -743,8 +743,8 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 				DBSQL_ASSERT(expr->pLeft == 0 && expr->pRight == 0);
 				expr->op = TK_AS;
 				expr->iColumn = j;
-				expr->pLeft = __expr_dup(elist->a[j].pExpr);
-				__dbsql_free(NULL, col_name);
+				expr->pLeft = __expr_dup(dbp, elist->a[j].pExpr);
+				__dbsql_free(dbp, col_name);
 				DBSQL_ASSERT(table_name == 0 && db_name == 0);
 				return 0;
 			}
@@ -759,7 +759,7 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 	 * expr.
 	 */
 	if (cnt == 0 && table_name == 0 && col_token->z[0] == '"') {
-		__dbsql_free(NULL, col_name);
+		__dbsql_free(dbp, col_name);
 		return 0;
 	}
 
@@ -778,18 +778,18 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 		} else if (table_name) {
 			__str_append(&z, table_name, ".", col_name, 0);
 		} else {
-			__dbsql_strdup(NULL, col_name, &z);
+			__dbsql_strdup(dbp, col_name, &z);
 		}
 		__error_msg(parser, err, z);
-		__dbsql_free(NULL, z);
+		__dbsql_free(dbp, z);
 	}
 
 	/*
 	 * Clean up and return
 	 */
-	__dbsql_free(NULL, db_name);
-	__dbsql_free(NULL, table_name);
-	__dbsql_free(NULL, col_name);
+	__dbsql_free(dbp, db_name);
+	__dbsql_free(dbp, table_name);
+	__dbsql_free(dbp, col_name);
 	__expr_delete(expr->pLeft);
 	expr->pLeft = 0;
 	__expr_delete(expr->pRight);
@@ -1513,7 +1513,7 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 				__vdbe_add_op(v, OP_String, 0, target);
 				__vdbe_change_p4(v, -1, z, (tok_n + 1));
 			}
-			__dbsql_free(NULL, z);
+			__dbsql_free(dbp, z);
 			break;
 		}
 		/* FALLTHROUGH */

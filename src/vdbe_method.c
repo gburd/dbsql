@@ -554,7 +554,7 @@ __vdbe_dequote_p4(vdbe_t* vm, int addr)
 		return;
 	}
 	if (op->p4type != P4_DYNAMIC) {
-		__dbsql_strdup(NULL, op->p4.z, (char**)&op->p4.z);
+		__dbsql_strdup(vm->db, op->p4.z, (char**)&op->p4.z);
 		op->p4type = P4_DYNAMIC;
 	}
 	__str_unquote((char*)op->p4.z);
@@ -583,7 +583,7 @@ __vdbe_compress_space(vdbe_t* vm, int addr)
 		return;
 	}
 	if (op->p4type != P4_DYNAMIC) {
-		__dbsql_strdup(NULL, op->p4.z, (char**)&op->p4.z);
+		__dbsql_strdup(vm->db, op->p4.z, (char**)&op->p4.z);
 		op->p4type = P4_DYNAMIC;
 	}
 	z = (unsigned char*)op->p4.z;

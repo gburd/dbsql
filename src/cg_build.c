@@ -1540,7 +1540,7 @@ __view_get_column_names(parser_t* parser, table_t* table)
 	 * the original in elist.
 	 */
 	elist = sel->pEList;
-	sel->pEList = __expr_list_dup(elist);
+	sel->pEList = __expr_list_dup(parser->db, elist);
 	if (sel->pEList == 0) {
 		sel->pEList = elist;
 		return 1;  /* Malloc failed */

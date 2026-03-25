@@ -841,24 +841,24 @@ trigger_cmd_list(A) ::= . { A = 0; }
 
 %type trigger_cmd {trigger_step_t *}
 %destructor trigger_cmd {__vdbe_delete_trigger_step($$);}
-// UPDATE 
-trigger_cmd(A) ::= UPDATE orconf(R) nm(X) SET setlist(Y) where_opt(Z).  
-               { A = __trigger_update_step(&X, Y, Z, R); }
+// UPDATE
+trigger_cmd(A) ::= UPDATE orconf(R) nm(X) SET setlist(Y) where_opt(Z).
+               { A = __trigger_update_step(pParse->db, &X, Y, Z, R); }
 
 // INSERT
-trigger_cmd(A) ::= INSERT orconf(R) INTO nm(X) inscollist_opt(F) 
-  VALUES LP itemlist(Y) RP.  
-{A = __trigger_insert_step(&X, F, Y, 0, R);}
+trigger_cmd(A) ::= INSERT orconf(R) INTO nm(X) inscollist_opt(F)
+  VALUES LP itemlist(Y) RP.
+{A = __trigger_insert_step(pParse->db, &X, F, Y, 0, R);}
 
 trigger_cmd(A) ::= INSERT orconf(R) INTO nm(X) inscollist_opt(F) select(S).
-               {A = __trigger_insert_step(&X, F, 0, S, R);}
+               {A = __trigger_insert_step(pParse->db, &X, F, 0, S, R);}
 
 // DELETE
 trigger_cmd(A) ::= DELETE FROM nm(X) where_opt(Y).
-               {A = __trigger_delete_step(&X, Y);}
+               {A = __trigger_delete_step(pParse->db, &X, Y);}
 
 // SELECT
-trigger_cmd(A) ::= select(X).  {A = __trigger_select_step(X); }
+trigger_cmd(A) ::= select(X).  {A = __trigger_select_step(pParse->db, X); }
 
 // The special RAISE expression that may occur in trigger programs
 expr(A) ::= RAISE(X) LP IGNORE RP(Y).  {

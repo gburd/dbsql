@@ -1805,7 +1805,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 	return 0;
 }
 
-static void __subst_expr_list(expr_list_t*,int,expr_list_t*);
+static void __subst_expr_list(DBSQL*,expr_list_t*,int,expr_list_t*);
 
 /*
  * __subst_expr --
@@ -1821,10 +1821,10 @@ static void __subst_expr_list(expr_list_t*,int,expr_list_t*);
  *	changes to pExpr so that it refers directly to the source table
  *	of the subquery rather the result set of the subquery.
  *
- * STATIC: static void __subst_expr __P((expr_t *, int, expr_list_t *));
+ * STATIC: static void __subst_expr __P((DBSQL *, expr_t *, int, expr_list_t *));
  */
 static void
-__subst_expr(expr_t* expr, int table, expr_list_t* elist)
+__subst_expr(DBSQL* dbp, expr_t* expr, int table, expr_list_t* elist)
 {
 	expr_t *new;
 
@@ -1842,36 +1842,36 @@ __subst_expr(expr_t* expr, int table, expr_list_t* elist)
 		expr->op = new->op;
 		expr->dataType = new->dataType;
 		DBSQL_ASSERT(expr->pLeft == 0);
-		expr->pLeft = __expr_dup(new->pLeft);
+		expr->pLeft = __expr_dup(dbp, new->pLeft);
 		DBSQL_ASSERT(expr->pRight == 0);
-		expr->pRight = __expr_dup(new->pRight);
+		expr->pRight = __expr_dup(dbp, new->pRight);
 		DBSQL_ASSERT(expr->pList == 0);
-		expr->pList = __expr_list_dup(new->pList);
+		expr->pList = __expr_list_dup(dbp, new->pList);
 		expr->iTable = new->iTable;
 		expr->iColumn = new->iColumn;
 		expr->iAgg = new->iAgg;
 		__token_copy(&expr->span, &new->span);
 	} else {
-		__subst_expr(expr->pLeft, table, elist);
-		__subst_expr(expr->pRight, table, elist);
-		__subst_expr_list(expr->pList, table, elist);
+		__subst_expr(dbp, expr->pLeft, table, elist);
+		__subst_expr(dbp, expr->pRight, table, elist);
+		__subst_expr_list(dbp, expr->pList, table, elist);
 	}
 }
 
 /*
  * __subst_expr_list --
  *
- * STATIC: static void __subst_expr_list __P((expr_list_t *, int,
+ * STATIC: static void __subst_expr_list __P((DBSQL *, expr_list_t *, int,
  * STATIC:                               expr_list_t *));
  */
 static void
-__subst_expr_list(expr_list_t* list, int table, expr_list_t* elist)
+__subst_expr_list(DBSQL* dbp, expr_list_t* list, int table, expr_list_t* elist)
 {
 	int i;
 	if (list == 0)
 		return;
 	for (i = 0; i < list->n_expressions; i++) {
-		__subst_expr(list->a[i].pExpr, table, elist);
+		__subst_expr(dbp, list->a[i].pExpr, table, elist);
 	}
 }
 
@@ -2092,31 +2092,31 @@ __flatten_subquery(parser_t* parser, select_t* select, int from, int agg_p, int 
 	 * see "a" we substitute "x*3" and every place we see "b" we
 	 * substitute "y+10".
 	 */
-	__subst_expr_list(select->pEList, parent, sub_select->pEList);
+	__subst_expr_list(parser->db, select->pEList, parent, sub_select->pEList);
 	outer_query_results = select->pEList;
 	for(i = 0; i < outer_query_results->n_expressions; i++) {
 		if (outer_query_results->a[i].zName == 0 &&
 		    (expr = outer_query_results->a[i].pExpr)->span.z != 0) {
-			__dbsql_strndup(NULL, expr->span.z,
+			__dbsql_strndup(parser->db, expr->span.z,
 				     &outer_query_results->a[i].zName,
 				     expr->span.n);
 		}
 	}
 	if (agg_p) {
-		__subst_expr_list(select->pGroupBy, parent,
+		__subst_expr_list(parser->db, select->pGroupBy, parent,
 				  sub_select->pEList);
-		__subst_expr(select->pHaving, parent, sub_select->pEList);
+		__subst_expr(parser->db, select->pHaving, parent, sub_select->pEList);
 	}
 	if (sub_select->pOrderBy) {
 		DBSQL_ASSERT(select->pOrderBy == 0);
 		select->pOrderBy = sub_select->pOrderBy;
 		sub_select->pOrderBy = 0;
 	} else if (select->pOrderBy) {
-		__subst_expr_list(select->pOrderBy, parent,
+		__subst_expr_list(parser->db, select->pOrderBy, parent,
 				  sub_select->pEList);
 	}
 	if (sub_select->pWhere) {
-		where = __expr_dup(sub_select->pWhere);
+		where = __expr_dup(parser->db, sub_select->pWhere);
 	} else {
 		where = 0;
 	}
@@ -2124,9 +2124,9 @@ __flatten_subquery(parser_t* parser, select_t* select, int from, int agg_p, int 
 		DBSQL_ASSERT(select->pHaving == 0);
 		select->pHaving = select->pWhere;
 		select->pWhere = where;
-		__subst_expr(select->pHaving, parent, sub_select->pEList);
+		__subst_expr(parser->db, select->pHaving, parent, sub_select->pEList);
 		if (sub_select->pHaving) {
-			having = __expr_dup(sub_select->pHaving);
+			having = __expr_dup(parser->db, sub_select->pHaving);
 			if (select->pHaving) {
 				select->pHaving = __expr(TK_AND,
 							 select->pHaving,
@@ -2136,11 +2136,11 @@ __flatten_subquery(parser_t* parser, select_t* select, int from, int agg_p, int 
 			}
 		}
 		DBSQL_ASSERT(select->pGroupBy == 0);
-		select->pGroupBy = __expr_list_dup(sub_select->pGroupBy);
+		select->pGroupBy = __expr_list_dup(parser->db, sub_select->pGroupBy);
 	} else if (select->pWhere == 0) {
 		select->pWhere = where;
 	} else {
-		__subst_expr(select->pWhere, parent, sub_select->pEList);
+		__subst_expr(parser->db, select->pWhere, parent, sub_select->pEList);
 		if (where) {
 			select->pWhere = __expr(TK_AND, select->pWhere,
 						where, 0);
@@ -2534,7 +2534,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 			    col <= elist->n_expressions) {
 				__expr_delete(e);
 				e = orderby_clause->a[i].pExpr =
-					__expr_dup(elist->a[col-1].pExpr);
+					__expr_dup(parser->db, elist->a[col-1].pExpr);
 			}
 			if (__expr_resolve_ids(parser, tables, elist, e)) {
 				goto select_end;
@@ -2566,7 +2566,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 			    col <= elist->n_expressions) {
 				__expr_delete(e);
 				e = groupby_clause->a[i].pExpr =
-					__expr_dup(elist->a[col-1].pExpr);
+					__expr_dup(parser->db, elist->a[col-1].pExpr);
 			}
 			if (__expr_resolve_ids(parser, tables, elist, e)) {
 				goto select_end;
@@ -2905,24 +2905,24 @@ __select_result_set(parser_t* parser, char* tab_name, select_t* select)
 	if (__fill_in_column_list(parser, select)) {
 		return 0;
 	}
-	if (__dbsql_calloc(NULL, 1, sizeof(table_t), &table) == ENOMEM) {
+	if (__dbsql_calloc(parser->db, 1, sizeof(table_t), &table) == ENOMEM) {
 		return 0;
 	}
 	table->zName = 0;
 	if (tab_name)
-		if (__dbsql_strdup(NULL, tab_name, &table->zName) == ENOMEM) {
-			__dbsql_free(NULL, table);
+		if (__dbsql_strdup(parser->db, tab_name, &table->zName) == ENOMEM) {
+			__dbsql_free(parser->db, table);
 			return 0;
 		}
 	elist = select->pEList;
 	table->n_columns = elist->n_expressions;
 	DBSQL_ASSERT(table->n_columns > 0);
-	__dbsql_calloc(NULL, table->n_columns, sizeof(table->aCol[0]),
+	__dbsql_calloc(parser->db, table->n_columns, sizeof(table->aCol[0]),
 		       &table->aCol);
 	column = table->aCol;
 	for (i = 0; i < table->n_columns; i++) {
 		if (elist->a[i].zName) {
-			__dbsql_strdup(NULL, elist->a[i].zName, &column[i].zName);
+			__dbsql_strdup(parser->db, elist->a[i].zName, &column[i].zName);
 		} else if ((p = elist->a[i].pExpr)->op == TK_DOT &&
 			   (pr = p->pRight) != 0 &&
 			   pr->u.zToken.z && pr->u.zToken.z[0]) {
@@ -2945,7 +2945,7 @@ __select_result_set(parser_t* parser, char* tab_name, select_t* select)
 				      p->span.n, NULL);
 		} else {
 			sprintf(buf, "column%d", i+1);
-			__dbsql_strdup(NULL, buf, &table->aCol[i].zName);
+			__dbsql_strdup(parser->db, buf, &table->aCol[i].zName);
 		}
 	}
 	table->iPKey = -1;
