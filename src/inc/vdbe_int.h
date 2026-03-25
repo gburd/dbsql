@@ -454,7 +454,7 @@ struct aux_data {
  *   - Removed: zArgv, azColName (replaced by register-based mem_t arrays)
  *   - Removed: xCallback, pCbArg (replaced by OP_ResultRow)
  *   - Removed: nCallback, uniqueCnt, undoTransOnError, inTempTrans
- *   - Added: apCsr (pointer array of VdbeCursor* replaces inline aCsr)
+ *   - Added: cursors (pointer array of VdbeCursor* replaces inline aCsr)
  *   - Added: aVar as mem_t* (typed bind parameters)
  *   - Added: cacheCtr for column cache generation
  *   - Added: nChange for DML change counting
