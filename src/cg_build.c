@@ -1451,7 +1451,7 @@ void __create_view(parser, begin, name, select, temp)
 	 * allocated rather than point to the input string - which means that
 	 * they will persist after the current dbsql_exec() call returns.
 	 */
-	table->u.view.pSelect = __select_dup(select);
+	table->u.view.pSelect = __select_dup(parser->db, select);
 	__select_delete(select);
 	if (!parser->initFlag) {
 		__view_get_column_names(parser, table);
