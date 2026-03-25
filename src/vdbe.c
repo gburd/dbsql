@@ -624,7 +624,7 @@ __vdbe_exec(vdbe_t* p)
 	vdbe_op_t *pOp;            /* Current operation */
 	int rc = DBSQL_SUCCESS;    /* Value to return */
 	DBSQL *db = p->db;         /* The database */
-	mem_t *aMem;               /* Register array (replaces stack) */
+	mem_t *registers;               /* Register array (replaces stack) */
 #define BUF_SIZE 100
 	char zBuf[BUF_SIZE];       /* Space to sprintf() an integer */
 #ifdef VDBE_PROFILE
@@ -646,7 +646,7 @@ __vdbe_exec(vdbe_t* p)
 		goto no_mem;
 
 	/* Get register array from VDBE (register-based architecture) */
-	aMem = p->registers;
+	registers = p->registers;
 
 	/* Temporary compatibility variables for unconverted stack-based opcodes */
 	mem_t *pTos = NULL;      /* Top of stack (legacy - to be removed) */
@@ -659,7 +659,7 @@ __vdbe_exec(vdbe_t* p)
 	 *
 	 * CRITICAL: pTos starts at -1 (one BEFORE the first register) because
 	 * legacy push opcodes do pTos++ BEFORE writing. This means the first
-	 * push writes to aMem[0], second to aMem[1], etc.
+	 * push writes to registers[0], second to registers[1], etc.
 	 *
 	 * We allocated extra space (nMem includes +5 from vdbe_method.c) to
 	 * allow pushes beyond the parser-calculated register count.
@@ -667,7 +667,7 @@ __vdbe_exec(vdbe_t* p)
 	 * TODO: Remove once all opcodes are converted to pure register-based.
 	 */
 	if (p->nMem > 0) {
-		pTos = &aMem[-1];  /* Start one BEFORE first register */
+		pTos = &registers[-1];  /* Start one BEFORE first register */
 	}
 
 	/* Note: popStack logic removed - not needed in register-based VDBE */
@@ -781,7 +781,7 @@ case OP_Goto: {
 case OP_Gosub: {
 	/* Modern SQLite: return address stored in register P1 */
 	int iReg = pOp->p1;
-	mem_t *pRet = &aMem[iReg];
+	mem_t *pRet = &registers[iReg];
 	pRet->u.i = (i64)(pc + 1);
 	pRet->flags = MEM_Int;
 	pc = pOp->p2 - 1;
@@ -797,7 +797,7 @@ case OP_Gosub: {
 case OP_Return: {
 	/* Modern SQLite: return address read from register P1 */
 	int iReg = pOp->p1;
-	mem_t *pRet = &aMem[iReg];
+	mem_t *pRet = &registers[iReg];
 	if ((pRet->flags & MEM_Int) == 0) {
 		__str_append(&p->zErrMsg, "return address is not an integer",
 			     (char*)0);
@@ -848,12 +848,12 @@ case OP_Halt: {
 **
 ** Old stack-based: The integer value P1 is pushed onto the stack.
 ** To support both modes, if P2==0, use legacy stack mode (push).
-** Otherwise use register mode (store to aMem[P2]).
+** Otherwise use register mode (store to registers[P2]).
 */
 case OP_Integer: {
 	if (pOp->p2 > 0) {
 		/* Register-based mode: store to register P2 */
-		mem_t *pOut = &aMem[pOp->p2];
+		mem_t *pOut = &registers[pOp->p2];
 		pOut->u.i = pOp->p1;
 		pOut->flags = MEM_Int;
 	} else {
@@ -875,13 +875,13 @@ case OP_Integer: {
 ** Store the string value P3 into register P2. If P3==0 then store NULL.
 ** If P2==0, use legacy stack mode (push).
 **
-** Register-based: The string is stored in aMem[P2].
+** Register-based: The string is stored in registers[P2].
 */
 case OP_String: {
 	char *z = pOp->p3;
 	if (pOp->p2 > 0) {
 		/* Register-based mode */
-		mem_t *pOut = &aMem[pOp->p2];
+		mem_t *pOut = &registers[pOp->p2];
 		if( z==0 ){
 			pOut->flags = MEM_Null;
 		} else {
@@ -907,13 +907,13 @@ case OP_String: {
 **
 ** Store a NULL value in register P2. If P2==0, use stack mode (push NULL).
 **
-** Register-based: Store NULL in aMem[P2]
+** Register-based: Store NULL in registers[P2]
 ** Stack-based: Push NULL onto stack
 */
 case OP_Null: {
 	if (pOp->p2 > 0) {
 		/* Register-based mode */
-		mem_t *pOut = &aMem[pOp->p2];
+		mem_t *pOut = &registers[pOp->p2];
 		pOut->flags = MEM_Null;
 	} else {
 		/* Legacy stack-based mode */
@@ -935,7 +935,7 @@ case OP_Null: {
 case OP_Variable: {
 	int j = pOp->p1 - 1;
 	int iReg = pOp->p2;  /* Target register */
-	mem_t *pOut = &aMem[iReg];
+	mem_t *pOut = &registers[iReg];
 
 	if (j >= 0 && j < p->nVar && p->variables) {
 		/* variables is mem_t* array, copy the Mem */
@@ -1063,7 +1063,7 @@ case OP_ResultRow: {
 	DBSQL_ASSERT(pOp->p1 + pOp->p2 <= p->nMem + 1);
 
 	/* Point to first result register */
-	p->result_row = &aMem[pOp->p1];
+	p->result_row = &registers[pOp->p1];
 	p->cacheCtr = (p->cacheCtr + 2) | 1;
 	p->pc = (int)(pc + 1);
 	rc = DBSQL_ROW;
@@ -1976,7 +1976,7 @@ case OP_Noop: {
 */
 case OP_If: {
 	int c;
-	pIn1 = &aMem[pOp->p1];
+	pIn1 = &registers[pOp->p1];
 	c = __vdbe_boolean_value(pIn1, pOp->p3);
 	if (c) {
 		pc = pOp->p2 - 1;
@@ -1986,7 +1986,7 @@ case OP_If: {
 
 case OP_IfNot: {
 	int c;
-	pIn1 = &aMem[pOp->p1];
+	pIn1 = &registers[pOp->p1];
 	c = !__vdbe_boolean_value(pIn1, !pOp->p3);
 	if (c) {
 		pc = pOp->p2 - 1;
@@ -2101,7 +2101,7 @@ case OP_MakeRecord: {
 		/* REGISTER MODE: P1=first_reg, P2=field_count, P3=dest_reg */
 		int iFirst = pOp->p1;
 		nField = pOp->p2;
-		pOut = &aMem[pOp->p3];
+		pOut = &registers[pOp->p3];
 
 		DBSQL_ASSERT(iFirst >= 0 && iFirst + nField <= p->nMem);
 		DBSQL_ASSERT(pOp->p3 > 0 && pOp->p3 <= p->nMem);
@@ -2109,7 +2109,7 @@ case OP_MakeRecord: {
 		/* Calculate total size needed */
 		nByte = 0;
 		for (i = 0; i < nField; i++) {
-			pRec = &aMem[iFirst + i];
+			pRec = &registers[iFirst + i];
 			if ((pRec->flags & MEM_Null) == 0) {
 				__entity_as_string(pRec);
 				nByte += pRec->n;
@@ -2138,7 +2138,7 @@ case OP_MakeRecord: {
 		j = 0;
 		addr = idxWidth * (nField + 1);
 		for (i = 0; i < nField; i++) {
-			pRec = &aMem[iFirst + i];
+			pRec = &registers[iFirst + i];
 			zNewRecord[j++] = addr & 0xff;
 			if (idxWidth > 1) {
 				zNewRecord[j++] = (addr >> 8) & 0xff;
@@ -2162,7 +2162,7 @@ case OP_MakeRecord: {
 
 		/* Write field data */
 		for (i = 0; i < nField; i++) {
-			pRec = &aMem[iFirst + i];
+			pRec = &registers[iFirst + i];
 			if ((pRec->flags & MEM_Null) == 0) {
 				memcpy(&zNewRecord[j], pRec->z, pRec->n);
 				j += pRec->n;
@@ -3412,7 +3412,7 @@ case OP_NotExists: {
 ** table that cursor P1 points to. The new record number is stored
 ** in register P2. If P2==0, use legacy stack mode (push).
 **
-** Register-based: Result is stored in aMem[P2].
+** Register-based: Result is stored in registers[P2].
 */
 case OP_NewRecno: {
 	static struct drand48_data rand;
@@ -3511,7 +3511,7 @@ case OP_NewRecno: {
 	}
 	if (pOp->p2 > 0) {
 		/* Register-based mode */
-		mem_t *pOut = &aMem[pOp->p2];
+		mem_t *pOut = &registers[pOp->p2];
 		pOut->u.i = v;
 		pOut->flags = MEM_Int;
 	} else {
@@ -3741,7 +3741,7 @@ case OP_Column: {
 	if (regOut > 0) {
 		/* REGISTER MODE: write to register */
 		DBSQL_ASSERT(regOut > 0 && regOut <= p->nMem);
-		pDest = &aMem[regOut];
+		pDest = &registers[regOut];
 	} else {
 		/* STACK MODE: push to stack */
 		pTos++;
@@ -3867,7 +3867,7 @@ case OP_Rowid: {
 	DBSQL_ASSERT(pOp->p2 > 0 && pOp->p2 <= p->nMem);
 
 	pC = p->cursors[pOp->p1];
-	pOut = &aMem[pOp->p2];
+	pOut = &registers[pOp->p2];
 
 	/* Handle null row or missing cursor */
 	if (pC == 0 || pC->nullRow) {
