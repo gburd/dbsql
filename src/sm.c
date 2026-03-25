@@ -962,13 +962,15 @@ __sm_data(sm_cursor_t* smc, size_t offset, size_t len, char* value)
 
 	switch(smc->dbc->c_get(smc->dbc, &key, &data, DB_CURRENT)) {
 	case 0:
-		if (!data.data || ((len + offset) <= data.size)) {
+		if (data.data && ((len + offset) <= data.size)) {
 			memcpy((void *)value, ((char*)data.data) + offset,len);
 			amt = len;
-		} else {
+		} else if (data.data && (offset < data.size)) {
 			memcpy((void *)value, ((char*)data.data) + offset,
 			       data.size - offset);
 			amt = data.size - offset;
+		} else {
+			amt = 0;  /* No data or out of bounds */
 		}
 		break;
 	default:
