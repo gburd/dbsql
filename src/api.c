@@ -580,7 +580,7 @@ __process_sql(DBSQL *dbp, const char *sql, dbsql_callback callback,	void *arg, c
 		return DBSQL_ERROR;
 	}
 	*/
-	if (dbp->pVdbe == 0)
+	if (dbp->vdbe == 0)
 		dbp->_num_last_changes = 0;
 	memset(&parser, 0, sizeof(parser_t));
 	parser.db = dbp;

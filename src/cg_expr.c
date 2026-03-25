@@ -781,7 +781,7 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 			__dbsql_strdup(dbp, col_name, &z);
 		}
 		__error_msg(parser, err, z);
-		__dbsql_free(dbp, z);
+		__dbsql_free(parser->db, z);
 	}
 
 	/*
@@ -1376,7 +1376,7 @@ __release_temp_range(parser_t* parser, int base, int nreg)
 int
 __expr_code_target(parser_t* parser, expr_t* expr, int target)
 {
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	int i, op, dest, nexpr, nid, addr, expr_end_label, jump_inst;
 	int r1, r2;
 	int regFree1 = 0;
@@ -1513,7 +1513,7 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 				__vdbe_add_op(v, OP_String, 0, target);
 				__vdbe_change_p4(v, -1, z, (tok_n + 1));
 			}
-			__dbsql_free(dbp, z);
+			__dbsql_free(parser->db, z);
 			break;
 		}
 		/* FALLTHROUGH */
@@ -1732,7 +1732,7 @@ __expr_code_temp(parser_t* parser, expr_t* expr, int *reg_ptr)
 void
 __expr_if_true(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 {
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	int d2, addr, op = 0;
 
 	if (v == 0 || expr == 0)
@@ -1823,7 +1823,7 @@ __expr_if_true(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 void
 __expr_if_false(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 {
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	int addr, d2, op = 0;
 
 	if (v == 0 || expr == 0)

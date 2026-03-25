@@ -63,12 +63,12 @@ __vdbe_create(DBSQL* dbp)
 	if (__dbsql_calloc(dbp, 1, sizeof(vdbe_t), &vm) != 0)
 		return 0;
 	vm->db = dbp;
-	if (dbp->pVdbe) {
-		dbp->pVdbe->prev_vdbe = vm;
+	if (dbp->vdbe) {
+		dbp->vdbe->prev_vdbe = vm;
 	}
-	vm->next_vdbe = dbp->pVdbe;
+	vm->next_vdbe = dbp->vdbe;
 	vm->prev_vdbe = 0;
-	dbp->pVdbe = vm;
+	dbp->vdbe = vm;
 	vm->magic = VDBE_MAGIC_INIT;
 	return vm;
 }
@@ -134,7 +134,7 @@ int
 __vdbe_add_op3(vdbe_t* vm, int op, int p1, int p2, int p3)
 {
 	int i;
-	vdbe_op_t *pOp;
+	vdbe_op_t *op;
 
 	i = vm->nOp;
 	vm->nOp++;
@@ -145,17 +145,17 @@ __vdbe_add_op3(vdbe_t* vm, int op, int p1, int p2, int p3)
 			return 0;
 		}
 	}
-	pOp = &vm->opcodes[i];
-	pOp->opcode = op;
-	pOp->p1 = p1;
+	op = &vm->opcodes[i];
+	op->opcode = op;
+	op->p1 = p1;
 	if (p2 < 0 && (-1 - p2) < vm->nLabel && vm->labels[-1 - p2] >= 0) {
 		p2 = vm->labels[-1 - p2];
 	}
-	pOp->p2 = p2;
-	pOp->p3 = p3;
-	pOp->p4.p = 0;
-	pOp->p4type = P4_NOTUSED;
-	pOp->p5 = 0;
+	op->p2 = p2;
+	op->p3 = p3;
+	op->p4.p = 0;
+	op->p4type = P4_NOTUSED;
+	op->p5 = 0;
 #ifndef NDEBUG
 	if (dbsql_vdbe_add_op_trace)
 		__vdbe_print_op(0, i, &vm->opcodes[i]);
@@ -437,7 +437,7 @@ __vdbe_change_p3(vdbe_t* vm, int addr, int val)
 void
 __vdbe_change_p4(vdbe_t* vm, int addr, const char *p4, int p4type)
 {
-	vdbe_op_t *pOp;
+	vdbe_op_t *op;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	if (vm == 0 || vm->opcodes == 0)
 		return;
@@ -446,33 +446,33 @@ __vdbe_change_p4(vdbe_t* vm, int addr, const char *p4, int p4type)
 		if (addr < 0)
 			return;
 	}
-	pOp = &vm->opcodes[addr];
+	op = &vm->opcodes[addr];
 	/* Free any existing dynamic P4 value */
-	__vdbe_free_p4(pOp->p4type, pOp->p4.p);
-	pOp->p4.p = 0;
-	pOp->p4type = P4_NOTUSED;
+	__vdbe_free_p4(op->p4type, op->p4.p);
+	op->p4.p = 0;
+	op->p4type = P4_NOTUSED;
 	if (p4 == 0) {
 		return;
 	}
 	if (p4type < 0) {
 		/* Negative p4type values indicate the type directly */
-		pOp->p4.p = (void*)p4;
-		pOp->p4type = p4type;
+		op->p4.p = (void*)p4;
+		op->p4type = p4type;
 		if (p4type == P4_INT32) {
 			/* For INT32, the pointer IS the integer value */
-			pOp->p4.i = (int)(intptr_t)p4;
-			pOp->p4type = P4_INT32;
+			op->p4.i = (int)(intptr_t)p4;
+			op->p4type = P4_INT32;
 		}
 	} else if (p4type == P4_INT32) {
-		pOp->p4.i = (int)(intptr_t)p4;
-		pOp->p4type = P4_INT32;
+		op->p4.i = (int)(intptr_t)p4;
+		op->p4type = P4_INT32;
 	} else if (p4type >= 0) {
 		/* Copy p4type bytes of the string */
 		int n = p4type;
 		if (n == 0)
 			n = strlen(p4);
-		__str_nappend((char**)&pOp->p4.z, p4, n, NULL);
-		pOp->p4type = P4_DYNAMIC;
+		__str_nappend((char**)&op->p4.z, p4, n, NULL);
+		op->p4type = P4_DYNAMIC;
 	}
 }
 
@@ -1186,7 +1186,7 @@ __vdbe_list(vdbe_t* vm)
 	vm->nResColumn = 8;
 
 	for (i = vm->pc; vm->rc == DBSQL_SUCCESS && i < vm->nOp; i++) {
-		vdbe_op_t *pOp = &vm->opcodes[i];
+		vdbe_op_t *op = &vm->opcodes[i];
 
 		if (db->flags & DBSQL_Interrupt) {
 			db->flags &= ~DBSQL_Interrupt;
@@ -1206,28 +1206,28 @@ __vdbe_list(vdbe_t* vm)
 
 		/* opcode */
 		pMem = &vm->registers[1];
-		__vdbe_mem_set_str(pMem, __opcode_names[pOp->opcode],
+		__vdbe_mem_set_str(pMem, __opcode_names[op->opcode],
 				   -1, 0);
 
 		/* p1 */
 		pMem = &vm->registers[2];
-		__vdbe_mem_set_int64(pMem, pOp->p1);
+		__vdbe_mem_set_int64(pMem, op->p1);
 
 		/* p2 */
 		pMem = &vm->registers[3];
-		__vdbe_mem_set_int64(pMem, pOp->p2);
+		__vdbe_mem_set_int64(pMem, op->p2);
 
 		/* p3 */
 		pMem = &vm->registers[4];
-		__vdbe_mem_set_int64(pMem, pOp->p3);
+		__vdbe_mem_set_int64(pMem, op->p3);
 
 		/* p4 */
 		pMem = &vm->registers[5];
-		if (pOp->p4type == P4_DYNAMIC || pOp->p4type == P4_STATIC) {
-			__vdbe_mem_set_str(pMem, pOp->p4.z, -1, 0);
-		} else if (pOp->p4type == P4_INT32) {
+		if (op->p4type == P4_DYNAMIC || op->p4type == P4_STATIC) {
+			__vdbe_mem_set_str(pMem, op->p4.z, -1, 0);
+		} else if (op->p4type == P4_INT32) {
 			char buf[30];
-			sprintf(buf, "%d", pOp->p4.i);
+			sprintf(buf, "%d", op->p4.i);
 			__vdbe_mem_set_str(pMem, buf, -1,
 					   (void(*)(void*))(-1));
 		} else {
@@ -1236,7 +1236,7 @@ __vdbe_list(vdbe_t* vm)
 
 		/* p5 */
 		pMem = &vm->registers[6];
-		__vdbe_mem_set_int64(pMem, pOp->p5);
+		__vdbe_mem_set_int64(pMem, op->p5);
 
 		/* comment (empty for now) */
 		pMem = &vm->registers[7];
@@ -1696,7 +1696,7 @@ __vdbe_finalize(vdbe_t* vm, char* *err_msgs)
 	/* TODO: Legacy field want_to_close removed in SQLite 3.52.0
 	 * Database close handling is now done explicitly by the caller.
 	 * The following code was removed:
-	 *   if (db->want_to_close && db->pVdbe == 0) {
+	 *   if (db->want_to_close && db->vdbe == 0) {
 	 *       db->close(db);
 	 *   }
 	 */
@@ -1772,8 +1772,8 @@ __vdbe_delete(vdbe_t* vm)
 	if (vm->prev_vdbe) {
 		vm->prev_vdbe->next_vdbe = vm->next_vdbe;
 	} else {
-		DBSQL_ASSERT(vm->db->pVdbe == vm );
-		vm->db->pVdbe = vm->next_vdbe;
+		DBSQL_ASSERT(vm->db->vdbe == vm );
+		vm->db->vdbe = vm->next_vdbe;
 	}
 	if (vm->next_vdbe) {
 		vm->next_vdbe->prev_vdbe = vm->prev_vdbe;

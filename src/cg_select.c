@@ -515,7 +515,7 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 	int brk;
 {
 	int i, addr, addr1, addr2;
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	int regResult;      /* Start of memory holding current results */
 	int nResultCol;     /* Number of result columns */
 
@@ -810,7 +810,7 @@ __generate_column_types(parser_t* parser, src_list_t* tables, expr_list_t* elist
 	expr_t *p;
 	char *type;
 	table_t *table;
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	if (parser->useCallback &&
 	    (parser->db->flags & DBSQL_ReportTypes) == 0) {
 		return;
@@ -870,7 +870,7 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 	char namebuf[30]; /* TODO consider eliminating this */
 	expr_t *p;
 	table_t *table;
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	if (parser->colNamesSet || v == 0 || parser->rc == ENOMEM)
 		return;
 	parser->colNamesSet = 1;
@@ -1383,9 +1383,9 @@ __match_orderby_to_column(parser, select, orderby_clause, table_idx,
 vdbe_t *
 __parser_get_vdbe(parser_t* parser)
 {
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	if (v == 0) {
-		v = parser->pVdbe = __vdbe_create(parser->db);
+		v = parser->vdbe = __vdbe_create(parser->db);
 	}
 	return v;
 }

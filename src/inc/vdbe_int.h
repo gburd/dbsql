@@ -407,7 +407,7 @@ struct __dbsql_func {
 	mem_t *pOut;             /* The return value is stored here */
 	func_def_t *pFunc;       /* Pointer to function information */
 	mem_t *pMem;             /* Memory cell used to store aggregate context */
-	vdbe_t *pVdbe;           /* The VM that owns this context */
+	vdbe_t *vdbe;           /* The VM that owns this context */
 	int iOp;                 /* Instruction number of OP_Function */
 	int isError;             /* Error code returned by the function */
 	u8 enc;                  /* Encoding to use for results */

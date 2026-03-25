@@ -432,7 +432,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	int i;                    /* Loop counter */
 	where_info_t *where_info; /* Will become the return value of this
 				     function */
-	vdbe_t *v = parser->pVdbe;/* The virtual database engine */
+	vdbe_t *v = parser->vdbe;/* The virtual database engine */
 	int brk, cont = 0;        /* Addresses used during code generation */
 	int num_expr;             /* Number of subexpressions in the WHERE
 				     clause */
@@ -1384,7 +1384,7 @@ __where_end(where_info_t* winfo)
 	int i, addr;
 	where_level_t *level;
 	table_t *table;
-	vdbe_t *v = winfo->pParse->pVdbe;
+	vdbe_t *v = winfo->pParse->vdbe;
 	src_list_t *tab_list = winfo->pTabList;
 
 	for (i = (tab_list->n_sources - 1); i >= 0; i--) {
