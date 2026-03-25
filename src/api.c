@@ -345,7 +345,7 @@ __sqldb_init(p, dbp, name, temp, mem, init_sm)
 	__hash_init(&p->trigHash, DBSQL_HASH_STRING, 0);
 	__hash_init(&p->aFKey, DBSQL_HASH_STRING, 1);
 
-	__dbsql_strdup(NULL, name, &p->zName);
+	__dbsql_strdup(dbp, name, &p->zName);
 
 	if (init_sm) {
 		/* Create a Berkeley DB storage manager. */
