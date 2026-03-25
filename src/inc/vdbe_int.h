@@ -80,6 +80,17 @@ typedef struct vdbe_txt_blb_cache vdbe_txt_blb_cache_t;
 /* ================================================================
  * VdbeCursor -- register-based cursor structure
  *
+ * NAMING CONVENTION EXCEPTION: This structure uses PascalCase (VdbeCursor)
+ * instead of the standard snake_case_t convention for the following reasons:
+ *
+ *   1. Deep integration with VDBE opcode handlers (65+ references in vdbe.c)
+ *   2. Clear distinction from sm_cursor_t (Berkeley DB storage manager cursor)
+ *   3. Internal-only type (never exposed in public API)
+ *   4. Matches SQLite's struct VdbeCursor for easier reference/maintenance
+ *
+ * NOTE: The deprecated cursor_t forward declaration in dbsql_int.in will be
+ * removed in a future cleanup. All code should use VdbeCursor directly.
+ *
  * Replaces the old stack-based cursor_t.  Key changes:
  *   - eCurType field selects among btree, sorter, vtab, pseudo cursors
  *   - Union uc holds the type-specific cursor pointer
@@ -194,12 +205,21 @@ struct vdbe_txt_blb_cache {
 };
 
 /*
- * Backward compatibility note: cursor_t is forward-declared in
- * dbsql_int.in as "struct cursor".  The old struct cursor definition
- * has been replaced by VdbeCursor (struct VdbeCursor).  Code should
- * migrate from cursor_t to VdbeCursor.  The cursor_t typedef in
- * dbsql_int.in will be updated to point to VdbeCursor once all
- * dependent code is migrated.
+ * DEPRECATED TYPE NOTICE: cursor_t
+ *
+ * The cursor_t forward declaration in dbsql_int.in (line 129) is deprecated
+ * and scheduled for removal:
+ *
+ *   struct cursor; typedef struct cursor cursor_t;  // DEPRECATED
+ *
+ * This was a placeholder during the transition from stack-based to
+ * register-based VDBE. No actual "struct cursor" definition exists.
+ *
+ * MIGRATION: All code now uses VdbeCursor directly. The cursor_t forward
+ * declaration will be removed once all references are verified clean.
+ *
+ * PUBLIC API: VdbeCursor is internal-only (vdbe_int.h). External code
+ * should never see this type.
  */
 
 
