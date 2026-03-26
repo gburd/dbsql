@@ -369,13 +369,22 @@ __expr_list_append(expr_list_t* list, expr_t* expr, token_t* name)
 		DBSQL_ASSERT(list->n_allocated == 0);
 	}
 	if (list->n_allocated <= list->n_expressions) {
+		int old_allocated = list->n_allocated;
 		list->n_allocated = (list->n_allocated * 2) + 4;
-		if (__dbsql_realloc(NULL, (list->n_allocated * sizeof(list->a[0])),
-				 &list->a) == ENOMEM) {
-                        /* TODO Leak memory if malloc fails
-			 __expr_delete(expr); */
-			list->n_expressions = list->n_allocated = 0;
-			return list;
+		/* Berkeley DB __dbsql_realloc doesn't handle NULL pointers properly,
+		 * so use malloc for initial allocation, realloc for growth */
+		if (old_allocated == 0) {
+			if (__dbsql_malloc(NULL, (list->n_allocated * sizeof(list->a[0])),
+					&list->a) == ENOMEM) {
+				list->n_expressions = list->n_allocated = 0;
+				return list;
+			}
+		} else {
+			if (__dbsql_realloc(NULL, (list->n_allocated * sizeof(list->a[0])),
+					 &list->a) == ENOMEM) {
+				list->n_expressions = list->n_allocated = 0;
+				return list;
+			}
 		}
 	}
 	DBSQL_ASSERT(list->a != 0);
@@ -1376,7 +1385,7 @@ __release_temp_range(parser_t* parser, int base, int nreg)
 int
 __expr_code_target(parser_t* parser, expr_t* expr, int target)
 {
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	int i, op, dest, nexpr, nid, addr, expr_end_label, jump_inst;
 	int r1, r2;
 	int regFree1 = 0;
@@ -1732,7 +1741,7 @@ __expr_code_temp(parser_t* parser, expr_t* expr, int *reg_ptr)
 void
 __expr_if_true(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 {
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	int d2, addr, op = 0;
 
 	if (v == 0 || expr == 0)
@@ -1823,7 +1832,7 @@ __expr_if_true(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 void
 __expr_if_false(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 {
-	vdbe_t *v = parser->vdbe;
+	vdbe_t *v = parser->pVdbe;
 	int addr, d2, op = 0;
 
 	if (v == 0 || expr == 0)

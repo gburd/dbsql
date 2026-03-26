@@ -63,12 +63,12 @@ __vdbe_create(DBSQL* dbp)
 	if (__dbsql_calloc(dbp, 1, sizeof(vdbe_t), &vm) != 0)
 		return 0;
 	vm->db = dbp;
-	if (dbp->vdbe) {
-		dbp->vdbe->prev_vdbe = vm;
-	}
-	vm->next_vdbe = dbp->vdbe;
-	vm->prev_vdbe = 0;
-	dbp->vdbe = vm;
+// TODO: VDBE list management - 	if (dbp->vdbe) {
+// TODO: VDBE list management - 		dbp->vdbe->prev_vdbe = vm;
+// TODO: VDBE list management - 	}
+// TODO: VDBE list management - 	vm->next_vdbe = dbp->vdbe;
+// TODO: VDBE list management - 	vm->prev_vdbe = 0;
+// TODO: VDBE list management - 	dbp->vdbe = vm;
 	vm->magic = VDBE_MAGIC_INIT;
 	return vm;
 }
@@ -134,7 +134,7 @@ int
 __vdbe_add_op3(vdbe_t* vm, int op, int p1, int p2, int p3)
 {
 	int i;
-	vdbe_op_t *op;
+	vdbe_op_t *pOp;
 
 	i = vm->nOp;
 	vm->nOp++;
@@ -145,17 +145,17 @@ __vdbe_add_op3(vdbe_t* vm, int op, int p1, int p2, int p3)
 			return 0;
 		}
 	}
-	op = &vm->opcodes[i];
-	op->opcode = op;
-	op->p1 = p1;
+	pOp = &vm->opcodes[i];
+	pOp->opcode = op;
+	pOp->p1 = p1;
 	if (p2 < 0 && (-1 - p2) < vm->nLabel && vm->labels[-1 - p2] >= 0) {
 		p2 = vm->labels[-1 - p2];
 	}
-	op->p2 = p2;
-	op->p3 = p3;
-	op->p4.p = 0;
-	op->p4type = P4_NOTUSED;
-	op->p5 = 0;
+	pOp->p2 = p2;
+	pOp->p3 = p3;
+	pOp->p4.p = 0;
+	pOp->p4type = P4_NOTUSED;
+	pOp->p5 = 0;
 #ifndef NDEBUG
 	if (dbsql_vdbe_add_op_trace)
 		__vdbe_print_op(0, i, &vm->opcodes[i]);
@@ -350,6 +350,7 @@ __vdbe_add_op_list(vm, num_op, op)
 			vm->opcodes[i + addr] = op[i];
 			if (p2 < 0)
 				vm->opcodes[i + addr].p2 = addr + ADDR(p2);
+			/* Ensure p4type is set to P4_NOTUSED if p4.p is NULL */
 			if (op[i].p4.p == 0) {
 				vm->opcodes[i + addr].p4type = P4_NOTUSED;
 			}
@@ -1773,7 +1774,7 @@ __vdbe_delete(vdbe_t* vm)
 		vm->prev_vdbe->next_vdbe = vm->next_vdbe;
 	} else {
 		DBSQL_ASSERT(vm->db->vdbe == vm );
-		vm->db->vdbe = vm->next_vdbe;
+// TODO: VDBE list management - 		vm->db->vdbe = vm->next_vdbe;
 	}
 	if (vm->next_vdbe) {
 		vm->next_vdbe->prev_vdbe = vm->prev_vdbe;
