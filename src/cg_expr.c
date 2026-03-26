@@ -369,22 +369,13 @@ __expr_list_append(expr_list_t* list, expr_t* expr, token_t* name)
 		DBSQL_ASSERT(list->n_allocated == 0);
 	}
 	if (list->n_allocated <= list->n_expressions) {
-		int old_allocated = list->n_allocated;
 		list->n_allocated = (list->n_allocated * 2) + 4;
-		/* Berkeley DB __dbsql_realloc doesn't handle NULL pointers properly,
-		 * so use malloc for initial allocation, realloc for growth */
-		if (old_allocated == 0) {
-			if (__dbsql_malloc(NULL, (list->n_allocated * sizeof(list->a[0])),
-					&list->a) == ENOMEM) {
-				list->n_expressions = list->n_allocated = 0;
-				return list;
-			}
-		} else {
-			if (__dbsql_realloc(NULL, (list->n_allocated * sizeof(list->a[0])),
-					 &list->a) == ENOMEM) {
-				list->n_expressions = list->n_allocated = 0;
-				return list;
-			}
+		if (__dbsql_realloc(NULL, (list->n_allocated * sizeof(list->a[0])),
+				 &list->a) == ENOMEM) {
+                        /* TODO Leak memory if malloc fails
+			 __expr_delete(expr); */
+			list->n_expressions = list->n_allocated = 0;
+			return list;
 		}
 	}
 	DBSQL_ASSERT(list->a != 0);
