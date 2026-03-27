@@ -138,6 +138,7 @@ typedef struct vdbe_op_list VdbeOpList;
 #define P4_INT32      (-3)  /* P4 is a 32-bit signed integer */
 #define P4_SUBPROGRAM (-4)  /* P4 is a pointer to a sub_program_t */
 #define P4_TABLE      (-5)  /* P4 is a pointer to a table_t structure */
+#define P4_POINTER    (-17) /* Generic non-owning pointer (no free needed) */
 /* Above do not own any resources.  Must free those below */
 #define P4_FREE_IF_LE (-6)
 #define P4_DYNAMIC    (-6)  /* Pointer to memory from __os_malloc() */
@@ -156,7 +157,7 @@ typedef struct vdbe_op_list VdbeOpList;
 #define P3_NOTUSED    P4_NOTUSED
 #define P3_DYNAMIC    P4_DYNAMIC
 #define P3_STATIC     P4_STATIC
-#define P3_POINTER    P4_DYNAMIC  /* P3_POINTER maps to dynamic P4 */
+#define P3_POINTER    P4_POINTER  /* P3_POINTER maps to non-owning pointer */
 
 /* Error message codes for OP_Halt P5 */
 #define P5_ConstraintNotNull 1

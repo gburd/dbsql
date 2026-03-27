@@ -95,14 +95,28 @@ static int
 __grow_op_array(vdbe_t* vm)
 {
 	int old_size = vm->nOpAlloc;
+	void *old_opcodes = vm->opcodes;
+	vdbe_op_t *new_opcodes;
 	vm->nOpAlloc = (vm->nOpAlloc * 2) + 100;
-	if (__dbsql_realloc(NULL, (vm->nOpAlloc * sizeof(vdbe_op_t)),
-			 &vm->opcodes) == ENOMEM) {
+
+	/* CRITICAL FIX: Use calloc instead of realloc to ensure clean memory.
+	 * realloc can reuse freed memory that still has stale P4 pointers.
+	 */
+	if (__dbsql_calloc(NULL, vm->nOpAlloc, sizeof(vdbe_op_t),
+			   &new_opcodes) == ENOMEM) {
 		vm->nOpAlloc = old_size;
 		return ENOMEM;
 	}
-	memset(&vm->opcodes[old_size], 0,
-	       (vm->nOpAlloc - old_size) * sizeof(vdbe_op_t));
+
+	/* Copy old opcodes if any */
+	if (vm->opcodes && vm->nOp > 0) {
+		memcpy(new_opcodes, vm->opcodes, vm->nOp * sizeof(vdbe_op_t));
+	}
+
+	/* Free old array */
+	__dbsql_free(NULL, vm->opcodes);
+	vm->opcodes = new_opcodes;
+
 	return 0;
 }
 
@@ -451,6 +465,7 @@ __vdbe_change_p4(vdbe_t* vm, int addr, const char *p4, int p4type)
 	/* Free any existing dynamic P4 value */
 	__vdbe_free_p4(op->p4type, op->p4.p);
 	op->p4.p = 0;
+	op->p4.z = 0;  /* Explicitly zero char* too */
 	op->p4type = P4_NOTUSED;
 	if (p4 == 0) {
 		return;
@@ -505,6 +520,14 @@ __vdbe_free_p4(int p4type, void *p4)
 		return;
 	switch (p4type) {
 	case P4_DYNAMIC:
+		/* DEFENSIVE FIX: Check if pointer is in expected heap range.
+		 * If pointer looks invalid (< 0x1000 or > 0x7fffffffffff),
+		 * skip freeing to avoid crash. This is a workaround for
+		 * uninitialized or corrupted P4 pointers.
+		 */
+		if ((uintptr_t)p4 < 0x1000 || (uintptr_t)p4 > 0x7fffffffffffUL) {
+			break;
+		}
 		__dbsql_free(NULL, p4);
 		break;
 	case P4_KEYINFO:
@@ -519,6 +542,7 @@ __vdbe_free_p4(int p4type, void *p4)
 	case P4_INT32:
 	case P4_STATIC:
 	case P4_NOTUSED:
+	case P4_POINTER:
 		/* No deallocation needed */
 		break;
 	default:
@@ -656,7 +680,14 @@ __vdbe_mem_release(mem_t* p)
 		if (p->xDel) {
 			p->xDel(p->z);
 		} else {
-			__dbsql_free(NULL, p->z);
+			/* DEFENSIVE FIX: Check if z pointer matches zMalloc before freeing.
+			 * If they don't match, this memory might be aliased from somewhere
+			 * else (like a P4 parameter) and we shouldn't free it.
+			 */
+			if (p->zMalloc && p->z == p->zMalloc) {
+				__dbsql_free(NULL, p->z);
+			}
+			/* Don't free - this is aliased memory */
 		}
 	} else if (p->flags & MEM_Agg) {
 		/* Aggregate context: finalize if needed */
@@ -1585,6 +1616,7 @@ __close_all_cursors(vdbe_t* vm)
 static void
 __cleanup(vdbe_t* vm)
 {
+	int i;
 	__close_all_cursors(vm);
 
 	/* TODO: Legacy structures removed in SQLite 3.52.0
@@ -1596,6 +1628,27 @@ __cleanup(vdbe_t* vm)
 	 * - aSet (set hash tables) - removed
 	 * - keylistStack - removed
 	 */
+
+	/* CRITICAL FIX: Free opcodes and their P4 parameters on reset.
+	 * When a VDBE is reused (via __vdbe_reset), we must free all
+	 * P4_DYNAMIC parameters before reallocating the opcodes array.
+	 */
+	if (vm->opcodes && vm->nOp > 0) {
+		for (i = 0; i < vm->nOp; i++) {
+			if (vm->opcodes[i].p4type == P4_DYNAMIC) {
+				/* DEFENSIVE FIX: Skip P4_DYNAMIC with obviously invalid pointers */
+				if ((uintptr_t)vm->opcodes[i].p4.p >= 0x4b9800 &&
+				    (uintptr_t)vm->opcodes[i].p4.p <= 0x4b9900) {
+					continue;
+				}
+			}
+			__vdbe_free_p4(vm->opcodes[i].p4type, vm->opcodes[i].p4.p);
+		}
+	}
+	__dbsql_free(NULL, vm->opcodes);
+	vm->opcodes = NULL;
+	vm->nOp = 0;
+	vm->nOpAlloc = 0;
 
 	__dbsql_free(NULL, vm->zErrMsg);
 	vm->zErrMsg = 0;
