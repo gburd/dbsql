@@ -24,7 +24,7 @@
  * These routines are in a separate files so that they will not be linked
  * if they are not used.
  */
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 
 #ifndef NO_SYSTEM_INCLUDES
 #include <stdlib.h>

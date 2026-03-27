@@ -20,7 +20,7 @@
  * This file contains routines that handle WHERE statements.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 /*
@@ -149,7 +149,7 @@ __expr_table_usage(expr_mask_set_t* mask_set, expr_t* p)
 		mask |= __expr_table_usage(mask_set, p->pLeft);
 	}
 	if (p->pList) {
-		for(i = 0; i < p->pList->nExpr; i++) {
+		for(i = 0; i < p->pList->n_expressions; i++) {
 			mask |= __expr_table_usage(mask_set,
 						   p->pList->a[i].pExpr);
 		}
@@ -266,9 +266,9 @@ static index_t *__find_sorting_index(table, base, orderby_clause,
 	int num_expr;
 
 	DBSQL_ASSERT(orderby_clause != 0);
-	DBSQL_ASSERT(orderby_clause->nExpr > 0);
+	DBSQL_ASSERT(orderby_clause->n_expressions > 0);
 	sort_order = (orderby_clause->a[0].sortOrder & DBSQL_SO_DIRMASK);
-	for (i = 0; i < orderby_clause->nExpr; i++) {
+	for (i = 0; i < orderby_clause->n_expressions; i++) {
 		if ((orderby_clause->a[i].sortOrder & DBSQL_SO_DIRMASK) !=
 		    sort_order) {
 			/*
@@ -300,8 +300,8 @@ static index_t *__find_sorting_index(table, base, orderby_clause,
 	 */
 	match = 0;
 	for (idx = table->pIndex; idx; idx = idx->pNext) {
-		num_expr = orderby_clause->nExpr;
-		if (idx->nColumn < num_eq_col || idx->nColumn < num_expr)
+		num_expr = orderby_clause->n_expressions;
+		if (idx->n_key_columns < num_eq_col || idx->n_key_columns < num_expr)
 			continue;
 		for (i = j = 0; i < num_eq_col; i++) {
 			if (preferred_idx->aiColumn[i] != idx->aiColumn[i])
@@ -432,7 +432,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	int i;                    /* Loop counter */
 	where_info_t *where_info; /* Will become the return value of this
 				     function */
-	vdbe_t *v = parser->pVdbe;/* The virtual database engine */
+	vdbe_t *v = parser->vdbe;/* The virtual database engine */
 	int brk, cont = 0;        /* Addresses used during code generation */
 	int num_expr;             /* Number of subexpressions in the WHERE
 				     clause */
@@ -468,7 +468,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 * 'push_key_p' is only allowed if there is a single table
 	 * (as in an INSERT or UPDATE statement).
 	 */
-	DBSQL_ASSERT(push_key_p == 0 || tab_list->nSrc == 1);
+	DBSQL_ASSERT(push_key_p == 0 || tab_list->n_sources == 1);
 
 	/*
 	 * Split the WHERE clause into separate subexpressions where each
@@ -484,7 +484,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		__str_append(&parser->zErrMsg,
 			     "WHERE clause too complex - no more "
 			     "than ", buf, " terms allowed", (char*)0);
-		parser->nErr++;
+		parser->n_errors++;
 		return 0;
 	}
   
@@ -493,14 +493,14 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 * become the return value.
 	 */
 	if (__dbsql_calloc(parser->db, 1, sizeof(where_info_t) +
-		    (tab_list->nSrc * sizeof(where_level_t)),
+		    (tab_list->n_sources * sizeof(where_level_t)),
 			&where_info) == ENOMEM) {
 		__dbsql_free(parser->db, where_info);
 		return 0;
 	}
 	where_info->pParse = parser;
 	where_info->pTabList = tab_list;
-	where_info->peakNTab = where_info->savedNTab = parser->nTab;
+	where_info->peak_n_tab = where_info->saved_n_tab = parser->n_tables;
 	where_info->iBreak = __vdbe_make_label(v);
 
 	/*
@@ -508,7 +508,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 * expression and either jump over all of the code or fall thru.
 	 */
 	if (where_clause &&
-	    (tab_list->nSrc == 0 || __expr_is_constant(where_clause))) {
+	    (tab_list->n_sources == 0 || __expr_is_constant(where_clause))) {
 		__expr_if_false(parser, where_clause, where_info->iBreak, 1);
 		where_clause = 0;
 	}
@@ -542,7 +542,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	/*
 	 * Figure out what index to use (if any) for each nested loop.
 	 * Make where_info->a[i].pIdx point to the index to use for the i-th
-	 * nested loop where i==0 is the outer loop and i==tab_list->nSrc-1
+	 * nested loop where i==0 is the outer loop and i==tab_list->n_sources-1
 	 * is the inner loop. 
 	 *
 	 * If terms exist that use the ROWID of any table, then set the
@@ -557,7 +557,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 * to the limit of 32 bits in an integer bitmask.
 	 */
 	loop_mask = 0;
-	for(i = 0; i < tab_list->nSrc && i < ARRAY_SIZE(direct_eq); i++) {
+	for(i = 0; i < tab_list->n_sources && i < ARRAY_SIZE(direct_eq); i++) {
 		cur = tab_list->a[i].iCursor; /* The cursor for this table */
 		mask = __get_cursor_bitmask(&mask_set, cur);
 		table = tab_list->a[i].pTab;
@@ -655,14 +655,14 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			 lt_mask = 0;
 			 gt_mask = 0;
 			 in_mask = 0;
-			 if (idx->nColumn > 32)
+			 if (idx->n_key_columns > 32)
 				 continue;/* Ignore indices too many columns */
 			 for (j = 0; j < num_expr; j++) {
 				 if (wc_exprs[j].idxLeft == cur &&
 				     ((wc_exprs[j].prereqRight & loop_mask) ==
 				      wc_exprs[j].prereqRight)) {
 					 col = wc_exprs[j].p->pLeft->iColumn;
-					 for (k = 0; k < idx->nColumn; k++) {
+					 for (k = 0; k < idx->n_key_columns; k++) {
 					 if (idx->aiColumn[k] == col) {
 						 switch(wc_exprs[j].p->op){
 						 case TK_IN:
@@ -692,7 +692,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 				     ((wc_exprs[j].prereqLeft & loop_mask) ==
 				      wc_exprs[j].prereqLeft)) {
 					 col = wc_exprs[j].p->pRight->iColumn;
-					 for (k = 0; k < idx->nColumn; k++) {
+					 for (k = 0; k < idx->n_key_columns; k++) {
 					 if (idx->aiColumn[k] == col) {
 						 switch(wc_exprs[j].p->op) {
 						 case TK_EQ:
@@ -721,7 +721,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			  * number of columns on the left of the index with
 			  * == constraints.
 			  */
-			 for (num_eq = 0; num_eq < idx->nColumn; num_eq++) {
+			 for (num_eq = 0; num_eq < idx->n_key_columns; num_eq++) {
 				 m = (1 << (num_eq + 1)) - 1;
 				 if ((m & eq_mask) != m)
 					 break;
@@ -748,8 +748,8 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		 where_info->a[i].bRev = 0;
 		 loop_mask |= mask;
 		 if (best_idx) {
-			 where_info->a[i].iCur = parser->nTab++;
-			 where_info->peakNTab = parser->nTab;
+			 where_info->a[i].iCur = parser->n_tables++;
+			 where_info->peak_n_tab = parser->n_tables;
 		 }
 	}
 
@@ -757,7 +757,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 * Check to see if the ORDER BY clause is or can be satisfied by the
 	 * use of an index on the first table.
 	 */
-	if (orderby_clause && *orderby_clause && tab_list->nSrc > 0) {
+	if (orderby_clause && *orderby_clause && tab_list->n_sources > 0) {
 		rev = 0;
 		table = tab_list->a[0].pTab;
 		idx = where_info->a[0].pIdx;
@@ -785,8 +785,8 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		if (sort_idx && (idx == 0 || idx == sort_idx)) {
 			if (idx == 0) {
 				where_info->a[0].pIdx = sort_idx;
-				where_info->a[0].iCur = parser->nTab++;
-				where_info->peakNTab = parser->nTab;
+				where_info->a[0].iCur = parser->n_tables++;
+				where_info->peak_n_tab = parser->n_tables;
 			}
 			where_info->a[0].bRev = rev;
 			*orderby_clause = 0;
@@ -797,7 +797,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 * Open all tables in the tab_list and all indices used by those
 	 * tables.
 	 */
-	for (i = 0; i < tab_list->nSrc; i++) {
+	for (i = 0; i < tab_list->n_sources; i++) {
 		table = tab_list->a[i].pTab;
 		if ((table->tabFlags & TF_Ephemeral) || table->pSelect )
 			continue;
@@ -820,7 +820,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 	 * Generate the code to do the search.
 	 */
 	loop_mask = 0;
-	for (i = 0; i < tab_list->nSrc; i++) {
+	for (i = 0; i < tab_list->n_sources; i++) {
 		cur = tab_list->a[i].iCursor;
 		level = &where_info->a[i];
 
@@ -830,9 +830,9 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 		 * matches any row of the left table of the join.
 		 */
 		if (i > 0 && (tab_list->a[(i - 1)].jointype & JT_LEFT) != 0) {
-			if (!parser->nMem)
-				parser->nMem++;
-			level->iLeftJoin = parser->nMem++;
+			if (!parser->n_memory)
+				parser->n_memory++;
+			level->iLeftJoin = parser->n_memory++;
 			__vdbe_add_op(v, OP_String, 0, 0);
 			__vdbe_add_op(v, OP_MemStore, level->iLeftJoin, 1);
 		}
@@ -864,7 +864,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					level->inP1 = ex->iTable;
 					level->inP2 = __vdbe_current_addr(v);
 				} else {
-					DBSQL_ASSERT(ex->pSelect);
+					DBSQL_ASSERT(ex->select);
 					__vdbe_add_op(v, OP_Rewind,
 						      ex->iTable, brk);
 					__vdbe_add_op(v, OP_KeyAsData,
@@ -918,7 +918,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 								level->inP1 = ex->iTable;
 								level->inP2 = __vdbe_current_addr(v);
 							} else {
-								DBSQL_ASSERT(ex->pSelect);
+								DBSQL_ASSERT(ex->select);
 								__vdbe_add_op(v, OP_Rewind, ex->iTable, brk);
 								__vdbe_add_op(v, OP_KeyAsData, ex->iTable, 1);
 								level->inP2 = __vdbe_add_op(v, OP_FullKey, ex->iTable, 0);
@@ -942,7 +942,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					}
 				}
 			}
-			level->iMem = parser->nMem++;
+			level->iMem = parser->n_memory++;
 			cont = level->cont = __vdbe_make_label(v);
 			__vdbe_add_op(v, OP_NotNull, -col_num,
 				      (__vdbe_current_addr(v) + 3));
@@ -950,7 +950,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			__vdbe_add_op(v, OP_Goto, 0, brk);
 			__vdbe_add_op(v, OP_MakeKey, col_num, 0);
 			__add_idx_key_type(v, idx);
-			if (col_num == idx->nColumn || level->bRev) {
+			if (col_num == idx->n_key_columns || level->bRev) {
 				__vdbe_add_op(v, OP_MemStore, level->iMem, 0);
 				test_op = OP_IdxGT;
 			} else {
@@ -978,7 +978,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			__vdbe_add_op(v, OP_RowKey, level->iCur, 0);
 			__vdbe_add_op(v, OP_IdxIsNull, col_num, cont);
 			__vdbe_add_op(v, OP_IdxRecno, level->iCur, 0);
-			if (i == tab_list->nSrc-1 && push_key_p) {
+			if (i == tab_list->n_sources-1 && push_key_p) {
 				have_key_p = 1;
 			} else {
 				__vdbe_add_op(v, OP_MoveTo, cur, 0);
@@ -1031,7 +1031,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 						    wc_exprs[k].p->pLeft);
 				}
 				/*TODO: __vdbe_add_op(v, OP_MustBeInt, 0, __vdbe_current_addr(v)+1); */
-				level->iMem = parser->nMem++;
+				level->iMem = parser->n_memory++;
 				__vdbe_add_op(v, OP_MemStore, level->iMem, 1);
 				if (((wc_exprs[k].p->op == TK_LT) ||
 				     (wc_exprs[k].p->op == TK_GT))) {
@@ -1183,7 +1183,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			}
 			if (test_op != OP_Noop) {
 				col = eqcols + (score & 1);
-				level->iMem = parser->nMem++;
+				level->iMem = parser->n_memory++;
 				__vdbe_add_op(v, OP_NotNull, -col,
 					      (__vdbe_current_addr(v) + 3));
 				__vdbe_add_op(v, OP_Pop, col, 0);
@@ -1265,7 +1265,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 					__vdbe_add_op(v, OP_IncrKey, 0, 0);
 				}
 				if (level->bRev) {
-					level->iMem = parser->nMem++;
+					level->iMem = parser->n_memory++;
 					__vdbe_add_op(v, OP_MemStore,
 						      level->iMem, 1);
 					test_op = OP_IdxLT;
@@ -1293,7 +1293,7 @@ where_info_t *__where_begin(parser, tab_list, where_clause, push_key_p,
 			__vdbe_add_op(v, OP_IdxIsNull, (eqcols + (score & 1)),
 				      cont);
 			__vdbe_add_op(v, OP_IdxRecno, level->iCur, 0);
-			if (i == (tab_list->nSrc - 1) && push_key_p) {
+			if (i == (tab_list->n_sources - 1) && push_key_p) {
 				have_key_p = 1;
 			} else {
 				__vdbe_add_op(v, OP_MoveTo, cur, 0);
@@ -1384,10 +1384,10 @@ __where_end(where_info_t* winfo)
 	int i, addr;
 	where_level_t *level;
 	table_t *table;
-	vdbe_t *v = winfo->pParse->pVdbe;
+	vdbe_t *v = winfo->pParse->vdbe;
 	src_list_t *tab_list = winfo->pTabList;
 
-	for (i = (tab_list->nSrc - 1); i >= 0; i--) {
+	for (i = (tab_list->n_sources - 1); i >= 0; i--) {
 		level = &winfo->a[i];
 		__vdbe_resolve_label(v, level->cont);
 		if (level->op != OP_Noop) {
@@ -1412,7 +1412,7 @@ __where_end(where_info_t* winfo)
 		}
 	}
 	__vdbe_resolve_label(v, winfo->iBreak);
-	for (i = 0; i < tab_list->nSrc; i++) {
+	for (i = 0; i < tab_list->n_sources; i++) {
 		table = tab_list->a[i].pTab;
 		DBSQL_ASSERT(table != 0);
 		if ((table->tabFlags & TF_Ephemeral) || table->pSelect)
@@ -1423,9 +1423,13 @@ __where_end(where_info_t* winfo)
 			__vdbe_add_op(v, OP_Close, level->iCur, 0);
 		}
 	}
-#if 0  /* NOTE: Never reuse a cursor */
-	if( winfo->pParse->nTab==winfo->peakNTab ){
-		winfo->pParse->nTab = winfo->savedNTab;
+#if 0  /* DESIGN NOTE: Never reuse a cursor
+        * This code would restore nTab to savedNTab, but cursor reuse
+        * is intentionally disabled as a design decision.
+        * Reusing cursors can lead to subtle bugs with nested queries.
+        */
+	if( winfo->pParse->nTab==winfo->peak_n_tab ){
+		winfo->pParse->nTab = winfo->saved_n_tab;
 	}
 #endif
 	__dbsql_free(winfo->pParse->db, winfo);

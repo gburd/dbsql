@@ -23,7 +23,7 @@
  * with '--disable-auth'.  Then recompile the entire library.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 #ifndef DBSQL_OMIT_AUTHORIZATION
@@ -103,7 +103,7 @@ __auth_bad_return_code(parser_t* parser, int rc)
 		     buf, " from the authorization function - ",
 		     "should be DBSQL_SUCCESS, DBSQL_IGNORE, or DBSQL_DENY",
 		     (char*)0);
-	parser->nErr++;
+	parser->n_errors++;
 	parser->rc = DBSQL_MISUSE;
 }
 
@@ -137,11 +137,11 @@ __auth_read(parser_t* parser, expr_t* expr, src_list_t* tab_list)
 	if (dbp->auth == 0)
 		return;
 	DBSQL_ASSERT(expr->op == TK_COLUMN);
-	for (src = 0; src < tab_list->nSrc; src++) {
+	for (src = 0; src < tab_list->n_sources; src++) {
 		if (expr->iTable == tab_list->a[src].iCursor)
 			break;
 	}
-	if (src >= 0 && src < tab_list->nSrc) {
+	if (src >= 0 && src < tab_list->n_sources) {
 		table = tab_list->a[src].pTab;
 	} else {
 		/*
@@ -157,10 +157,10 @@ __auth_read(parser_t* parser, expr_t* expr, src_list_t* tab_list)
 	if (table == 0)
 		return;
 	if (expr->iColumn >= 0) {
-		DBSQL_ASSERT(expr->iColumn < table->nCol);
+		DBSQL_ASSERT(expr->iColumn < table->n_columns);
 		col = table->aCol[expr->iColumn].zName;
 	} else if (table->iPKey >= 0) {
-		DBSQL_ASSERT(table->iPKey < table->nCol);
+		DBSQL_ASSERT(table->iPKey < table->n_columns);
 		col = table->aCol[table->iPKey].zName;
 	} else {
 		col = "ROWID";
@@ -181,7 +181,7 @@ __auth_read(parser_t* parser, expr_t* expr, src_list_t* tab_list)
 				     table->zName, ".", col, " is prohibited",
 				     (char*)0);
 		}
-		parser->nErr++;
+		parser->n_errors++;
 		parser->rc = DBSQL_AUTH;
 	} else if (rc != DBSQL_SUCCESS) {
 		__auth_bad_return_code(parser, rc);
@@ -218,7 +218,7 @@ __auth_check(parser, code, arg1, arg2, arg3)
 		__str_append(&parser->zErrMsg, "not authorized",
 			     (char*)0);
 		parser->rc = DBSQL_AUTH;
-		parser->nErr++;
+		parser->n_errors++;
 	} else if (rc != DBSQL_SUCCESS && rc != DBSQL_IGNORE) {
 		rc = DBSQL_DENY;
 		__auth_bad_return_code(parser, rc);

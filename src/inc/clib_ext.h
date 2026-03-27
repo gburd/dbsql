@@ -12,7 +12,7 @@ int getopt __P((int, char * const *, const char *));
 #ifndef HAVE_MEMCMP
 int memcmp __P((const void *, const void *, size_t));
 #endif
-#ifndef HAVE_SRAND48_R
+#if !defined(__GLIBC__) && !defined(HAVE_SRAND48_R)
 int srand48_r __P((struct drand48_data *));
 #endif
 int rand8_r __P((struct drand48_data *, u_int8_t *));

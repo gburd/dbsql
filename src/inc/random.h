@@ -28,7 +28,9 @@
 extern "C" {
 #endif
 
-#ifndef HAVE_SRAND48_R
+/* Note: On modern glibc systems, drand48_data is provided by stdlib.h
+ * We only define our own version if the system doesn't provide it */
+#if !defined(__GLIBC__) && !defined(HAVE_SRAND48_R)
 struct drand48_data {
 	int init_p;          /* True if initialized */
 	int i, j;            /* State variables */

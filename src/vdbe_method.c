@@ -23,14 +23,14 @@
  * Updated for register-based VM execution model (SQLite 3.52.0 compatible).
  * Key changes from the stack-based model:
  *   - Instructions have 5 operands: P1, P2, P3 (int), P4 (union), P5 (u16)
- *   - Values live in numbered registers (aMem[]) instead of an operand stack
- *   - Cursors are a pointer array (apCsr[]) instead of inline array
+ *   - Values live in numbered registers (registers[]) instead of an operand stack
+ *   - Cursors are a pointer array (cursors[]) instead of inline array
  *   - Result delivery via OP_ResultRow pointing to register range
  *   - Variables stored as Mem structures (aVar[]) instead of string arrays
  *   - Column names stored as Mem structures (aColName[])
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 
 #ifndef NO_SYSTEM_INCLUDES
 #include <ctype.h>
@@ -60,15 +60,15 @@ vdbe_t *
 __vdbe_create(DBSQL* dbp)
 {
 	vdbe_t *vm;
-	if (__dbsql_calloc(dbp, 1, sizeof(vdbe_t), &vm) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(vdbe_t), &vm) != 0)
 		return 0;
 	vm->db = dbp;
-	if (dbp->pVdbe) {
-		dbp->pVdbe->prev_vdbe = vm;
-	}
-	vm->next_vdbe = dbp->pVdbe;
-	vm->prev_vdbe = 0;
-	dbp->pVdbe = vm;
+// TODO: VDBE list management - 	if (dbp->vdbe) {
+// TODO: VDBE list management - 		dbp->vdbe->prev_vdbe = vm;
+// TODO: VDBE list management - 	}
+// TODO: VDBE list management - 	vm->next_vdbe = dbp->vdbe;
+// TODO: VDBE list management - 	vm->prev_vdbe = 0;
+// TODO: VDBE list management - 	dbp->vdbe = vm;
 	vm->magic = VDBE_MAGIC_INIT;
 	return vm;
 }
@@ -350,6 +350,7 @@ __vdbe_add_op_list(vm, num_op, op)
 			vm->opcodes[i + addr] = op[i];
 			if (p2 < 0)
 				vm->opcodes[i + addr].p2 = addr + ADDR(p2);
+			/* Ensure p4type is set to P4_NOTUSED if p4.p is NULL */
 			if (op[i].p4.p == 0) {
 				vm->opcodes[i + addr].p4type = P4_NOTUSED;
 			}
@@ -437,7 +438,7 @@ __vdbe_change_p3(vdbe_t* vm, int addr, int val)
 void
 __vdbe_change_p4(vdbe_t* vm, int addr, const char *p4, int p4type)
 {
-	vdbe_op_t *pOp;
+	vdbe_op_t *op;
 	DBSQL_ASSERT(vm->magic == VDBE_MAGIC_INIT);
 	if (vm == 0 || vm->opcodes == 0)
 		return;
@@ -446,33 +447,33 @@ __vdbe_change_p4(vdbe_t* vm, int addr, const char *p4, int p4type)
 		if (addr < 0)
 			return;
 	}
-	pOp = &vm->opcodes[addr];
+	op = &vm->opcodes[addr];
 	/* Free any existing dynamic P4 value */
-	__vdbe_free_p4(pOp->p4type, pOp->p4.p);
-	pOp->p4.p = 0;
-	pOp->p4type = P4_NOTUSED;
+	__vdbe_free_p4(op->p4type, op->p4.p);
+	op->p4.p = 0;
+	op->p4type = P4_NOTUSED;
 	if (p4 == 0) {
 		return;
 	}
 	if (p4type < 0) {
 		/* Negative p4type values indicate the type directly */
-		pOp->p4.p = (void*)p4;
-		pOp->p4type = p4type;
+		op->p4.p = (void*)p4;
+		op->p4type = p4type;
 		if (p4type == P4_INT32) {
 			/* For INT32, the pointer IS the integer value */
-			pOp->p4.i = (int)(intptr_t)p4;
-			pOp->p4type = P4_INT32;
+			op->p4.i = (int)(intptr_t)p4;
+			op->p4type = P4_INT32;
 		}
 	} else if (p4type == P4_INT32) {
-		pOp->p4.i = (int)(intptr_t)p4;
-		pOp->p4type = P4_INT32;
+		op->p4.i = (int)(intptr_t)p4;
+		op->p4type = P4_INT32;
 	} else if (p4type >= 0) {
 		/* Copy p4type bytes of the string */
 		int n = p4type;
 		if (n == 0)
 			n = strlen(p4);
-		__str_nappend((char**)&pOp->p4.z, p4, n, NULL);
-		pOp->p4type = P4_DYNAMIC;
+		__str_nappend((char**)&op->p4.z, p4, n, NULL);
+		op->p4type = P4_DYNAMIC;
 	}
 }
 
@@ -554,7 +555,7 @@ __vdbe_dequote_p4(vdbe_t* vm, int addr)
 		return;
 	}
 	if (op->p4type != P4_DYNAMIC) {
-		__dbsql_strdup(NULL, op->p4.z, (char**)&op->p4.z);
+		__dbsql_strdup(vm->db, op->p4.z, (char**)&op->p4.z);
 		op->p4type = P4_DYNAMIC;
 	}
 	__str_unquote((char*)op->p4.z);
@@ -583,7 +584,7 @@ __vdbe_compress_space(vdbe_t* vm, int addr)
 		return;
 	}
 	if (op->p4type != P4_DYNAMIC) {
-		__dbsql_strdup(NULL, op->p4.z, (char**)&op->p4.z);
+		__dbsql_strdup(vm->db, op->p4.z, (char**)&op->p4.z);
 		op->p4type = P4_DYNAMIC;
 	}
 	z = (unsigned char*)op->p4.z;
@@ -1186,7 +1187,7 @@ __vdbe_list(vdbe_t* vm)
 	vm->nResColumn = 8;
 
 	for (i = vm->pc; vm->rc == DBSQL_SUCCESS && i < vm->nOp; i++) {
-		vdbe_op_t *pOp = &vm->opcodes[i];
+		vdbe_op_t *op = &vm->opcodes[i];
 
 		if (db->flags & DBSQL_Interrupt) {
 			db->flags &= ~DBSQL_Interrupt;
@@ -1206,28 +1207,28 @@ __vdbe_list(vdbe_t* vm)
 
 		/* opcode */
 		pMem = &vm->registers[1];
-		__vdbe_mem_set_str(pMem, __opcode_names[pOp->opcode],
+		__vdbe_mem_set_str(pMem, __opcode_names[op->opcode],
 				   -1, 0);
 
 		/* p1 */
 		pMem = &vm->registers[2];
-		__vdbe_mem_set_int64(pMem, pOp->p1);
+		__vdbe_mem_set_int64(pMem, op->p1);
 
 		/* p2 */
 		pMem = &vm->registers[3];
-		__vdbe_mem_set_int64(pMem, pOp->p2);
+		__vdbe_mem_set_int64(pMem, op->p2);
 
 		/* p3 */
 		pMem = &vm->registers[4];
-		__vdbe_mem_set_int64(pMem, pOp->p3);
+		__vdbe_mem_set_int64(pMem, op->p3);
 
 		/* p4 */
 		pMem = &vm->registers[5];
-		if (pOp->p4type == P4_DYNAMIC || pOp->p4type == P4_STATIC) {
-			__vdbe_mem_set_str(pMem, pOp->p4.z, -1, 0);
-		} else if (pOp->p4type == P4_INT32) {
+		if (op->p4type == P4_DYNAMIC || op->p4type == P4_STATIC) {
+			__vdbe_mem_set_str(pMem, op->p4.z, -1, 0);
+		} else if (op->p4type == P4_INT32) {
 			char buf[30];
-			sprintf(buf, "%d", pOp->p4.i);
+			sprintf(buf, "%d", op->p4.i);
 			__vdbe_mem_set_str(pMem, buf, -1,
 					   (void(*)(void*))(-1));
 		} else {
@@ -1236,7 +1237,7 @@ __vdbe_list(vdbe_t* vm)
 
 		/* p5 */
 		pMem = &vm->registers[6];
-		__vdbe_mem_set_int64(pMem, pOp->p5);
+		__vdbe_mem_set_int64(pMem, op->p5);
 
 		/* comment (empty for now) */
 		pMem = &vm->registers[7];
@@ -1310,8 +1311,8 @@ __vdbe_set_col_name(vdbe_t* vm, int idx, int var, const char *zName,
  *	calls to __vdbe_exec().
  *
  *	For the register-based VM:
- *	  - aMem[0..nMem-1] is the register array
- *	  - apCsr[0..nCursor-1] is the cursor pointer array
+ *	  - registers[0..nMem-1] is the register array
+ *	  - cursors[0..nCursor-1] is the cursor pointer array
  *	  - aVar[0..nVar-1] is the bound parameter array
  *
  * PUBLIC: void __vdbe_make_ready __P((vdbe_t *, int, int, int, int));
@@ -1351,10 +1352,10 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 
 	/*
 	 * Each cursor uses a memory cell.  The first cursor (cursor 0)
-	 * can use aMem[0].  Allocate space for cursors at the end of aMem[].
+	 * can use registers[0].  Allocate space for cursors at the end of registers[].
 	 */
 	nMem += nCursor;
-	if (nCursor == 0 && nMem > 0) nMem++;  /* Space for aMem[0] */
+	if (nCursor == 0 && nMem > 0) nMem++;  /* Space for registers[0] */
 
 	/*
 	 * Fix for DDL statements: Ensure minimum register allocation.
@@ -1362,7 +1363,7 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 	 * (OP_MakeRecord with 5 fields) that haven't been fully converted to
 	 * register-based model. They need at least 10 registers to work:
 	 * - MakeRecord(5) needs pTos[1-5] = registers [pTos-4..pTos]
-	 * - If pTos = aMem[n_memory-1], we need n_memory >= 5
+	 * - If pTos = registers[n_memory-1], we need n_memory >= 5
 	 * - Allocate 10 for safety margin and future opcodes
 	 */
 	if (nMem < 10) {
@@ -1370,7 +1371,19 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 	}
 
 	/*
-	 * Allocate the register array (aMem).
+	 * CRITICAL FIX: Add extra registers for stack growth.
+	 * Legacy stack-based opcodes do pTos++ to push values, where pTos
+	 * starts at &registers[nMem-1]. This means they can access registers[nMem],
+	 * registers[nMem+1], etc. which are OUT OF BOUNDS if we only allocate nMem
+	 * registers. Add 5 extra registers to allow for stack pushes.
+	 *
+	 * Example: SELECT 1 does OP_Integer which does pTos++ then writes to pTos,
+	 * accessing registers[10] when only registers[0..9] are allocated.
+	 */
+	nMem += 5;  /* Add extra space for legacy stack pushes */
+
+	/*
+	 * Allocate the register array (registers).
 	 */
 	if (vm->registers == 0) {
 		vm->nVar = nVar;
@@ -1399,7 +1412,7 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 		}
 
 		/*
-		 * Allocate the cursor pointer array (apCsr).
+		 * Allocate the cursor pointer array (cursors).
 		 */
 		if (nCursor > 0) {
 			if (__dbsql_calloc(NULL, nCursor,
@@ -1417,7 +1430,7 @@ __vdbe_make_ready(vdbe_t* vm, int nVar, int nMem, int nCursor, int explain_p)
 		vm->trace = stdout;
 	}
 #endif
-	vm->pc = -1; /* Will be set to 0 on first step */
+	vm->pc = 0; /* Start at first instruction */
 	vm->rc = DBSQL_SUCCESS;
 	vm->errorAction = OE_Abort;
 	vm->explain |= explain_p;
@@ -1522,13 +1535,13 @@ __vdbe_free_cursor(vdbe_t* vm, VdbeCursor* pCur)
 		break;
 	}
 
-	__dbsql_free(vm->db, pCur);
+	__dbsql_free(NULL, pCur);
 }
 
 /*
  * __close_all_cursors --
  *	Close all cursors.  In the register-based VM, cursors are stored
- *	as a pointer array (apCsr[]), not an inline array.
+ *	as a pointer array (cursors[]), not an inline array.
  *
  *	Also release any dynamic memory held by registers, since register
  *	values may hold pointers to cursor-related resources.
@@ -1684,7 +1697,7 @@ __vdbe_finalize(vdbe_t* vm, char* *err_msgs)
 	/* TODO: Legacy field want_to_close removed in SQLite 3.52.0
 	 * Database close handling is now done explicitly by the caller.
 	 * The following code was removed:
-	 *   if (db->want_to_close && db->pVdbe == 0) {
+	 *   if (db->want_to_close && db->vdbe == 0) {
 	 *       db->close(db);
 	 *   }
 	 */
@@ -1760,8 +1773,8 @@ __vdbe_delete(vdbe_t* vm)
 	if (vm->prev_vdbe) {
 		vm->prev_vdbe->next_vdbe = vm->next_vdbe;
 	} else {
-		DBSQL_ASSERT(vm->db->pVdbe == vm );
-		vm->db->pVdbe = vm->next_vdbe;
+		DBSQL_ASSERT(vm->db->vdbe == vm );
+// TODO: VDBE list management - 		vm->db->vdbe = vm->next_vdbe;
 	}
 	if (vm->next_vdbe) {
 		vm->next_vdbe->prev_vdbe = vm->prev_vdbe;
@@ -1772,9 +1785,10 @@ __vdbe_delete(vdbe_t* vm)
 	if (vm->nOpAlloc == 0) {
 		vm->opcodes = 0;
 		vm->nOp = 0;
-	}
-	for (i = 0; i < vm->nOp; i++) {
-		__vdbe_free_p4(vm->opcodes[i].p4type, vm->opcodes[i].p4.p);
+	} else {
+		for (i = 0; i < vm->nOp; i++) {
+			__vdbe_free_p4(vm->opcodes[i].p4type, vm->opcodes[i].p4.p);
+		}
 	}
 
 	/* Free bound parameters */

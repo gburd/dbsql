@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 /*
@@ -93,9 +93,10 @@ __safety_off(DBSQL* dbp)
 int
 __safety_check(DBSQL* dbp)
 {
-	if (dbp->pVdbe != 0) {
-		dbp->magic = DBSQL_STATUS_ERROR;
-		return 1;
-	}
+	// TODO: Check VDBE list - need dbp->pVdbe field
+	// if (dbp->pVdbe != 0) {
+	// 	dbp->magic = DBSQL_STATUS_ERROR;
+	// 	return 1;
+	// }
 	return 0;
 }

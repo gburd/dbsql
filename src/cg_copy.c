@@ -21,7 +21,7 @@
  * This file contains code used to implement the COPY command.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 /*
@@ -81,7 +81,7 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 		__vdbe_prepare_write(parser, 1, table->iDb);
 		addr = __vdbe_add_op(v, OP_FileOpen, 0, 0);
 		__vdbe_change_p4(v, addr, filename->z, filename->n);
-		__vdbe_dequote_p3(v, addr);
+		__vdbe_dequote_p4(v, addr);
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, 0, table->tnum);
 		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
@@ -97,10 +97,10 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 			__vdbe_add_op(v, OP_Integer, 0, 0);
 		}
 		end = __vdbe_make_label(v);
-		addr = __vdbe_add_op(v, OP_FileRead, table->nCol, end);
+		addr = __vdbe_add_op(v, OP_FileRead, table->n_columns, end);
 		if (delimiter) {
 			__vdbe_change_p4(v, addr, delimiter->z, delimiter->n);
-			__vdbe_dequote_p3(v, addr);
+			__vdbe_dequote_p4(v, addr);
 		} else {
 			__vdbe_change_p4(v, addr, "\t", 1);
 		}
@@ -110,7 +110,7 @@ void __copy(parser, table_name, filename, delimiter, on_error)
 		} else {
 			__vdbe_add_op(v, OP_NewRecno, 0, 0);
 		}
-		for(i = 0; i < table->nCol; i++) {
+		for(i = 0; i < table->n_columns; i++) {
 			if (i == table->iPKey) {
 				/*
 				 * The integer primary key column is filled

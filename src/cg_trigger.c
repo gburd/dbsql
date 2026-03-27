@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 /*
@@ -128,13 +128,13 @@ __begin_trigger(parser, trigger, tr_tm, op, columns, tab_name, foreach,
 	if (strncasecmp(table->zName, MASTER_NAME,
 				   strlen(MASTER_NAME)) == 0) {
 		__error_msg(parser, "cannot create trigger on system table");
-		parser->nErr++;
+		parser->n_errors++;
 		goto trigger_cleanup;
 	}
 	if (strncasecmp(table->zName, TEMP_MASTER_NAME,
 				   strlen(TEMP_MASTER_NAME)) == 0) {
 		__error_msg(parser, "cannot create trigger on system table");
-		parser->nErr++;
+		parser->n_errors++;
 		goto trigger_cleanup;
 	}
 	if (table->pSelect && tr_tm != TK_INSTEAD) {
@@ -189,8 +189,8 @@ __begin_trigger(parser, trigger, tr_tm, op, columns, tab_name, foreach,
 	nt->iTabDb = table->iDb;
 	nt->op = op;
 	nt->tr_tm = tr_tm;
-	nt->pWhen = __expr_dup(when_clause);
-	nt->pColumns = __id_list_dup(columns);
+	nt->pWhen = __expr_dup(dbp, when_clause);
+	nt->pColumns = __id_list_dup(dbp, columns);
 	nt->foreach = foreach;
 	__token_copy(&nt->nameToken,trigger);
 	DBSQL_ASSERT( parser->pNewTrigger==0 );
@@ -224,7 +224,7 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 	trigger_t *nt = 0; /* The trigger whose construction is finishing up */
 	DBSQL *dbp = parser->db;
 
-	if (parser->nErr || parser->pNewTrigger == 0)
+	if (parser->n_errors || parser->pNewTrigger == 0)
 		goto triggerfinish_cleanup;
 	nt = parser->pNewTrigger;
 	parser->pNewTrigger = 0;
@@ -282,8 +282,8 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 		table = __locate_table(parser, nt->table,
 				       dbp->aDb[nt->iTabDb].zName);
 		DBSQL_ASSERT(table != 0);
-		nt->pNext = table->pTrigger;
-		table->pTrigger = nt;
+		nt->pNext = table->first_trigger;
+		table->first_trigger = nt;
 		nt = 0;
 	}
 
@@ -305,32 +305,32 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
  *	copy of all the Expr.token.z strings so that the trigger_step_t
  *	structure will be valid even after the dbsql_exec() call returns.
  *
- * STATIC: static void __persist_trigger_step __P((trigger_step_t *));
+ * STATIC: static void __persist_trigger_step __P((DBSQL *, trigger_step_t *));
  */
 static void
-__persist_trigger_step(trigger_step_t* ts)
+__persist_trigger_step(DBSQL* dbp, trigger_step_t* ts)
 {
 	if (ts->target.z) {
-		__dbsql_strndup(NULL, ts->target.z, &ts->target.z, ts->target.n);
+		__dbsql_strndup(dbp, ts->target.z, &ts->target.z, ts->target.n);
 		ts->target.dyn = 1;
 	}
 	if (ts->pSelect) {
-		select_t *new = __select_dup(ts->pSelect);
+		select_t *new = __select_dup(dbp, ts->pSelect);
 		__select_delete(ts->pSelect);
 		ts->pSelect = new;
 	}
 	if( ts->pWhere ){
-		expr_t *new = __expr_dup(ts->pWhere);
+		expr_t *new = __expr_dup(dbp, ts->pWhere);
 		__expr_delete(ts->pWhere);
 		ts->pWhere = new;
 	}
 	if (ts->pExprList) {
-		expr_list_t *new = __expr_list_dup(ts->pExprList);
+		expr_list_t *new = __expr_list_dup(dbp, ts->pExprList);
 		__expr_list_delete(ts->pExprList);
 		ts->pExprList = new;
 	}
 	if (ts->pIdList) {
-		id_list_t *new = __id_list_dup(ts->pIdList);
+		id_list_t *new = __id_list_dup(dbp, ts->pIdList);
 		__id_list_delete(ts->pIdList);
 		ts->pIdList = new;
 	}
@@ -344,20 +344,20 @@ __persist_trigger_step(trigger_step_t* ts)
  *	The parser calls this routine when it finds a SELECT statement in
  *	body of a TRIGGER.
  *
- * PUBLIC: trigger_step_t * __trigger_select_step __P((select_t *));
+ * PUBLIC: trigger_step_t * __trigger_select_step __P((DBSQL *, select_t *));
  */
 trigger_step_t *
-__trigger_select_step(select_t* select)
+__trigger_select_step(DBSQL* dbp, select_t* select)
 {
 	trigger_step_t *ts;
-	
-	if (__dbsql_calloc(NULL, 1, sizeof(trigger_step_t), &ts) == ENOMEM)
+
+	if (__dbsql_calloc(dbp, 1, sizeof(trigger_step_t), &ts) == ENOMEM)
 		return 0;
 
 	ts->op = TK_SELECT;
 	ts->pSelect = select;
 	ts->orconf = OE_Default;
-	__persist_trigger_step(ts);
+	__persist_trigger_step(dbp, ts);
 
 	return ts;
 }
@@ -370,9 +370,10 @@ __trigger_select_step(select_t* select)
  *	The parser calls this routine when it sees an INSERT inside the
  *	body of a trigger.
  *
- * PUBLIC: trigger_step_t *__trigger_insert_step __P((token_t *, id_list_t *,
+ * PUBLIC: trigger_step_t *__trigger_insert_step __P((DBSQL *, token_t *, id_list_t *,
  * PUBLIC:                 expr_list_t *, select_t *, int));
  *
+ * dbp				Database handle
  * tab_name			Name of the table into which we insert
  * column			List of columns in tab_name to insert into
  * elist			The VALUE clause: a list of values to be
@@ -382,11 +383,11 @@ __trigger_select_step(select_t* select)
  *                              etc.)
  */
 trigger_step_t *
-__trigger_insert_step(token_t* tab_name, id_list_t* column, expr_list_t* elist, select_t* select, int orconf)
+__trigger_insert_step(DBSQL* dbp, token_t* tab_name, id_list_t* column, expr_list_t* elist, select_t* select, int orconf)
 {
 	trigger_step_t *ts;
 
-	if (__dbsql_calloc(NULL, 1, sizeof(trigger_step_t), &ts) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(trigger_step_t), &ts) == ENOMEM)
 		return 0;
 
 	DBSQL_ASSERT(elist == 0 || select == 0);
@@ -398,7 +399,7 @@ __trigger_insert_step(token_t* tab_name, id_list_t* column, expr_list_t* elist, 
 	ts->pIdList = column;
 	ts->pExprList = elist;
 	ts->orconf = orconf;
-	__persist_trigger_step(ts);
+	__persist_trigger_step(dbp, ts);
 
 	return ts;
 }
@@ -409,9 +410,10 @@ __trigger_insert_step(token_t* tab_name, id_list_t* column, expr_list_t* elist, 
  *	a pointer to that trigger step.  The parser calls this routine when it
  *	sees an UPDATE statement inside the body of a CREATE TRIGGER.
  *
- * PUBLIC: trigger_step_t *__trigger_update_step __P((token_t *, expr_list_t *,
+ * PUBLIC: trigger_step_t *__trigger_update_step __P((DBSQL *, token_t *, expr_list_t *,
  * PUBLIC:                 expr_t *, int));
  *
+ * dbp				Database handle
  * tab_name			Name of the table to be updated
  * elist			The SET clause: list of column and new values
  * where_clause			The WHERE clause
@@ -419,11 +421,11 @@ __trigger_insert_step(token_t* tab_name, id_list_t* column, expr_list_t* elist, 
  *                              etc)
  */
 trigger_step_t *
-__trigger_update_step(token_t* tab_name, expr_list_t* elist, expr_t* where_clause, int orconf)
+__trigger_update_step(DBSQL* dbp, token_t* tab_name, expr_list_t* elist, expr_t* where_clause, int orconf)
 {
 	trigger_step_t *ts;
 
-	if (__dbsql_calloc(NULL, 1, sizeof(trigger_step_t), &ts) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(trigger_step_t), &ts) == ENOMEM)
 		return 0;
 
 	ts->op = TK_UPDATE;
@@ -431,7 +433,7 @@ __trigger_update_step(token_t* tab_name, expr_list_t* elist, expr_t* where_claus
 	ts->pExprList = elist;
 	ts->pWhere = where_clause;
 	ts->orconf = orconf;
-	__persist_trigger_step(ts);
+	__persist_trigger_step(dbp, ts);
 
 	return ts;
 }
@@ -442,21 +444,21 @@ __trigger_update_step(token_t* tab_name, expr_list_t* elist, expr_t* where_claus
  *	a pointer to that trigger step.  The parser calls this routine when it
  *	sees a DELETE statement inside the body of a CREATE TRIGGER.
  *
- * PUBLIC: trigger_step_t *__trigger_delete_step __P((token_t *, expr_t *));
+ * PUBLIC: trigger_step_t *__trigger_delete_step __P((DBSQL *, token_t *, expr_t *));
  */
 trigger_step_t *
-__trigger_delete_step(token_t* tab_name, expr_t* where_clause)
+__trigger_delete_step(DBSQL* dbp, token_t* tab_name, expr_t* where_clause)
 {
 	trigger_step_t *ts;
 
-	if (__dbsql_calloc(NULL, 1, sizeof(trigger_step_t), &ts) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(trigger_step_t), &ts) == ENOMEM)
 		return 0;
 
 	ts->op = TK_DELETE;
 	ts->target  = *tab_name;
 	ts->pWhere = where_clause;
 	ts->orconf = OE_Default;
-	__persist_trigger_step(ts);
+	__persist_trigger_step(dbp, ts);
 
 	return ts;
 }
@@ -612,10 +614,10 @@ __drop_trigger_ptr(parser_t* parser, trigger_t* trigger, int nested)
 	if (!parser->explain) {
 		const char *name = trigger->name;
 		int len = strlen(name);
-		if (table->pTrigger == trigger) {
-			table->pTrigger = trigger->pNext;
+		if (table->first_trigger == trigger) {
+			table->first_trigger = trigger->pNext;
 		} else {
-			trigger_t *cc = table->pTrigger;
+			trigger_t *cc = table->first_trigger;
 			while(cc) { 
 				if (cc->pNext == trigger) {
 					cc->pNext = cc->pNext->pNext;
@@ -771,12 +773,12 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 	trigger_step_t * ts = steplist;
 
 	while (ts) {
-		int saveNTab = parser->nTab;
+		int saveNTab = parser->n_tables;
 		orconf = (orconfin == OE_Default)?ts->orconf:orconfin;
 		parser->trigStack->orconf = orconf;
 		switch(ts->op) {
 		case TK_SELECT: {
-			select_t * ss = __select_dup(ts->pSelect);
+			select_t * ss = __select_dup(parser->db, ts->pSelect);
 			DBSQL_ASSERT(ss);
 			DBSQL_ASSERT(ss->pSrc);
 			__select(parser, ss, SRT_Discard, 0, 0, 0, 0);
@@ -786,34 +788,34 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 		case TK_UPDATE: {
 			src_list_t *src;
 			src = targetSrcList(parser, ts);
-			__vdbe_add_op(parser->pVdbe, OP_ListPush, 0, 0);
+			__vdbe_add_op(parser->vdbe, OP_ListPush, 0, 0);
 			__update(parser, src,
-				 __expr_list_dup(ts->pExprList), 
-				 __expr_dup(ts->pWhere), orconf);
-			__vdbe_add_op(parser->pVdbe, OP_ListPop, 0, 0);
+				 __expr_list_dup(parser->db, ts->pExprList), 
+				 __expr_dup(parser->db, ts->pWhere), orconf);
+			__vdbe_add_op(parser->vdbe, OP_ListPop, 0, 0);
 			break;
 		}
 		case TK_INSERT: {
 			src_list_t *src;
 			src = targetSrcList(parser, ts);
 			__insert(parser, src,
-				 __expr_list_dup(ts->pExprList), 
-				 __select_dup(ts->pSelect), 
-				 __id_list_dup(ts->pIdList), orconf);
+				 __expr_list_dup(parser->db, ts->pExprList), 
+				 __select_dup(parser->db, ts->pSelect), 
+				 __id_list_dup(parser->db, ts->pIdList), orconf);
 			break;
 		}
 		case TK_DELETE: {
 			src_list_t *src;
-			__vdbe_add_op(parser->pVdbe, OP_ListPush, 0, 0);
+			__vdbe_add_op(parser->vdbe, OP_ListPush, 0, 0);
 			src = targetSrcList(parser, ts);
-			__delete_from(parser, src, __expr_dup(ts->pWhere));
-			__vdbe_add_op(parser->pVdbe, OP_ListPop, 0, 0);
+			__delete_from(parser, src, __expr_dup(parser->db, ts->pWhere));
+			__vdbe_add_op(parser->vdbe, OP_ListPop, 0, 0);
 			break;
 		}
 		default:
 			DBSQL_ASSERT(0);
 		} 
-		parser->nTab = saveNTab;
+		parser->n_tables = saveNTab;
 		ts = ts->pNext;
 	}
 	return 0;
@@ -872,7 +874,7 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 
 	DBSQL_ASSERT(new_idx != -1 || old_idx != -1);
 
-	trigger = table->pTrigger;
+	trigger = table->first_trigger;
 	while(trigger) {
 		int fire_this = 0;
 
@@ -920,8 +922,8 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 			/*
 			 * Code the WHEN clause.
 			 */
-			end_trigger = __vdbe_make_label(parser->pVdbe);
-			when_expr = __expr_dup(trigger->pWhen);
+			end_trigger = __vdbe_make_label(parser->vdbe);
+			when_expr = __expr_dup(parser->db, trigger->pWhen);
 			if (__expr_resolve_ids(parser, &dummy_tab_list, 0,
 					       when_expr)) {
 				parser->trigStack = parser->trigStack->pNext;
@@ -942,7 +944,7 @@ int __code_row_trigger(parser, op, changes, tr_tm, table, new_idx, old_idx,
 			__auth_context_pop(&authctx);
 			__dbsql_free(dbp, trig_stack);
 
-			__vdbe_resolve_label(parser->pVdbe, end_trigger);
+			__vdbe_resolve_label(parser->vdbe, end_trigger);
 		}
 		trigger = trigger->pNext;
 	}

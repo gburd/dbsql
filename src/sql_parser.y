@@ -35,11 +35,11 @@
       __set_string(&pParse->zErrMsg, "incomplete SQL statement", (char*)0);
     }
   }
-  pParse->nErr++;
+  pParse->n_errors++;
 }
 %name dbsql_parser
 %include {
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 #include "sql_parser.h"
 
@@ -359,32 +359,32 @@ from(A) ::= FROM seltablist(X).               {A = X;}
 //
 stl_prefix(A) ::= seltablist(X) joinop(Y).    {
    A = X;
-   if( A && A->nSrc>0 ) A->a[A->nSrc-1].jointype = Y;
+   if( A && A->n_sources>0 ) A->a[A->n_sources-1].jointype = Y;
 }
 stl_prefix(A) ::= .                           {A = 0;}
 seltablist(A) ::= stl_prefix(X) nm(Y) dbnm(D) as(Z) on_opt(N) using_opt(U). {
   A = __src_list_append(X,&Y,&D);
   if( Z.n ) __src_list_add_alias(A,&Z);
   if( N ){
-    if( A && A->nSrc>1 ){ A->a[A->nSrc-2].pOn = N; }
+    if( A && A->n_sources>1 ){ A->a[A->n_sources-2].pOn = N; }
     else { __expr_delete(N); }
   }
   if( U ){
-    if( A && A->nSrc>1 ){ A->a[A->nSrc-2].pUsing = U; }
+    if( A && A->n_sources>1 ){ A->a[A->n_sources-2].pUsing = U; }
     else { __id_list_delete(U); }
   }
 }
 seltablist(A) ::= stl_prefix(X) LP seltablist_paren(S) RP
                   as(Z) on_opt(N) using_opt(U). {
   A = __src_list_append(X,0,0);
-  A->a[A->nSrc-1].pSelect = S;
+  A->a[A->n_sources-1].pSelect = S;
   if( Z.n ) __src_list_add_alias(A,&Z);
   if( N ){
-    if( A && A->nSrc>1 ){ A->a[A->nSrc-2].pOn = N; }
+    if( A && A->n_sources>1 ){ A->a[A->n_sources-2].pOn = N; }
     else { __expr_delete(N); }
   }
   if( U ){
-    if( A && A->nSrc>1 ){ A->a[A->nSrc-2].pUsing = U; }
+    if( A && A->n_sources>1 ){ A->a[A->n_sources-2].pUsing = U; }
     else { __id_list_delete(U); }
   }
 }
@@ -435,7 +435,7 @@ orderby_opt(A) ::= .                          {A = 0;}
 orderby_opt(A) ::= ORDER BY sortlist(X).      {A = X;}
 sortlist(A) ::= sortlist(X) COMMA sortitem(Y) collate(C) sortorder(Z). {
   A = __expr_list_append(X,Y,0);
-  if( A ) A->a[A->nExpr-1].sortOrder = C+Z;
+  if( A ) A->a[A->n_expressions-1].sortOrder = C+Z;
 }
 sortlist(A) ::= sortitem(Y) collate(C) sortorder(Z). {
   A = __expr_list_append(0,Y,0);
@@ -560,7 +560,7 @@ expr(A) ::= FLOAT(X).        {A = __expr(TK_FLOAT, 0, 0, &X);}
 expr(A) ::= STRING(X).       {A = __expr(TK_STRING, 0, 0, &X);}
 expr(A) ::= VARIABLE(X).     {
   A = __expr(TK_VARIABLE, 0, 0, &X);
-  if( A ) A->iTable = ++pParse->nVar;
+  if( A ) A->iTable = ++pParse->n_variables;
 }
 expr(A) ::= ID(X) LP exprlist(Y) RP(E). {
   A = __expr_function(Y, &X);
@@ -841,24 +841,24 @@ trigger_cmd_list(A) ::= . { A = 0; }
 
 %type trigger_cmd {trigger_step_t *}
 %destructor trigger_cmd {__vdbe_delete_trigger_step($$);}
-// UPDATE 
-trigger_cmd(A) ::= UPDATE orconf(R) nm(X) SET setlist(Y) where_opt(Z).  
-               { A = __trigger_update_step(&X, Y, Z, R); }
+// UPDATE
+trigger_cmd(A) ::= UPDATE orconf(R) nm(X) SET setlist(Y) where_opt(Z).
+               { A = __trigger_update_step(pParse->db, &X, Y, Z, R); }
 
 // INSERT
-trigger_cmd(A) ::= INSERT orconf(R) INTO nm(X) inscollist_opt(F) 
-  VALUES LP itemlist(Y) RP.  
-{A = __trigger_insert_step(&X, F, Y, 0, R);}
+trigger_cmd(A) ::= INSERT orconf(R) INTO nm(X) inscollist_opt(F)
+  VALUES LP itemlist(Y) RP.
+{A = __trigger_insert_step(pParse->db, &X, F, Y, 0, R);}
 
 trigger_cmd(A) ::= INSERT orconf(R) INTO nm(X) inscollist_opt(F) select(S).
-               {A = __trigger_insert_step(&X, F, 0, S, R);}
+               {A = __trigger_insert_step(pParse->db, &X, F, 0, S, R);}
 
 // DELETE
 trigger_cmd(A) ::= DELETE FROM nm(X) where_opt(Y).
-               {A = __trigger_delete_step(&X, Y);}
+               {A = __trigger_delete_step(pParse->db, &X, Y);}
 
 // SELECT
-trigger_cmd(A) ::= select(X).  {A = __trigger_select_step(X); }
+trigger_cmd(A) ::= select(X).  {A = __trigger_select_step(pParse->db, X); }
 
 // The special RAISE expression that may occur in trigger programs
 expr(A) ::= RAISE(X) LP IGNORE RP(Y).  {

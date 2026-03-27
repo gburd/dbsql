@@ -21,7 +21,7 @@
  * to handle ATTACH and DETACH statements.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 /*
@@ -102,7 +102,7 @@ __attach(parser_t* parser, token_t* file, token_t* db)
 	new->zName = databasename;
 	__dbsql_free(dbp, filename);
 	dbp->flags &= ~DBSQL_Initialized;
-	if (parser->nErr)
+	if (parser->n_errors)
 		return;
 	if (rc == DBSQL_SUCCESS) {
 		rc = __init_databases(parser->db, &parser->zErrMsg);
@@ -115,7 +115,7 @@ __attach(parser_t* parser, token_t* file, token_t* db)
 			dbp->aDb[i].pBt = 0;
 		}
 		__reset_internal_schema(dbp, 0);
-		parser->nErr++;
+		parser->n_errors++;
 		parser->rc = DBSQL_ERROR;
 	}
 }
@@ -259,7 +259,7 @@ int __ref_normalize_src_list(normctx, src_list)
 				    name, src_list->a[i].zDatabase);
 			return 1;
 		}
-		if (__ref_normalize_select(normctx, src_list->a[i].pSelect))
+		if (__ref_normalize_select(normctx, src_list->a[i].select))
 			return 1;
 		if (__ref_normalize_expr(normctx, src_list->a[i].pOn))
 			return 1;
@@ -313,16 +313,16 @@ int __ref_normalize_expr(normctx, expr)
 	expr_t *expr;
 {
 	while (expr) {
-		if (__ref_normalize_select(normctx, expr->pSelect)) {
+		if (__ref_normalize_select(normctx, expr->select)) {
 			return 1;
 		}
-		if (__ref_normalize_expr_list(normctx, expr->pList)) {
+		if (__ref_normalize_expr_list(normctx, expr->expr_list)) {
 			return 1;
 		}
-		if (__ref_normalize_expr(normctx, expr->pRight)) {
+		if (__ref_normalize_expr(normctx, expr->right)) {
 			return 1;
 		}
-		expr = expr->pLeft;
+		expr = expr->left;
 	}
 	return 0;
 }

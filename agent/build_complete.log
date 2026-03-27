@@ -1,0 +1,35 @@
+this derivation will be built:
+  /nix/store/2rbnkrf6pjiqr0gmdqkny3rc27s7wxzf-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/2rbnkrf6pjiqr0gmdqkny3rc27s7wxzf-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/2rbnkrf6pjiqr0gmdqkny3rc27s7wxzf-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/ihqi21q3m13f7rakn1x587f95qdbli1j-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       > ../dist/../src/inc/vdbe_int.h:58:44: note: in definition of macro 'INT_TO_KEY'
+       >    58 | #define INT_TO_KEY(X)   (__vdbe_byte_swap((X) ^ 0x80000000))
+       >       |                                            ^
+       > ../dist/../src/vdbe_method.c:1904:30: error: invalid use of incomplete typedef 'cursor_t' {aka 'struct cursor'}
+       >  1904 |                 __sm_moveto(p->pCursor, (char*)&encoded_key,
+       >       |                              ^~
+       > ../dist/../src/vdbe_method.c:1906:18: error: invalid use of incomplete typedef 'cursor_t' {aka 'struct cursor'}
+       >  1906 |                 p->lastRecno = (int64_t)(int)p->movetoTarget;
+       >       |                  ^~
+       > ../dist/../src/vdbe_method.c:1906:47: error: invalid use of incomplete typedef 'cursor_t' {aka 'struct cursor'}
+       >  1906 |                 p->lastRecno = (int64_t)(int)p->movetoTarget;
+       >       |                                               ^~
+       > ../dist/../src/vdbe_method.c:1907:18: error: invalid use of incomplete typedef 'cursor_t' {aka 'struct cursor'}
+       >  1907 |                 p->recnoIsValid = (res == 0);
+       >       |                  ^~
+       > ../dist/../src/vdbe_method.c:1909:36: error: invalid use of incomplete typedef 'cursor_t' {aka 'struct cursor'}
+       >  1909 |                         __sm_next(p->pCursor, &res);
+       >       |                                    ^~
+       > ../dist/../src/vdbe_method.c:1914:18: error: invalid use of incomplete typedef 'cursor_t' {aka 'struct cursor'}
+       >  1914 |                 p->deferredMoveto = 0;
+       >       |                  ^~
+       > ../dist/../src/vdbe_method.c:1915:18: error: invalid use of incomplete typedef 'cursor_t' {aka 'struct cursor'}
+       >  1915 |                 p->cacheStatus = 0; /* CACHE_STALE */
+       >       |                  ^~
+       > make: *** [Makefile:456: vdbe_method.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/2rbnkrf6pjiqr0gmdqkny3rc27s7wxzf-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv

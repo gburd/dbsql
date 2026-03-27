@@ -144,6 +144,19 @@ static const YYCODETYPE yyFallback[] = {
 };
 #endif /* YYFALLBACK */
 
+/* Return the fallback token corresponding to canonical token iToken, or
+** 0 if iToken has no fallback. */
+int ParseFallback(int iToken){
+#ifdef YYFALLBACK
+  if( iToken<(int)(sizeof(yyFallback)/sizeof(yyFallback[0])) ){
+    return yyFallback[iToken];
+  }
+#else
+  (void)iToken;
+#endif
+  return 0;
+}
+
 /* The following structure represents a single element of the
 ** parser's stack.  Information stored includes:
 **

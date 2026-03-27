@@ -20,7 +20,7 @@
  * Implementation of the programmer public API to the library.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 
 #ifndef NO_SYSTEM_INCLUDES
 #include <ctype.h>
@@ -345,7 +345,7 @@ __sqldb_init(p, dbp, name, temp, mem, init_sm)
 	__hash_init(&p->trigHash, DBSQL_HASH_STRING, 0);
 	__hash_init(&p->aFKey, DBSQL_HASH_STRING, 1);
 
-	__dbsql_strdup(NULL, name, &p->zName);
+	__dbsql_strdup(dbp, name, &p->zName);
 
 	if (init_sm) {
 		/* Create a Berkeley DB storage manager. */
@@ -397,7 +397,7 @@ __api_open(dbp, filename, mode, err_msgs)
 	if (__dbsql_calloc(dbp, 2, sizeof(dbsql_db_t), &dbp->aDb) == ENOMEM)
 		goto no_mem_on_open1;
 
-	if (filename[0] == ':' && strcmp(filename, ":memory:") == 0)
+	if (filename && filename[0] == ':' && strcmp(filename, ":memory:") == 0)
 		mem = 1;
 
 	for (i = 0; i < dbp->nDb; i++) {
@@ -580,8 +580,8 @@ __process_sql(DBSQL *dbp, const char *sql, dbsql_callback callback,	void *arg, c
 		return DBSQL_ERROR;
 	}
 	*/
-	if (dbp->pVdbe == 0)
-		dbp->_num_last_changes = 0;
+	/* Always reset change counter at start of new SQL execution */
+	dbp->_num_last_changes = 0;
 	memset(&parser, 0, sizeof(parser_t));
 	parser.db = dbp;
 	parser.xCallback = callback;
@@ -613,7 +613,7 @@ __process_sql(DBSQL *dbp, const char *sql, dbsql_callback callback,	void *arg, c
 	}
 	if (parser.useCallback == 0) {
 		DBSQL_ASSERT(vm);
-		*vm = (dbsql_stmt_t*)parser.pVdbe;
+		*vm = (dbsql_stmt_t*)parser.vdbe;
 		if (tail)
 			*tail = parser.zTail;
 	}
@@ -956,13 +956,8 @@ __api_create_function(DBSQL *dbp, const char *name, int encoding, int num_arg, v
  * ...				Arguments to the format string
  */
 static int
-#ifdef STDC_HEADERS
 __api_exec_printf(DBSQL *dbp, const char *fmt, dbsql_callback callback,
 		  void *arg, char **err_msgs, ...)
-#else
-__api_exec_printf(DBSQL *dbp, const char *fmt, dbsql_callback callback,
-          void *arg, char **err_msgs, va_dcl)
-#endif
 {
 	va_list ap;
 	int rc;
@@ -1014,12 +1009,8 @@ __api_exec_vprintf(DBSQL *dbp, const char *fmt, dbsql_callback callback, void *a
  * ...				Arguments to the format string
  */
 static int
-#ifdef STDC_HEADERS
 __api_exec_table_printf(DBSQL *dbp, const char *fmt, char ***results,
 			int *num_rows, int *num_cols, char **err_msgs, ...)
-#else
-__api_exec_printf(DBSQL *dbp, const char *fmt, char ***results, int *num_rows, int *num_cols, char **err_msgs, va_dcl)
-#endif
 {
 	va_list ap;
 	int rc;
@@ -1246,17 +1237,22 @@ dbsql_create_env(DBSQL **dbpp, const char *dir, const char *crypt, int mode, u_i
 	} else {
 		if (__dbsql_exists(NULL, dir, &dir_p) == 0) {
 			if (dir_p) {
+				/* Directory exists - check for existing DB environment */
 				char buf[1024];
-				snprintf(buf, 1024, "%s%s%s", dir,
-					 PATH_SEPARATOR, dir);
-				if (__dbsql_exists(NULL, buf, &dir_p) == 0)
+				snprintf(buf, 1024, "%s%s__db.001", dir,
+					 PATH_SEPARATOR);
+				if (__dbsql_exists(NULL, buf, &dir_p) == 0) {
+					/* Environment files exist, join it */
 					env_open_flags = DB_JOINENV;
+				}
+				/* Else: directory exists but no environment, will create */
 			} else {
 				__dbsql_err(NULL,
 				       "Environment must be a directory.");
 				return DBSQL_INVALID_NAME;
 			}
 		} else {
+			/* Directory doesn't exist, create it */
 			mode = mode == 0 ? __dbsql_omode(NULL, "rwxrwxrwx") : mode;
 			if (__dbsql_mkdir(NULL, dir, mode) != 0)
 				return errno;

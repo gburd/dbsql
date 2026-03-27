@@ -20,7 +20,7 @@
  * This file contains code used to implement the PRAGMA command.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 
 #ifndef NO_SYSTEM_INCLUDES
 #include <ctype.h>
@@ -213,7 +213,7 @@ if (strcasecmp(left_name, "table_info") == 0) {
 		__vdbe_add_op(v, OP_ColumnName, 5, 0);
 		__vdbe_change_p4(v, -1, "pk", P4_STATIC);
 		__view_get_column_names(parser, table);
-		for (i = 0; i < table->nCol; i++) {
+		for (i = 0; i < table->n_columns; i++) {
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
 			__vdbe_change_p4(v, -1, table->aCol[i].zName,
@@ -251,12 +251,12 @@ if (strcasecmp(left_name, "index_info") == 0) {
 		__vdbe_change_p4(v, -1, "cid", P4_STATIC);
 		__vdbe_add_op(v, OP_ColumnName, 2, 0);
 		__vdbe_change_p4(v, -1, "name", P4_STATIC);
-		for (i = 0; i < index->nColumn; i++) {
+		for (i = 0; i < index->n_key_columns; i++) {
 			int cnum = index->aiColumn[i];
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_Integer, cnum, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			DBSQL_ASSERT(table->nCol > cnum);
+			DBSQL_ASSERT(table->n_columns > cnum);
 			__vdbe_change_p4(v, -1,
 					 table->aCol[cnum].zName,
 					 P3_STATIC);
@@ -323,7 +323,7 @@ if (strcasecmp(left_name, "foreign_key_list") == 0) {
 		__vdbe_change_p4(v, -1, "to", P4_STATIC);
 		while(fk) {
 			int j;
-			for (j = 0; j < fk->nCol; j++) {
+			for (j = 0; j < fk->n_columns; j++) {
 				__vdbe_add_op(v, OP_Integer, i, 0);
 				__vdbe_add_op(v, OP_Integer, j, 0);
 				__vdbe_add_op(v, OP_String, 0, 0);

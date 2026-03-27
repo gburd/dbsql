@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 
 #ifndef NO_SYSTEM_INCLUDES
 #include <sys/types.h>
@@ -219,14 +219,7 @@ unknown_err: {
  * PUBLIC:      __attribute__ ((__format__ (__printf__, 2, 3)));
  */
 void
-#ifdef STDC_HEADERS
 __dbsql_err(const DBSQL *dbp, const char *fmt, ...)
-#else
-__dbsql_err(dbp, fmt, va_alist)
-	const DBSQL *dbp;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	DBSQL_REAL_ERR(dbp, 0, 0, 0, fmt);
 }
@@ -317,7 +310,7 @@ __dbsql_errfile(dbp, error, error_set, fmt, ap)
 
 /*
  * __error_msg --
- *	Add an error message to pParse->zErrMsg and increment pParse->nErr.
+ *	Add an error message to pParse->zErrMsg and increment pParse->n_errors.
  *	The following formatting characters are allowed:
  *
  *	      %s      Insert a string
@@ -329,14 +322,7 @@ __dbsql_errfile(dbp, error, error_set, fmt, ap)
  * PUBLIC: void __error_msg __P((parser_t *, const char *, ...));
  */
 void
-#ifdef STDC_HEADERS
 __error_msg(parser_t *parser, const char *fmt, ...)
-#else
-__error_msg(parser, fmt, va_alist)
-	parser_t parser;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
 	int len;
@@ -344,7 +330,7 @@ __error_msg(parser, fmt, va_alist)
 	char *z;
 	static char null[] = "NULL";
 
-	parser->nErr++;
+	parser->n_errors++;
 	len = 1 + strlen(fmt);
 	va_start(ap, fmt);
 	for(i = 0; fmt[i]; i++) {
@@ -373,7 +359,7 @@ __error_msg(parser, fmt, va_alist)
 		case 'S': {
 			src_list_t *p = va_arg(ap, src_list_t*);
 			int k = va_arg(ap, int);
-			DBSQL_ASSERT(p->nSrc > k && k >= 0);
+			DBSQL_ASSERT(p->n_sources > k && k >= 0);
 			len += strlen(p->a[k].zName);
 			if (p->a[k].zDatabase && p->a[k].zDatabase[0]) {
 				len += strlen(p->a[k].zDatabase) + 1;
@@ -432,7 +418,7 @@ __error_msg(parser, fmt, va_alist)
 			int len;
 			src_list_t *p = va_arg(ap, src_list_t*);
 			int k = va_arg(ap, int);
-			assert(p->nSrc > k && k >= 0);
+			assert(p->n_sources > k && k >= 0);
 			if (p->a[k].zDatabase && p->a[k].zDatabase[0]) {
 				len = strlen(p->a[k].zDatabase);
 				memcpy(z, p->a[k].zDatabase, len);

@@ -1,0 +1,35 @@
+this derivation will be built:
+  /nix/store/glpiqzm95g33qfhkhzrsbias4ams558m-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/glpiqzm95g33qfhkhzrsbias4ams558m-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/glpiqzm95g33qfhkhzrsbias4ams558m-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/8a8p0zdp03r3q9grb0i997jmjy0ay301-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       > ../dist/../src/vdbe.c:4799:22: error: 'vdbe_t' {aka 'struct vdbe'} has no member named 'xCallback'
+       >  4799 |                 if (p->xCallback(p->pCbArg, pOp->p1, (char**)pTos->z,
+       >       |                      ^~
+       > ../dist/../src/vdbe.c:4799:35: error: 'vdbe_t' {aka 'struct vdbe'} has no member named 'pCbArg'
+       >  4799 |                 if (p->xCallback(p->pCbArg, pOp->p1, (char**)pTos->z,
+       >       |                                   ^~
+       > ../dist/../src/vdbe.c:4800:35: error: 'vdbe_t' {aka 'struct vdbe'} has no member named 'azColName'
+       >  4800 |                                  p->azColName) != 0) {
+       >       |                                   ^~
+       > ../dist/../src/vdbe.c:4805:18: error: 'vdbe_t' {aka 'struct vdbe'} has no member named 'nCallback'
+       >  4805 |                 p->nCallback++;
+       >       |                  ^~
+       > ../dist/../src/vdbe.c:6005:53: warning: format '%d' expects argument of type 'int', but argument 3 has type 'i64' {aka 'long int'} [-Wformat=]
+       >  6005 |                             fprintf(p->trace, " si:%d", pTos[i].u.i);
+       >       |                                                    ~^   ~~~~~~~~~~~
+       >       |                                                     |            |
+       >       |                                                     int          i64 {aka long int}
+       >       |                                                    %ld
+       > ../dist/../src/vdbe.c:6007:52: warning: format '%d' expects argument of type 'int', but argument 3 has type 'i64' {aka 'long int'} [-Wformat=]
+       >  6007 |                             fprintf(p->trace, " i:%d", pTos[i].u.i);
+       >       |                                                   ~^   ~~~~~~~~~~~
+       >       |                                                    |            |
+       >       |                                                    int          i64 {aka long int}
+       >       |                                                   %ld
+       > make: *** [Makefile:454: vdbe.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/glpiqzm95g33qfhkhzrsbias4ams558m-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv

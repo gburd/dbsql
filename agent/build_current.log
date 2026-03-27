@@ -1,0 +1,35 @@
+this derivation will be built:
+  /nix/store/fjl783h3zyq4h9rx9d2zhaqx79qd7fr0-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/fjl783h3zyq4h9rx9d2zhaqx79qd7fr0-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/fjl783h3zyq4h9rx9d2zhaqx79qd7fr0-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/s1a2cz7h934k7a5ylywad1jldd6gs1b9-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       >       |
+       > ../dist/../src/cg_select.c: In function '__fill_in_column_list':
+       > ../dist/../src/cg_select.c:1126:57: error: 'expr_t' {aka 'struct expr'} has no member named 'token'
+       >  1126 |                                         name = &e->pLeft->token;
+       >       |                                                         ^~
+       > ../dist/../src/cg_select.c:1179:50: error: 'expr_t' {aka 'struct expr'} has no member named 'token'
+       >  1179 |                                             right->token.dyn = 0;
+       >       |                                                  ^~
+       > ../dist/../src/cg_select.c:1190:57: error: 'expr_t' {aka 'struct expr'} has no member named 'token'
+       >  1190 |                                                     left->token.dyn = 0;
+       >       |                                                         ^~
+       > ../dist/../src/cg_select.c:1196:57: error: 'expr_t' {aka 'struct expr'} has no member named 'token'
+       >  1196 |                                                     expr->token.dyn = 0;
+       >       |                                                         ^~
+       > ../dist/../src/cg_select.c:1199:70: error: 'expr_t' {aka 'struct expr'} has no member named 'token'
+       >  1199 |                                                     expr->span = expr->token;
+       >       |                                                                      ^~
+       > ../dist/../src/cg_select.c: In function '__subst_expr':
+       > ../dist/../src/cg_select.c:1853:35: error: 'expr_t' {aka 'struct expr'} has no member named 'token'
+       >  1853 |                 __token_copy(&expr->token, &new->token);
+       >       |                                   ^~
+       > ../dist/../src/cg_select.c:1853:48: error: 'expr_t' {aka 'struct expr'} has no member named 'token'
+       >  1853 |                 __token_copy(&expr->token, &new->token);
+       >       |                                                ^~
+       > make: *** [Makefile:382: cg_select.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/fjl783h3zyq4h9rx9d2zhaqx79qd7fr0-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv

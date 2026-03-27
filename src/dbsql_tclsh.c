@@ -20,7 +20,7 @@
  * A TCL Shell for testing DBSQL.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 #include "tcl.h"
 

@@ -798,7 +798,7 @@ struct column {
  * CREATE TABLE statement is stored, but case is not significant for
  * comparisons.
  *
- * table_t.nCol is the number of columns in this table.  table_t.aCol is a
+ * table_t.nCol is the number of columns in this table.  table_t.columns is a
  * pointer to an array of column_t structures, one for each column.
  *
  * If the table has an INTEGER PRIMARY KEY, then table_t.iPKey is the index of
@@ -821,16 +821,16 @@ struct column {
  */
 struct table {
 	char *zName;             /* Name of the table or view */
-	column_t *aCol;          /* Information about each column */
-	index_t *pIndex;         /* List of SQL indexes on this table */
+	column_t *columns;       /* Information about each column */
+	index_t *first_index;    /* List of SQL indexes on this table */
 	char *zColAff;           /* String defining the affinity of each col */
-	expr_list_t *pCheck;     /* All CHECK constraints.
+	expr_list_t *check_constraints; /* All CHECK constraints.
 				    Also used as column name list in a VIEW */
 	Pgno tnum;               /* Root BTree page / BDB handle for this
 				    table */
 	u32 nTabRef;             /* Number of pointers to this table_t */
 	u32 tabFlags;            /* Mask of TF_* values */
-	i16 iPKey;               /* If not negative, use aCol[iPKey] as the
+	i16 iPKey;               /* If not negative, use columns[iPKey] as the
 				    rowid */
 	i16 nCol;                /* Number of columns in this table */
 	i16 nNVCol;              /* Number of columns that are not VIRTUAL */
@@ -843,7 +843,7 @@ struct table {
 		struct {                  /* Used by ordinary tables: */
 			int addColOffset;       /* Offset in CREATE TABLE stmt
 						   to add a new column */
-			foreign_key_t *pFKey;   /* Linked list of all FKs in
+			foreign_key_t *foreign_keys; /* Linked list of all FKs in
 						   this table */
 			expr_list_t *pDfltList; /* DEFAULT clauses on columns.
 						   Or the AS clause for
@@ -860,14 +860,14 @@ struct table {
 			vtable_t *p;            /* List of vtable_t objects */
 		} vtab;
 	} u;
-	trigger_t *pTrigger;     /* List of triggers on this object */
+	trigger_t *first_trigger; /* List of triggers on this object */
 	schema_t *pSchema;       /* Schema that contains this table */
 	u8 aHx[16];              /* Column aHx[K%sizeof(aHx)] might have
 				    hash K */
 
 	/* Legacy DBSQL compatibility shims (to be refactored) */
 	int iDb;                 /* Database index (0=main, 1=temp, 2+=attached) */
-	foreign_key_t *pFKey;    /* Alias for u.tab.pFKey */
+	foreign_key_t *pFKey;    /* Alias for u.tab.foreign_keys */
 	int readOnly;            /* Deprecated: use TF_Readonly flag instead */
 	select_t *pSelect;       /* Alias for u.view.pSelect (for views) */
 	int hasPrimKey;          /* Deprecated: use TF_HasPrimaryKey flag */
@@ -1017,15 +1017,15 @@ struct index {
 				    1st is 0 */
 	LogEst *aiRowLogEst;     /* From ANALYZE: est. rows selected by each
 				    column */
-	table_t *pTable;         /* The SQL table being indexed */
+	table_t *table;         /* The SQL table being indexed */
 	char *zColAff;           /* String defining the affinity of each col */
-	index_t *pNext;          /* The next index associated with the same
+	index_t *next_index;          /* The next index associated with the same
 				    table */
-	schema_t *pSchema;       /* Schema containing this index */
+	schema_t *schema;        /* Schema containing this index */
 	u8 *aSortOrder;          /* For each column: True==DESC, False==ASC */
 	const char **azColl;     /* Array of collation sequence names */
-	expr_t *pPartIdxWhere;   /* WHERE clause for partial indices */
-	expr_list_t *aColExpr;   /* Column expressions */
+	expr_t *partial_index_where; /* WHERE clause for partial indices */
+	expr_list_t *column_expressions; /* Column expressions */
 	Pgno tnum;               /* Storage handle for root of this index */
 	LogEst szIdxRow;         /* Estimated average row size in bytes */
 	u16 nKeyCol;             /* Number of columns forming the key */
@@ -1138,13 +1138,13 @@ struct expr {
 
 	/* If EP_TokenOnly is set, no space is allocated below this point. */
 
-	expr_t *pLeft;           /* Left subnode */
-	expr_t *pRight;          /* Right subnode */
+	expr_t *left;            /* Left subnode */
+	expr_t *right;           /* Right subnode */
 	union {
-		expr_list_t *pList;  /* op = IN, EXISTS, SELECT, CASE,
-					FUNCTION, BETWEEN */
-		select_t *pSelect;   /* EP_xIsSelect and op = IN, EXISTS,
-					SELECT */
+		expr_list_t *expr_list;  /* op = IN, EXISTS, SELECT, CASE,
+					     FUNCTION, BETWEEN */
+		select_t *select;        /* EP_xIsSelect and op = IN, EXISTS,
+					     SELECT */
 	} x;
 
 	/* If EP_Reduced is set, no space is allocated below this point. */
@@ -1162,7 +1162,7 @@ struct expr {
 	ynVar iColumn;           /* TK_COLUMN: column index. -1 for rowid.
 				    TK_VARIABLE: variable number (>= 1).
 				    TK_SELECT_COLUMN: column of result vec */
-	i16 iAgg;                /* Which entry in pAggInfo->aCol[] or
+	i16 iAgg;                /* Which entry in pAggInfo->columns[] or
 				    ->aFunc[] */
 	union {
 		int iJoin;       /* If EP_OuterON or EP_InnerON, the right
@@ -1187,8 +1187,8 @@ struct expr {
 	/* Legacy DBSQL compatibility shims */
 	int dataType;            /* Legacy: data type of expression result */
 	int iDb;                 /* Legacy: database index */
-	expr_list_t *pList;      /* Legacy: alias for x.pList */
-	select_t *pSelect;        /* Legacy: alias for x.pSelect */
+	expr_list_t *expr_list;  /* Legacy: alias for x.expr_list */
+	select_t *select;        /* Legacy: alias for x.select */
 	token_t span;             /* Legacy: source text span */
 };
 
@@ -1300,7 +1300,10 @@ struct expr_list {
 		/* Legacy compatibility fields for old code */
 		u8 sortOrder;    /* Legacy: same as fg.sortFlags & 1 */
 		u8 isAgg;        /* Legacy: 1 if aggregate function */
-	} a[FLEXARRAY];          /* One slot for each expression */
+	} *a;          /* Pointer to array of expressions (old DBSQL style) */
+	/* NOTE: SQLite 3.52 uses a[FLEXARRAY] here, but old DBSQL code
+	 * allocates the array separately with realloc. To maintain compatibility
+	 * with existing __expr_list_append code, we use a pointer. */
 };
 
 /*
@@ -1373,8 +1376,8 @@ struct src_list {
 		char *zAlias;    /* The "B" part of a "A AS B" phrase */
 		table_t *pTab;   /* An SQL table corresponding to zName */
 		union {
-			select_t *pSelect; /* A SELECT statement used in
-					      place of a table name */
+			select_t *select; /* A SELECT statement used in
+					     place of a table name */
 		} x;
 		int jointype;    /* Type of join between this table and the
 				    next */
@@ -1383,7 +1386,7 @@ struct src_list {
 		Bitmask colUsed; /* Bit N set if column N of pTab is used */
 		expr_t *pOn;     /* The ON clause of a join */
 		id_list_t *pUsing; /* The USING clause of a join */
-		select_t *pSelect;    /* Legacy: alias for x.pSelect */
+		select_t *select;     /* Legacy: alias for x.select */
 	} a[FLEXARRAY];          /* One entry for each identifier on the
 				    list */
 };
@@ -1797,7 +1800,7 @@ struct parser {
 	/* Core database & VDBE */
 	DBSQL *db;               /* Main database structure */
 	char *zErrMsg;           /* Error message */
-	vdbe_t *pVdbe;           /* Engine for executing database bytecode */
+	vdbe_t *vdbe;           /* Engine for executing database bytecode */
 	int rc;                  /* Return code from execution */
 
 	/* Query optimization & parsing state */
@@ -1826,7 +1829,7 @@ struct parser {
 	bft hasCompound:1;       /* Need convertCompoundSelectToSubquery() */
 	bft bReturning:1;        /* Coding a RETURNING trigger */
 	bft bHasExists:1;        /* Has correlated "EXISTS (SELECT ...)" */
-	bft colNamesSet:1;       /* TRUE after OP_ColumnName issued to pVdbe */
+	bft colNamesSet:1;       /* TRUE after OP_ColumnName issued to vdbe */
 	bft bHasWith:1;          /* Statement contains WITH clause */
 	bft okConstFactor:1;     /* OK to factor out constants */
 	bft checkSchema:1;       /* Force schema cookie check after error */

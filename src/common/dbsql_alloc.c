@@ -17,10 +17,11 @@
  */
 
 #include "dbsql.h"
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "db_int.h"
 
 #include <string.h>
+#include <errno.h>
 
 
 /*
@@ -72,7 +73,25 @@ __dbsql_strdup(dbp, str, storep)
 	const char *str;
 	void *storep;
 {
-	return (__os_strdup((dbp ? dbp->dbenv : NULL), str, storep));
+	size_t len;
+	int ret;
+	void *p;
+
+	*(void **)storep = NULL;
+
+	if (str == NULL)
+		return EINVAL;
+
+	len = strlen(str) + 1;
+
+	/* Use our wrapper function to handle NULL dbp correctly */
+	if ((ret = __dbsql_malloc(dbp, len, &p)) != 0)
+		return (ret);
+
+	memcpy(p, str, len);
+
+	*(void **)storep = p;
+	return (0);
 }
 
 /*
@@ -91,7 +110,6 @@ __dbsql_strndup(dbp, str, storep, len)
 	size_t size;
 	int ret;
 	void *p;
-	DB_ENV *dbenv = (dbp->dbenv ? NULL : dbp->dbenv);
 
 	*(void **)storep = NULL;
 
@@ -99,10 +117,13 @@ __dbsql_strndup(dbp, str, storep, len)
 		size = strlen(str);
 	else
 		size = len;
-	if ((ret = __os_calloc(dbenv, 1, size + 1, &p)) != 0)
+
+	/* Use our wrapper function to handle NULL dbp correctly */
+	if ((ret = __dbsql_calloc(dbp, 1, size + 1, &p)) != 0)
 		return (ret);
 
 	memcpy(p, str, size);
+	((char *)p)[size] = '\0';
 
 	*(void **)storep = p;
 	return (0);
@@ -120,8 +141,7 @@ __dbsql_calloc(dbp, num, size, storep)
 	size_t num, size;
 	void *storep;
 {
-	return (__os_calloc((dbp ? dbp->dbenv : NULL), num, size,
-			storep));
+	return (__os_calloc((dbp ? dbp->dbenv : NULL), num, size, storep));
 }
 
 /*

@@ -21,7 +21,7 @@
  * for generating VDBE code that evaluates expressions in SQLite.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 
 #ifndef NO_SYSTEM_INCLUDES
 #include <ctype.h>
@@ -105,7 +105,11 @@ __expr_function(expr_list_t* list, token_t* token)
 {
 	expr_t *new;
 	if (__dbsql_calloc(NULL, 1, sizeof(expr_t), &new) == ENOMEM) {
-#if 0  /* TODO Leak pList when malloc fails */
+#if 0  /* KNOWN ISSUE: Memory leak when malloc fails
+        * pList is not freed here because __expr_list_delete may also fail.
+        * In OOM conditions, we prioritize failing fast over cleanup.
+        * TODO: Implement proper error handling with cleanup on malloc failure.
+        */
 		__expr_list_delete(list);
 #endif
 		return 0;
@@ -156,33 +160,33 @@ __expr_delete(expr_t* p)
  *	be deleted (by being passed to their respective XXX_delete() routines)
  *	without effecting the originals.
  *	The expression list, ID, and source lists return by __expr_list_dup(),
- *	__id_list_dup(), and __src_list_dup() can not be further expanded 
+ *	__id_list_dup(), and __src_list_dup() can not be further expanded
  *	by subsequent calls to DBSQL* __XXX_list_append() routines.
  *	Any tables that the src_list_t might point to are not duplicated.
  *
- * PUBLIC: expr_t *__expr_dup __P((expr_t *));
+ * PUBLIC: expr_t *__expr_dup __P((DBSQL *, expr_t *));
  */
 expr_t *
-__expr_dup(expr_t* p)
+__expr_dup(DBSQL* dbp, expr_t* p)
 {
 	expr_t *new;
 	if (p == 0)
 		return 0;
-	if (__dbsql_calloc(NULL, 1, sizeof(*p), &new) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(*p), &new) == ENOMEM)
 		return 0;
 	memcpy(new, p, sizeof(*new));
 	if (p->u.zToken.z != 0) {
-		__dbsql_strdup(NULL, p->u.zToken.z, &new->u.zToken.z);
+		__dbsql_strdup(dbp, p->u.zToken.z, &new->u.zToken.z);
 		new->u.zToken.n = p->u.zToken.n;
 		/* Note: no dyn field in anonymous struct */
 	} else {
 		DBSQL_ASSERT(new->u.zToken.z == 0);
 	}
 	new->span.z = 0;
-	new->pLeft = __expr_dup(p->pLeft);
-	new->pRight = __expr_dup(p->pRight);
-	new->x.pList = __expr_list_dup(p->x.pList);
-	new->x.pSelect = __select_dup(p->x.pSelect);
+	new->pLeft = __expr_dup(dbp, p->pLeft);
+	new->pRight = __expr_dup(dbp, p->pRight);
+	new->x.pList = __expr_list_dup(dbp, p->x.pList);
+	new->x.pSelect = __select_dup(dbp, p->x.pSelect);
 	return new;
 }
 
@@ -210,25 +214,25 @@ __token_copy(token_t* to, token_t* from)
  * __expr_list_dup --
  *	Copy a expr_list_t.
  *
- * PUBLIC: expr_list_t *__expr_list_dup __P((expr_list_t *));
+ * PUBLIC: expr_list_t *__expr_list_dup __P((DBSQL *, expr_list_t *));
  */
 expr_list_t *
-__expr_list_dup(expr_list_t* p)
+__expr_list_dup(DBSQL* dbp, expr_list_t* p)
 {
 	expr_list_t *new;
 	int i;
 
 	if (p == 0)
 		return 0;
-	if (__dbsql_calloc(NULL, 1, sizeof(*new), &new) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(*new), &new) == ENOMEM)
 		return 0;
-	new->nExpr = new->nAlloc = p->nExpr;
-	if (__dbsql_calloc(NULL, p->nExpr, sizeof(p->a[0]), &new->a) == ENOMEM)
+	new->n_expressions = new->n_allocated = p->n_expressions;
+	if (__dbsql_calloc(dbp, p->n_expressions, sizeof(p->a[0]), &new->a) == ENOMEM)
 		return 0;
-	for (i = 0; i < p->nExpr; i++) {
+	for (i = 0; i < p->n_expressions; i++) {
 		expr_t *new_expr, *old_expr;
 		new->a[i].pExpr = new_expr =
-			__expr_dup(old_expr = p->a[i].pExpr);
+			__expr_dup(dbp, old_expr = p->a[i].pExpr);
 		if (old_expr->span.z!=0 && new_expr) {
 			/*
 			 * Always make a copy of the span for top-level
@@ -242,7 +246,7 @@ __expr_list_dup(expr_list_t* p)
 		DBSQL_ASSERT(new_expr == 0 || new_expr->span.z != 0 ||
 			     old_expr->span.z == 0);
 		if (p->a[i].zName)
-			__dbsql_strdup(NULL, p->a[i].zName, &new->a[i].zName);
+			__dbsql_strdup(dbp, p->a[i].zName, &new->a[i].zName);
 		new->a[i].sortOrder = p->a[i].sortOrder;
 		new->a[i].isAgg = p->a[i].isAgg;
 		new->a[i].fg.done = 0;
@@ -254,33 +258,33 @@ __expr_list_dup(expr_list_t* p)
  * __src_list_dup --
  *	Copy a src_list_t.
  *
- * PUBLIC: src_list_t *__src_list_dup __P((src_list_t *));
+ * PUBLIC: src_list_t *__src_list_dup __P((DBSQL *, src_list_t *));
  */
 src_list_t *
-__src_list_dup(src_list_t* p)
+__src_list_dup(DBSQL* dbp, src_list_t* p)
 {
 	src_list_t *new;
 	int i;
 	int bytes;
 	if (p == 0)
 		return 0;
-	bytes = sizeof(*p) + ((p->nSrc > 0) ?
-			      (sizeof(p->a[0]) * (p->nSrc - 1)) : 0);
-	if (__dbsql_calloc(NULL, 1, bytes, &new) == ENOMEM)
+	bytes = sizeof(*p) + ((p->n_sources > 0) ?
+			      (sizeof(p->a[0]) * (p->n_sources - 1)) : 0);
+	if (__dbsql_calloc(dbp, 1, bytes, &new) == ENOMEM)
 		return 0;
-	new->nSrc = new->nAlloc = p->nSrc;
-	for (i = 0; i < p->nSrc; i++) {
+	new->n_sources = new->n_allocated = p->n_sources;
+	for (i = 0; i < p->n_sources; i++) {
 		struct src_list_item *new_item = &new->a[i];
 		struct src_list_item *old_item = &p->a[i];
-		__dbsql_strdup(NULL, old_item->zDatabase, &new_item->zDatabase);
-		__dbsql_strdup(NULL, old_item->zName, &new_item->zName);
-		__dbsql_strdup(NULL, old_item->zAlias, &new_item->zAlias);
+		__dbsql_strdup(dbp, old_item->zDatabase, &new_item->zDatabase);
+		__dbsql_strdup(dbp, old_item->zName, &new_item->zName);
+		__dbsql_strdup(dbp, old_item->zAlias, &new_item->zAlias);
 		new_item->jointype = old_item->jointype;
 		new_item->iCursor = old_item->iCursor;
 		new_item->pTab = 0;
-		new_item->x.pSelect = __select_dup(old_item->x.pSelect);
-		new_item->pOn = __expr_dup(old_item->pOn);
-		new_item->pUsing = __id_list_dup(old_item->pUsing);
+		new_item->x.pSelect = __select_dup(dbp, old_item->x.pSelect);
+		new_item->pOn = __expr_dup(dbp, old_item->pOn);
+		new_item->pUsing = __id_list_dup(dbp, old_item->pUsing);
 	}
 	return new;
 }
@@ -289,24 +293,24 @@ __src_list_dup(src_list_t* p)
  * __id_list_dup --
  *	Copy a id_list_t.
  *
- * PUBLIC: id_list_t *__id_list_dup __P((id_list_t *));
+ * PUBLIC: id_list_t *__id_list_dup __P((DBSQL *, id_list_t *));
  */
 id_list_t *
-__id_list_dup(id_list_t* p)
+__id_list_dup(DBSQL* dbp, id_list_t* p)
 {
 	id_list_t *new;
 	int i;
 	if (p == 0)
 		return 0;
-	if (__dbsql_calloc(NULL, 1, sizeof(*new), &new) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(*new), &new) == ENOMEM)
 		return 0;
-	new->nId = new->nAlloc = p->nId;
-	if (__dbsql_calloc(NULL, p->nId, sizeof(p->a[0]), &new->a) == ENOMEM)
+	new->n_identifiers = new->n_allocated = p->n_identifiers;
+	if (__dbsql_calloc(dbp, p->n_identifiers, sizeof(p->a[0]), &new->a) == ENOMEM)
 		return 0;
-	for (i = 0; i < p->nId; i++) {
+	for (i = 0; i < p->n_identifiers; i++) {
 		struct id_list_item *new_item = &new->a[i];
 		struct id_list_item *old_item = &p->a[i];
-		__dbsql_strdup(NULL, old_item->zName, &new_item->zName);
+		__dbsql_strdup(dbp, old_item->zName, &new_item->zName);
 		new_item->idx = old_item->idx;
 	}
 	return new;
@@ -316,27 +320,27 @@ __id_list_dup(id_list_t* p)
  * __select_dup --
  *	Copy a select_t.
  *
- * PUBLIC: select_t *__select_dup __P((select_t *));
+ * PUBLIC: select_t *__select_dup __P((DBSQL *, select_t *));
  */
 select_t *
-__select_dup(select_t* p)
+__select_dup(DBSQL* dbp, select_t* p)
 {
 	select_t *new;
 	if (p == 0)
 		return 0;
-	if (__dbsql_calloc(NULL, 1, sizeof(*p), &new) == ENOMEM)
+	if (__dbsql_calloc(dbp, 1, sizeof(*p), &new) == ENOMEM)
 		return 0;
 	new->isDistinct = p->isDistinct;
-	new->pEList = __expr_list_dup(p->pEList);
-	new->pSrc = __src_list_dup(p->pSrc);
-	new->pWhere = __expr_dup(p->pWhere);
-	new->pGroupBy = __expr_list_dup(p->pGroupBy);
-	new->pHaving = __expr_dup(p->pHaving);
-	new->pOrderBy = __expr_list_dup(p->pOrderBy);
+	new->pEList = __expr_list_dup(dbp, p->pEList);
+	new->pSrc = __src_list_dup(dbp, p->pSrc);
+	new->pWhere = __expr_dup(dbp, p->pWhere);
+	new->pGroupBy = __expr_list_dup(dbp, p->pGroupBy);
+	new->pHaving = __expr_dup(dbp, p->pHaving);
+	new->pOrderBy = __expr_list_dup(dbp, p->pOrderBy);
 	new->op = p->op;
-	new->pPrior = __select_dup(p->pPrior);
+	new->pPrior = __select_dup(dbp, p->pPrior);
 	new->iLimit = p->iLimit;
-	new->nOffset = p->nOffset;
+	new->iOffset = p->iOffset;
 	new->zSelect = 0;
 	new->iLimit = -1;
 	new->iOffset = -1;
@@ -362,21 +366,21 @@ __expr_list_append(expr_list_t* list, expr_t* expr, token_t* name)
 			__expr_delete(expr); */
 			return 0;
 		}
-		DBSQL_ASSERT(list->nAlloc == 0);
+		DBSQL_ASSERT(list->n_allocated == 0);
 	}
-	if (list->nAlloc <= list->nExpr) {
-		list->nAlloc = (list->nAlloc * 2) + 4;
-		if (__dbsql_realloc(NULL, (list->nAlloc * sizeof(list->a[0])),
+	if (list->n_allocated <= list->n_expressions) {
+		list->n_allocated = (list->n_allocated * 2) + 4;
+		if (__dbsql_realloc(NULL, (list->n_allocated * sizeof(list->a[0])),
 				 &list->a) == ENOMEM) {
                         /* TODO Leak memory if malloc fails
 			 __expr_delete(expr); */
-			list->nExpr = list->nAlloc = 0;
+			list->n_expressions = list->n_allocated = 0;
 			return list;
 		}
 	}
 	DBSQL_ASSERT(list->a != 0);
 	if (expr || name) {
-		struct expr_list_item *item = &list->a[list->nExpr++];
+		struct expr_list_item *item = &list->a[list->n_expressions++];
 		memset(item, 0, sizeof(*item));
 		item->pExpr = expr;
 		if (name) {
@@ -399,7 +403,7 @@ __expr_list_delete(expr_list_t* list)
 	int i;
 	if (list == 0)
 		return;
-	for (i = 0; i < list->nExpr; i++) {
+	for (i = 0; i < list->n_expressions; i++) {
 		__expr_delete(list->a[i].pExpr);
 		__dbsql_free(NULL, list->a[i].zEName);
 	}
@@ -444,17 +448,17 @@ __expr_is_constant(expr_t* p)
 		} else {
 			if (p->x.pList) {
 				int i = 0;
-				while (i < p->x.pList->nExpr &&
+				while (i < p->x.pList->n_expressions &&
 				    __expr_is_constant(p->x.pList->a[i].pExpr)) {
 					i++;
 				}
-				if (i != p->x.pList->nExpr) {
+				if (i != p->x.pList->n_expressions) {
 					rc = 0;
 					break;
 				}
 			}
 			if (p->pLeft != 0 || p->pRight != 0 ||
-			    (p->x.pList && p->x.pList->nExpr > 0)) {
+			    (p->x.pList && p->x.pList->n_expressions > 0)) {
 				rc = 1;
 			} else {
 				rc = 0;
@@ -622,14 +626,14 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 	DBSQL_ASSERT(table_name == 0 || elist == 0);
 
 	expr->iTable = -1;
-	for (i = 0; i < slist->nSrc; i++) {
+	for (i = 0; i < slist->n_sources; i++) {
 		struct src_list_item *item = &slist->a[i];
 		table_t *table = item->pTab;
 		column_t *column;
 
 		if (table == 0)
 			continue;
-		DBSQL_ASSERT(table->nCol > 0);
+		DBSQL_ASSERT(table->n_columns > 0);
 		if (table_name) {
 			if (item->zAlias) {
 				char *tname = item->zAlias;
@@ -653,7 +657,7 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 			expr->iTable = item->iCursor;
 			expr->iDb = table->iDb;
 		}
-		for (j = 0, column = table->aCol; j < table->nCol;
+		for (j = 0, column = table->aCol; j < table->n_columns;
 		     j++, column++) {
 			if (strcasecmp(column->zName,
 						  col_name) == 0){
@@ -696,7 +700,7 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 			column_t *column = table->aCol;
 			expr->iDb = table->iDb;
 			ntables++;
-			for (j = 0; j < table->nCol; j++, column++) {
+			for (j = 0; j < table->n_columns; j++, column++) {
 				if (strcasecmp(column->zName,
 							  col_name) == 0) {
 					cnt++;
@@ -732,15 +736,15 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 	 * have already been resolved by the time the WHERE clause is resolved.
 	 */
 	if (cnt == 0 && elist != 0) {
-		for (j = 0; j < elist->nExpr; j++) {
+		for (j = 0; j < elist->n_expressions; j++) {
 			char *as = elist->a[j].zEName;
 			if (as != 0 && strcasecmp(as,
 							     col_name) == 0) {
 				DBSQL_ASSERT(expr->pLeft == 0 && expr->pRight == 0);
 				expr->op = TK_AS;
 				expr->iColumn = j;
-				expr->pLeft = __expr_dup(elist->a[j].pExpr);
-				__dbsql_free(NULL, col_name);
+				expr->pLeft = __expr_dup(dbp, elist->a[j].pExpr);
+				__dbsql_free(dbp, col_name);
 				DBSQL_ASSERT(table_name == 0 && db_name == 0);
 				return 0;
 			}
@@ -755,7 +759,7 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 	 * expr.
 	 */
 	if (cnt == 0 && table_name == 0 && col_token->z[0] == '"') {
-		__dbsql_free(NULL, col_name);
+		__dbsql_free(dbp, col_name);
 		return 0;
 	}
 
@@ -774,18 +778,18 @@ __lookup_name(parser, db_token, table_token, col_token, slist,
 		} else if (table_name) {
 			__str_append(&z, table_name, ".", col_name, 0);
 		} else {
-			__dbsql_strdup(NULL, col_name, &z);
+			__dbsql_strdup(dbp, col_name, &z);
 		}
 		__error_msg(parser, err, z);
-		__dbsql_free(NULL, z);
+		__dbsql_free(parser->db, z);
 	}
 
 	/*
 	 * Clean up and return
 	 */
-	__dbsql_free(NULL, db_name);
-	__dbsql_free(NULL, table_name);
-	__dbsql_free(NULL, col_name);
+	__dbsql_free(dbp, db_name);
+	__dbsql_free(dbp, table_name);
+	__dbsql_free(dbp, col_name);
 	__expr_delete(expr->pLeft);
 	expr->pLeft = 0;
 	__expr_delete(expr->pRight);
@@ -854,9 +858,9 @@ int __expr_resolve_ids(parser, slist, elist, expr)
 
 	if (expr == 0 || slist == 0)
 		return 0;
-	for (i = 0; i < slist->nSrc; i++) {
+	for (i = 0; i < slist->n_sources; i++) {
 		DBSQL_ASSERT(slist->a[i].iCursor >= 0 &&
-		       slist->a[i].iCursor<parser->nTab);
+		       slist->a[i].iCursor<parser->n_tables);
 	}
 	switch(expr->op) {
 		/*
@@ -942,7 +946,7 @@ int __expr_resolve_ids(parser, slist, elist, expr)
 			 * temporary table has already been put in iTable by
 			 * __expr_resolve_in_select().
 			 */
-			expr->iTable = parser->nTab++;
+			expr->iTable = parser->n_tables++;
 			__vdbe_add_op(v, OP_OpenTemp, expr->iTable, 1);
 			__select(parser, expr->x.pSelect, SRT_Set,
 				 expr->iTable, 0,0,0);
@@ -953,7 +957,7 @@ int __expr_resolve_ids(parser, slist, elist, expr)
 			 * Create a set to put the exprlist values in.  The
 			 * Set id is stored in iTable.
 			 */
-			for (i = 0; i < expr->x.pList->nExpr; i++) {
+			for (i = 0; i < expr->x.pList->n_expressions; i++) {
 				e2 = expr->x.pList->a[i].pExpr;
 				if (!__expr_is_constant(e2)) {
 					__error_msg(parser,
@@ -966,8 +970,8 @@ int __expr_resolve_ids(parser, slist, elist, expr)
 					return 1;
 				}
 			}
-			iset = expr->iTable = parser->nSet++;
-			for (i = 0; i < expr->x.pList->nExpr; i++) {
+			iset = expr->iTable = parser->n_sets++;
+			for (i = 0; i < expr->x.pList->n_expressions; i++) {
 				expr_t *e2 = expr->x.pList->a[i].pExpr;
 				switch(e2->op) {
 				case TK_FLOAT: /* FALLTHROUGH */
@@ -994,7 +998,7 @@ int __expr_resolve_ids(parser, slist, elist, expr)
 		 * value of this select in a memory cell and record the number
 		 * of the memory cell in iColumn.
 		 */
-		expr->iColumn = parser->nMem++;
+		expr->iColumn = parser->n_memory++;
 		if (__select(parser, expr->x.pSelect, SRT_Mem,
 			     expr->iColumn,0,0,0)) {
 			return 1;
@@ -1015,7 +1019,7 @@ int __expr_resolve_ids(parser, slist, elist, expr)
 		if (expr->x.pList) {
 			int i;
 			expr_list_t *el = expr->x.pList;
-			for (i = 0; i < el->nExpr; i++) {
+			for (i = 0; i < el->n_expressions; i++) {
 				expr_t *arg = el->a[i].pExpr;
 				if (__expr_resolve_ids(parser, slist, elist,
 						       arg)) {
@@ -1094,7 +1098,7 @@ __expr_check(parser_t* parser, expr_t* expr, int agg_allowed, int* agg)
 	case TK_LIKE: /* FALLTHROUGH */
 	case TK_FUNCTION:
 		n = (expr->x.pList) ?
-			expr->x.pList->nExpr : 0;  /* Number of arguments */
+			expr->x.pList->n_expressions : 0;  /* Number of arguments */
 		no_such_func = 0; /* True if no such function exists */
 		is_type_of = 0;   /* True if is the special TypeOf() func */
 		wrong_num_args = 0;/* True if wrong number of arguments */
@@ -1123,19 +1127,19 @@ __expr_check(parser_t* parser, expr_t* expr, int agg_allowed, int* agg)
 			__str_nappend(&parser->zErrMsg,
 				      "misuse of aggregate function ", -1,
 				      id, nid, "()", 2, NULL);
-			parser->nErr++;
+			parser->n_errors++;
 			nerr++;
 			is_agg = 0;
 		} else if (no_such_func) {
 			__str_nappend(&parser->zErrMsg,
 				      "no such function: ", -1, id, nid, NULL);
-			parser->nErr++;
+			parser->n_errors++;
 			nerr++;
 		} else if (wrong_num_args) {
 			__str_nappend(&parser->zErrMsg,
 				      "wrong number of arguments to function ",
 				      -1, id, nid, "()", 2, NULL);
-			parser->nErr++;
+			parser->n_errors++;
 			nerr++;
 		}
 		if (is_agg)
@@ -1189,7 +1193,7 @@ __expr_check(parser_t* parser, expr_t* expr, int agg_allowed, int* agg)
 					    agg_allowed, agg);
 		}
 		if (nerr == 0 && expr->x.pList) {
-			n = expr->x.pList->nExpr;
+			n = expr->x.pList->n_expressions;
 			for (i = 0; nerr == 0 && i < n; i++) {
 				e2 = expr->x.pList->a[i].pExpr;
 				nerr = __expr_check(parser, e2,
@@ -1271,7 +1275,7 @@ __expr_type(expr_t* p)
 		case TK_SELECT:
 			DBSQL_ASSERT(p->x.pSelect);
 			DBSQL_ASSERT(p->x.pSelect->pEList);
-			DBSQL_ASSERT(p->x.pSelect->pEList->nExpr > 0);
+			DBSQL_ASSERT(p->x.pSelect->pEList->n_expressions > 0);
 			p = p->x.pSelect->pEList->a[0].pExpr;
 			break;
 		case TK_CASE:
@@ -1281,7 +1285,7 @@ __expr_type(expr_t* p)
 			}
 			if (p->x.pList) {
 				list = p->x.pList;
-				for (i = 1; i < list->nExpr; i += 2) {
+				for (i = 1; i < list->n_expressions; i += 2) {
 					if(__expr_type(list->a[i].pExpr)
 					   == DBSQL_SO_NUM) {
 						return DBSQL_SO_NUM;
@@ -1308,7 +1312,7 @@ int
 __get_temp_reg(parser_t* parser)
 {
 	/* Simple allocation: just increment the register counter */
-	return ++parser->nMem;
+	return ++parser->n_memory;
 }
 
 /*
@@ -1322,7 +1326,7 @@ void
 __release_temp_reg(parser_t* parser, int reg)
 {
 	/* For now, no-op.  Future optimization: maintain free list */
-	/* Could track if reg == parser->nMem and decrement, but
+	/* Could track if reg == parser->n_memory and decrement, but
 	 * need to be careful about ordering */
 }
 
@@ -1339,8 +1343,8 @@ __get_temp_range(parser_t* parser, int nreg)
 	int base;
 	if (nreg <= 0)
 		return 0;
-	base = parser->nMem + 1;
-	parser->nMem += nreg;
+	base = parser->n_memory + 1;
+	parser->n_memory += nreg;
 	return base;
 }
 
@@ -1372,7 +1376,7 @@ __release_temp_range(parser_t* parser, int base, int nreg)
 int
 __expr_code_target(parser_t* parser, expr_t* expr, int target)
 {
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	int i, op, dest, nexpr, nid, addr, expr_end_label, jump_inst;
 	int r1, r2;
 	int regFree1 = 0;
@@ -1388,7 +1392,7 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 		return target;
 	}
 
-	DBSQL_ASSERT(target > 0 && target <= parser->nMem);
+	DBSQL_ASSERT(target > 0 && target <= parser->n_memory);
 
 	switch(expr->op) {
 	case TK_PLUS:     op = OP_Add;      break;
@@ -1420,7 +1424,7 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 	case TK_COLUMN:
 		if( parser->useAgg ) {
 			__vdbe_add_op(v, OP_AggGet, 0, expr->iAgg);
-			__vdbe_add_op(v, OP_Dup, parser->nMem - 1, target);
+			__vdbe_add_op(v, OP_Dup, parser->n_memory - 1, target);
 		} else if (expr->iColumn >= 0) {
 			__vdbe_add_op(v, OP_Column, expr->iTable,
 				      expr->iColumn);
@@ -1509,7 +1513,7 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 				__vdbe_add_op(v, OP_String, 0, target);
 				__vdbe_change_p4(v, -1, z, (tok_n + 1));
 			}
-			__dbsql_free(NULL, z);
+			__dbsql_free(parser->db, z);
 			break;
 		}
 		/* FALLTHROUGH */
@@ -1530,13 +1534,13 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 		break;
 	case TK_AGG_FUNCTION:
 		__vdbe_add_op(v, OP_AggGet, 0, expr->iAgg);
-		__vdbe_add_op(v, OP_Dup, parser->nMem - 1, target);
+		__vdbe_add_op(v, OP_Dup, parser->n_memory - 1, target);
 		break;
 	case TK_GLOB: /* FALLTHROUGH */
 	case TK_LIKE: /* FALLTHROUGH */
 	case TK_FUNCTION:
 		list = expr->x.pList;
-		nexpr = list ? list->nExpr : 0;
+		nexpr = list ? list->n_expressions : 0;
 		__get_function_name(expr, &id, &nid);
 		def = __find_function(parser->db, id, nid, nexpr, 0);
 		DBSQL_ASSERT(def != 0);
@@ -1606,9 +1610,9 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 		{
 			int caseReg = 0;
 			DBSQL_ASSERT(expr->x.pList);
-			DBSQL_ASSERT((expr->x.pList->nExpr % 2) == 0);
-			DBSQL_ASSERT(expr->x.pList->nExpr > 0);
-			nexpr = expr->x.pList->nExpr;
+			DBSQL_ASSERT((expr->x.pList->n_expressions % 2) == 0);
+			DBSQL_ASSERT(expr->x.pList->n_expressions > 0);
+			nexpr = expr->x.pList->n_expressions;
 			expr_end_label = __vdbe_make_label(v);
 			if (expr->pLeft) {
 				caseReg = __expr_code_temp(parser, expr->pLeft,
@@ -1649,7 +1653,7 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 			__error_msg(parser,
 				    "RAISE() may only be used within a "
 				    "trigger-program");
-			parser->nErr++;
+			parser->n_errors++;
 			return target;
 		}
 		if (expr->iColumn == OE_Rollback ||
@@ -1685,7 +1689,7 @@ __expr_code(parser_t* parser, expr_t* expr)
 	int target;
 	if (expr == 0)
 		return;
-	target = ++parser->nMem;
+	target = ++parser->n_memory;
 	__expr_code_target(parser, expr, target);
 }
 
@@ -1728,7 +1732,7 @@ __expr_code_temp(parser_t* parser, expr_t* expr, int *reg_ptr)
 void
 __expr_if_true(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 {
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	int d2, addr, op = 0;
 
 	if (v == 0 || expr == 0)
@@ -1819,7 +1823,7 @@ __expr_if_true(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 void
 __expr_if_false(parser_t* parser, expr_t* expr, int dest, int jump_if_null)
 {
-	vdbe_t *v = parser->pVdbe;
+	vdbe_t *v = parser->vdbe;
 	int addr, d2, op = 0;
 
 	if (v == 0 || expr == 0)
@@ -1932,9 +1936,9 @@ __expr_compare(expr_t* a, expr_t* b)
 	if (a->x.pList) {
 		if (b->x.pList == 0)
 			return 0;
-		if (a->x.pList->nExpr != b->x.pList->nExpr)
+		if (a->x.pList->n_expressions != b->x.pList->n_expressions)
 			return 0;
-		for(i = 0; i < a->x.pList->nExpr; i++) {
+		for(i = 0; i < a->x.pList->n_expressions; i++) {
 			if(!__expr_compare(a->x.pList->a[i].pExpr,
 					   b->x.pList->a[i].pExpr)) {
 				return 0;
@@ -1962,7 +1966,7 @@ __expr_compare(expr_t* a, expr_t* b)
 
 /*
  * __append_agg_info --
- *	Add a new element to the parser->aAgg[] array and return its index.
+ *	Add a new element to the parser->aggregate_info[] array and return its index.
  *
  * STATIC: static int __append_agg_info __P((parser_t *));
  */
@@ -1970,21 +1974,21 @@ static int
 __append_agg_info(parser_t* parser)
 {
 	agg_expr_t *agg;
-	if ((parser->nAgg & 0x7) == 0) {
-		int amt = parser->nAgg + 8;
-		if (__dbsql_realloc(parser->db, amt * sizeof(parser->aAgg[0]),
-				 &parser->aAgg) == ENOMEM)
+	if ((parser->n_aggregates & 0x7) == 0) {
+		int amt = parser->n_aggregates + 8;
+		if (__dbsql_realloc(parser->db, amt * sizeof(parser->aggregate_info[0]),
+				 &parser->aggregate_info) == ENOMEM)
 			return -1;
 	}
-	memset(&parser->aAgg[parser->nAgg], 0, sizeof(parser->aAgg[0]));
-	return parser->nAgg++;
+	memset(&parser->aggregate_info[parser->n_aggregates], 0, sizeof(parser->aggregate_info[0]));
+	return parser->n_aggregates++;
 }
 
 /*
  * __expr_analyze_aggregates --
  *	Analyze the given expression looking for aggregate functions and
- *	for variables that need to be added to the parser->aAgg[] array.
- *	Make additional entries to the parser->aAgg[] array as necessary.
+ *	for variables that need to be added to the parser->aggregate_info[] array.
+ *	Make additional entries to the parser->aggregate_info[] array as necessary.
  *	This routine should only be called after the expression has been
  *	analyzed by __expr_resolve_ids() and __expr_check().
  *	Return the number of errors.
@@ -2002,8 +2006,8 @@ __expr_analyze_aggregates(parser_t* parser, expr_t* expr)
 
 	switch(expr->op) {
 	case TK_COLUMN:
-		agg = parser->aAgg;
-		for (i = 0; i < parser->nAgg; i++) {
+		agg = parser->aggregate_info;
+		for (i = 0; i < parser->n_aggregates; i++) {
 			if (agg[i].isAgg)
 				continue;
 			if (agg[i].pExpr->iTable == expr->iTable &&
@@ -2011,32 +2015,32 @@ __expr_analyze_aggregates(parser_t* parser, expr_t* expr)
 				break;
 			}
 		}
-		if (i >= parser->nAgg) {
+		if (i >= parser->n_aggregates) {
 			i = __append_agg_info(parser);
 			if (i < 0)
 				return 1;
-			parser->aAgg[i].isAgg = 0;
-			parser->aAgg[i].pExpr = expr;
+			parser->aggregate_info[i].isAgg = 0;
+			parser->aggregate_info[i].pExpr = expr;
 		}
 		expr->iAgg = i;
 		break;
 	case TK_AGG_FUNCTION:
-		agg = parser->aAgg;
-		for(i = 0; i < parser->nAgg; i++) {
+		agg = parser->aggregate_info;
+		for(i = 0; i < parser->n_aggregates; i++) {
 			if (!agg[i].isAgg)
 				continue;
 			if (__expr_compare(agg[i].pExpr, expr)) {
 				break;
 			}
 		}
-		if (i >= parser->nAgg) {
+		if (i >= parser->n_aggregates) {
 			i = __append_agg_info(parser);
 			if (i < 0)
 				return 1;
-			parser->aAgg[i].isAgg = 1;
-			parser->aAgg[i].pExpr = expr;
-			nexpr = (expr->x.pList ? expr->x.pList->nExpr : 0);
-			parser->aAgg[i].pFunc = __find_function(parser->db,
+			parser->aggregate_info[i].isAgg = 1;
+			parser->aggregate_info[i].pExpr = expr;
+			nexpr = (expr->x.pList ? expr->x.pList->n_expressions : 0);
+			parser->aggregate_info[i].pFunc = __find_function(parser->db,
 								expr->u.zToken.z,
 								expr->u.zToken.n,
 								nexpr, 0);
@@ -2051,7 +2055,7 @@ __expr_analyze_aggregates(parser_t* parser, expr_t* expr)
 			nerr = __expr_analyze_aggregates(parser, expr->pRight);
 		}
 		if (nerr == 0 && expr->x.pList) {
-			n = expr->x.pList->nExpr;
+			n = expr->x.pList->n_expressions;
 			for (i = 0; nerr == 0 && i < n; i++) {
 				nerr = __expr_analyze_aggregates(parser,
 						expr->x.pList->a[i].pExpr);
@@ -2106,8 +2110,8 @@ __find_function(dbp, name, len, nargs, create)
 		return p;
 	}
 	maybe = 0;
-	while(p && p->nArg != nargs) {
-		if (p->nArg < 0 && !create && (p->xFunc || p->xStep))
+	while(p && p->n_arguments != nargs) {
+		if (p->n_arguments < 0 && !create && (p->xFunc || p->xStep))
 			maybe = p;
 		p = p->pNext;
 	}
@@ -2120,7 +2124,7 @@ __find_function(dbp, name, len, nargs, create)
 	}
 	if (p == 0 && create &&
 	    __dbsql_calloc(dbp, 1, sizeof(*p), &p) != ENOMEM) {
-		p->nArg = nargs;
+		p->n_arguments = nargs;
 		p->pNext = first;
 		p->dataType = first ? first->dataType : DBSQL_NUMERIC;
 		__hash_insert((hash_t*)dbp->fns, name, len, (void*)p);

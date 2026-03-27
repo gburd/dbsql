@@ -1,0 +1,35 @@
+this derivation will be built:
+  /nix/store/rj8i1avls2bbd8xda0vfrva219w2wx1c-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/rj8i1avls2bbd8xda0vfrva219w2wx1c-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/rj8i1avls2bbd8xda0vfrva219w2wx1c-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/4j2cfwap22mdbvdfxx770va8n0jpynsg-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       > ./opcodes.h:177: warning: "OP_SetNext" redefined
+       >   177 | #define OP_SetNext                     176
+       >       |
+       > ./opcodes.h:172: note: this is the location of the previous definition
+       >   172 | #define OP_SetNext                     171
+       >       |
+       > ./opcodes.h:182: warning: "OP_SortCallback" redefined
+       >   182 | #define OP_SortCallback                179  /* Legacy: use OP_ResultRow */
+       >       |
+       > ./opcodes.h:132: note: this is the location of the previous definition
+       >   132 | #define OP_SortCallback                131
+       >       |
+       > ./opcodes.h:183: warning: "OP_NullCallback" redefined
+       >   183 | #define OP_NullCallback                180  /* Legacy: use OP_ResultRow */
+       >       |
+       > ./opcodes.h:17: note: this is the location of the previous definition
+       >    17 | #define OP_NullCallback                 16
+       >       |
+       > libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/nrz5m3p98n73nkqn42j4x95rxvb6pzpb-db4-combined/include -D_GNU_SOURCE -D_REENTRANT -O2 ../dist/../src/dbsql/dbsql.c -o dbsql.o >/dev/null 2>&1
+       > /nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/bash ./libtool --mode=link gcc -o dbsql  \
+       >     dbsql.lo libdbsql-0.4.la -lm -lreadline
+       > libtool: link: gcc -o .libs/dbsql .libs/dbsql.o  ./.libs/libdbsql-0.4.so -L/nix/store/nrz5m3p98n73nkqn42j4x95rxvb6pzpb-db4-combined/lib /nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib/libdb-4.8.so -lm -lreadline  -Wl,-rpath -Wl,/nix/store/4j2cfwap22mdbvdfxx770va8n0jpynsg-dbsql-DBSQL-0.3.1-pre20260323_dirty-/lib -Wl,-rpath -Wl,/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib
+       > /nix/store/74y3751gsixaz9797ib0hp7c658sp1y5-binutils-2.40/bin/ld: ./.libs/libdbsql-0.4.so: undefined reference to `__sql_parser_fallback'
+       > collect2: error: ld returned 1 exit status
+       > make: *** [Makefile:209: dbsql] Error 1
+       For full logs, run:
+         nix log /nix/store/rj8i1avls2bbd8xda0vfrva219w2wx1c-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv

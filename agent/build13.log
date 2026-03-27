@@ -1,0 +1,35 @@
+this derivation will be built:
+  /nix/store/g68m933mnlgr9s3fxfh9afb20dm08y8p-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv
+building '/nix/store/g68m933mnlgr9s3fxfh9afb20dm08y8p-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'...
+error: Cannot build '/nix/store/g68m933mnlgr9s3fxfh9afb20dm08y8p-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv'.
+       Reason: builder failed with exit code 2.
+       Output paths:
+         /nix/store/7rb5r84s9584sqwcc6wh631ka49ji4zl-dbsql-DBSQL-0.3.1-pre20260323_dirty-
+       Last 25 log lines:
+       >       |                                       ^~~~~
+       >       |                                       |
+       >       |                                       int *
+       > ../dist/../src/inc/dbsql_ext.h:162:27: note: expected 'sm_cursor_t *' {aka 'struct sm_cursor *'} but argument is of type 'int *'
+       >   162 | int __sm_key_compare __P((sm_cursor_t *, const void *, int, int, int *));
+       >       |                           ^~~~~~~~~~~~~
+       > ./dbsql.h:41:30: note: in definition of macro '__P'
+       >    41 | #define      __P(protos)     protos
+       >       |                              ^~~~~~
+       > ../dist/../src/vdbe.c:4476:18: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+       >  4476 |                 *(u_int32_t*)pOp->p3 = pgno;
+       >       |                  ^
+       > ../dist/../src/vdbe.c:6053:53: warning: format '%d' expects argument of type 'int', but argument 3 has type 'i64' {aka 'long int'} [-Wformat=]
+       >  6053 |                             fprintf(p->trace, " si:%d", pTos[i].u.i);
+       >       |                                                    ~^   ~~~~~~~~~~~
+       >       |                                                     |            |
+       >       |                                                     int          i64 {aka long int}
+       >       |                                                    %ld
+       > ../dist/../src/vdbe.c:6055:52: warning: format '%d' expects argument of type 'int', but argument 3 has type 'i64' {aka 'long int'} [-Wformat=]
+       >  6055 |                             fprintf(p->trace, " i:%d", pTos[i].u.i);
+       >       |                                                   ~^   ~~~~~~~~~~~
+       >       |                                                    |            |
+       >       |                                                    int          i64 {aka long int}
+       >       |                                                   %ld
+       > make: *** [Makefile:454: vdbe.lo] Error 1
+       For full logs, run:
+         nix log /nix/store/g68m933mnlgr9s3fxfh9afb20dm08y8p-dbsql-DBSQL-0.3.1-pre20260323_dirty-.drv

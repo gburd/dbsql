@@ -90,7 +90,7 @@
  * 2. Redistributions 
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 
 #ifndef NO_SYSTEM_INCLUDES
 #include <sys/types.h>
@@ -141,11 +141,11 @@ __rng_seed(char* buf)
  * srand48_r --
  *	Seed the random number generator before use.
  *
- * PUBLIC: #ifndef HAVE_SRAND48_R
+ * PUBLIC: #if !defined(__GLIBC__) && !defined(HAVE_SRAND48_R)
  * PUBLIC: int srand48_r __P((struct drand48_data *));
  * PUBLIC: #endif
  */
-#ifndef HAVE_SRAND48_R
+#if !defined(__GLIBC__) && !defined(HAVE_SRAND48_R)
 int
 srand48_r(buffer)
 	struct drand48_data *buffer;
@@ -174,11 +174,11 @@ srand48_r(buffer)
  *	A re-entrant version of a random number generator.  This
  *	random number generator is based on the RC4 algorithm.
  *
- * STATIC: #ifndef HAVE_LRAND48_R
+ * STATIC: #if !defined(__GLIBC__) && !defined(HAVE_LRAND48_R)
  * STATIC: int lrand48_r __P((struct drand48_data *, double *));
  * STATIC: #endif
  */
-#ifndef HAVE_LRAND48_R
+#if !defined(__GLIBC__) && !defined(HAVE_LRAND48_R)
 static int
 lrand48_r(buffer, result)
 	struct drand48_data *buffer;
@@ -208,9 +208,13 @@ rand8_r(buffer, result)
 	u_int8_t *result;
 {
 	long int i;
+#ifdef __GLIBC__
 	int rc = lrand48_r(buffer, &i);
+#else
+	int rc = lrand48_r(buffer, (double *)&i);
+#endif
 	*result = i & 0xf;
-	return 0;
+	return rc;
 }
 
 /*
@@ -225,12 +229,23 @@ rand32_r(buffer, result)
 {
 	int rc, i;
 	long int r, s;
+#ifdef __GLIBC__
 	rc = lrand48_r(buffer, &r);
 	for(i = 1; i < 4; i++) {
 		rc = lrand48_r(buffer, &s);
 		r = (r << 8) + s;
 	}
-	*result = r;
+#else
+	double dr, ds;
+	rc = lrand48_r(buffer, &dr);
+	r = (long int)dr;
+	for(i = 1; i < 4; i++) {
+		rc = lrand48_r(buffer, &ds);
+		s = (long int)ds;
+		r = (r << 8) + s;
+	}
+#endif
+	*result = (u_int32_t)r;
 	return rc;
 }
 

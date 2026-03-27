@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "dbsql_config.h"
+#include "inc/dbsql_config.h"
 #include "dbsql_int.h"
 
 typedef struct {
@@ -257,8 +257,10 @@ __sm_init(sm_t* sm, int* init)
 			   DB_BTREE,
 			   DB_CREATE | DB_EXCL | flags, 0)) == EEXIST) {
 		/* The database already exists, try to open it */
-		if ((rc = db->open(db, txn, sm->name, SM_META_NAME, DB_BTREE,
-				   flags, 0)) == 0)
+		if ((rc = db->open(db, txn,
+				   (F_ISSET(sm, SM_INMEM_DB) ? NULL : sm->name),
+				   (F_ISSET(sm, SM_INMEM_DB) ? NULL : SM_META_NAME),
+				   DB_BTREE, flags, 0)) == 0)
 			*init = 0;
 		else
 			goto err;
@@ -504,13 +506,15 @@ __sm_cursor(sm_t* sm, int id, int write, sm_cursor_t* *smcp)
 	DBSQL_ASSERT(smcp != 0);
 
 	*smcp = 0;
+	if (sm->dbp == NULL)
+		return DBSQL_ERROR;
 	dbenv = sm->dbp->dbenv;
 
 	smr = (sm_rec_t *)__hash_find(&sm->dbs, (const void *)0, id);
 	if (smr == 0)
 		return DBSQL_INTERNAL;
 
-	if (__dbsql_calloc(sm->dbp, 1, sizeof(sm_cursor_t), &smc) == ENOMEM)
+	if (__dbsql_calloc(sm->dbp, 1, sizeof(sm_cursor_t), &smc) != 0)
 		return DBSQL_NOMEM;
 
 	smc->sm = sm;
@@ -960,13 +964,15 @@ __sm_data(sm_cursor_t* smc, size_t offset, size_t len, char* value)
 
 	switch(smc->dbc->c_get(smc->dbc, &key, &data, DB_CURRENT)) {
 	case 0:
-		if (!data.data || ((len + offset) <= data.size)) {
+		if (data.data && ((len + offset) <= data.size)) {
 			memcpy((void *)value, ((char*)data.data) + offset,len);
 			amt = len;
-		} else {
+		} else if (data.data && (offset < data.size)) {
 			memcpy((void *)value, ((char*)data.data) + offset,
 			       data.size - offset);
 			amt = data.size - offset;
+		} else {
+			amt = 0;  /* No data or out of bounds */
 		}
 		break;
 	default:
@@ -1945,9 +1951,9 @@ __sm_integer_key(smc)
  *	SQLite 3.52.0's sqlite3BtreeInsert(pCur, &payload, flags, seekResult).
  *
  *	For table inserts (INTKEY):
- *	  payload->nKey is the i64 rowid.
+ *	  payload->n_key_bytes is the i64 rowid.
  *	  payload->pData/nData is the record body.
- *	  payload->nZero trailing zero bytes are appended logically.
+ *	  payload->n_zero_bytes trailing zero bytes are appended logically.
  *
  *	For index inserts (BLOBKEY):
  *	  payload->pKey/nKey is the index key blob.
@@ -1986,29 +1992,29 @@ __sm_insert_ex(smc, pPayload, flags, seekResult)
 		 * The data is the record body, possibly with nZero
 		 * trailing zeros.
 		 */
-		__sm_i64_to_key(pPayload->nKey, keybuf);
+		__sm_i64_to_key(pPayload->n_key_bytes, keybuf);
 		key.data = keybuf;
 		key.size = sizeof(keybuf);
 
-		if (pPayload->nZero > 0) {
+		if (pPayload->n_zero_bytes > 0) {
 			/*
 			 * Expand the data to include trailing zeros.
 			 * Allocate a single buffer for pData + nZero bytes.
 			 */
-			int total = pPayload->nData + pPayload->nZero;
+			int total = pPayload->n_data_bytes + pPayload->n_zero_bytes;
 			if (__dbsql_umalloc(smc->sm->dbp, total,
 					    &expanded_data) == ENOMEM)
 				return DBSQL_NOMEM;
-			if (pPayload->nData > 0)
+			if (pPayload->n_data_bytes > 0)
 				memcpy(expanded_data, pPayload->pData,
-				       pPayload->nData);
-			memset((char *)expanded_data + pPayload->nData, 0,
-			       pPayload->nZero);
+				       pPayload->n_data_bytes);
+			memset((char *)expanded_data + pPayload->n_data_bytes, 0,
+			       pPayload->n_zero_bytes);
 			data.data = expanded_data;
 			data.size = total;
 		} else {
 			data.data = (void *)pPayload->pData;
-			data.size = pPayload->nData;
+			data.size = pPayload->n_data_bytes;
 		}
 	} else {
 		/*
@@ -2016,7 +2022,7 @@ __sm_insert_ex(smc, pPayload, flags, seekResult)
 		 * No separate data.
 		 */
 		key.data = (void *)pPayload->pKey;
-		key.size = (u_int32_t)pPayload->nKey;
+		key.size = (u_int32_t)pPayload->n_key_bytes;
 		data.data = (void *)"";
 		data.size = 0;
 	}
@@ -2033,7 +2039,7 @@ __sm_insert_ex(smc, pPayload, flags, seekResult)
 		else {
 			smc->eState = SMC_STATE_VALID;
 			if (F_ISSET(smc, SMC_INTKEY)) {
-				smc->cachedRowid = pPayload->nKey;
+				smc->cachedRowid = pPayload->n_key_bytes;
 				smc->cachedRowidValid = 1;
 			}
 		}
