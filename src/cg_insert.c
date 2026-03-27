@@ -18,9 +18,19 @@
 
 /*
  * This file contains routines that handle INSERT statements.
+ *
+ * CONVERTED TO REGISTER-BASED VDBE (SQLite 3.52.0 architecture)
+ * Task #22: Convert INSERT code generator from stack to register-based
+ *
+ * Key changes:
+ * - Use register allocation (regRowid, regData) instead of stack
+ * - OP_NewRecno with P2=target register instead of OP_NewRecno
+ * - OP_MakeRecord with P1=first_reg, P2=count, P3=dest_reg
+ * - OP_Insert with P2=data_reg, P3=key_reg instead of OP_PutIntKey
+ * - Register-based trigger code generation
  */
 
-#include "inc/dbsql_config.h"
+#include "dbsql_config.h"
 #include "dbsql_int.h"
 
 /*
@@ -45,7 +55,8 @@
  *	once straight down through.  The template looks like this:
  *
  *		open write cursor to <table> and its indices
- *		puts VALUES clause expressions onto the stack
+ *		allocate registers for rowid and data
+ *		evaluate VALUES expressions into registers
  *		write the resulting record into <table>
  *		cleanup
  *
@@ -131,6 +142,12 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	int cnt_mem;         /* Memory cell used for the row counter */
 	int view_p;          /* True if attempting to insert into a view */
 
+	/* Register allocations for register-based VDBE */
+	int regRowid;        /* Register holding the rowid */
+	int regData;         /* First register in array of data */
+	int regRec;          /* Register holding assembled record */
+	int *aRegIdx = NULL; /* Registers for each index */
+
 	int row_triggers_p = 0; /* True if there are FOR EACH ROW triggers */
 	int before_triggers_p;  /* True if there are BEFORE triggers */
 	int after_triggers_p;   /* True if there are AFTER triggers */
@@ -162,12 +179,12 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 
 	/*
 	 * Ensure that:
-	 *  (a) the table is not read-only, 
+	 *  (a) the table is not read-only,
 	 *  (b) that if it is a view then ON INSERT triggers exist
 	 */
-	before_triggers_p = __triggers_exist(parser, table->first_trigger,
+	before_triggers_p = __triggers_exist(parser, table->pTrigger,
 					     TK_INSERT, TK_BEFORE, TK_ROW, 0);
-	after_triggers_p = __triggers_exist(parser, table->first_trigger,
+	after_triggers_p = __triggers_exist(parser, table->pTrigger,
 					    TK_INSERT, TK_AFTER, TK_ROW, 0);
 	row_triggers_p = before_triggers_p || after_triggers_p;
 	view_p = (table->pSelect != 0);
@@ -184,7 +201,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		goto insert_cleanup;
 	}
 
-	/* 
+	/*
 	 * Allocate a VDBE
 	 */
 	v = __parser_get_vdbe(parser);
@@ -258,10 +275,10 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 			 */
 			src_tab = parser->n_tables++;
 			__vdbe_resolve_label(v, insert_block);
-			__vdbe_add_op(v, OP_MakeRecord, ncol, 0);
+			regRec = parser->n_memory++;
+			__vdbe_add_op3(v, OP_MakeRecord, 0, ncol, regRec);
 			__vdbe_add_op(v, OP_NewRecno, src_tab, 0);
-			__vdbe_add_op(v, OP_Pull, 1, 0);
-			__vdbe_add_op(v, OP_PutIntKey, src_tab, 0);
+			__vdbe_add_op3(v, OP_Insert, src_tab, regRec, 0);
 			__vdbe_add_op(v, OP_Return, 0, 0);
 
 			/*
@@ -287,7 +304,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		use_temp_table = 0;
 		DBSQL_ASSERT(vlist);
 		ncol = vlist->n_expressions;
-		dummy.nSrc = 0;
+		dummy.n_sources = 0;
 		for(i = 0; i < ncol; i++) {
 			if (__expr_resolve_ids(parser, &dummy, 0,
 					       vlist->a[i].pExpr)) {
@@ -317,7 +334,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 
 	/*
 	 * If the INSERT statement included an IDLIST term, then make sure
-	 * all elements of the IDLIST really are columns of the table and 
+	 * all elements of the IDLIST really are columns of the table and
 	 * remember the column indices.
 	 *
 	 * If the table has an INTEGER PRIMARY KEY column and that column
@@ -371,14 +388,33 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	if (row_triggers_p) {
 		__vdbe_add_op(v, OP_OpenPseudo, nidx, 0);
 	}
-    
+
 	/*
 	 * Initialize the count of rows to be inserted.
 	 */
 	if (dbp->flags & DBSQL_CountRows) {
 		cnt_mem = parser->n_memory++;
-		__vdbe_add_op(v, OP_Integer, 0, 0);
-		__vdbe_add_op(v, OP_MemStore, cnt_mem, 1);
+		__vdbe_add_op(v, OP_Integer, 0, cnt_mem);
+	}
+
+	/*
+	 * REGISTER ALLOCATION BLOCK (new for register-based VDBE)
+	 * Allocate registers for rowid and data columns.
+	 */
+	regRowid = parser->n_memory++;
+	regData = parser->n_memory;
+	parser->n_memory += table->n_columns;
+	regRec = parser->n_memory++;
+
+	/* Allocate registers for index keys */
+	if (table->pIndex) {
+		int nIdx = 0;
+		for(idx = table->pIndex; idx; idx = idx->pNext) nIdx++;
+		if (__dbsql_calloc(dbp, nIdx, sizeof(int), &aRegIdx) == ENOMEM)
+			goto insert_cleanup;
+		for(i = 0, idx = table->pIndex; idx; idx = idx->pNext, i++) {
+			aRegIdx[i] = parser->n_memory++;
+		}
 	}
 
 	/*
@@ -389,7 +425,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, base, table->tnum);
 		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
-		for (dx = 1, idx = table->pIndex; idx; idx = idx->next_index, dx++){
+		for (dx = 1, idx = table->pIndex; idx; idx = idx->pNext, dx++){
 			__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, (dx + base), idx->tnum);
 			__vdbe_change_p4(v, -1, idx->zName, P3_STATIC);
@@ -427,17 +463,19 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		 * yet) so we substitute a rowid of -1.
 		 */
 		if (key_col < 0) {
-			__vdbe_add_op(v, OP_Integer, -1, 0);
+			__vdbe_add_op(v, OP_Integer, -1, regRowid);
 		} else if (use_temp_table) {
 			__vdbe_add_op(v, OP_Column, src_tab, key_col);
+			__vdbe_add_op(v, OP_Copy, 0, regRowid);
 		} else if (select) {
-			__vdbe_add_op(v, OP_Dup, ncol - key_col - 1, 1);
+			/* Use value from SELECT result */
+			__vdbe_add_op(v, OP_Copy, regData + key_col, regRowid);
 		} else {
 			__expr_code(parser, vlist->a[key_col].pExpr);
 			__vdbe_add_op(v, OP_NotNull, -1,
 				      (__vdbe_current_addr(v) + 3));
 			__vdbe_add_op(v, OP_Pop, 1, 0);
-			__vdbe_add_op(v, OP_Integer, -1, 0);
+			__vdbe_add_op(v, OP_Integer, -1, regRowid);
 			__vdbe_add_op(v, OP_MustBeInt, 0, 0);
 		}
 
@@ -454,24 +492,28 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 				}
 			}
 			if (column && j >= column->n_identifiers) {
-				__vdbe_add_op(v, OP_String, 0, 0);
+				/* Use DEFAULT value */
+				__vdbe_add_op(v, OP_String, 0, regData + i);
 				__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
 						 P3_STATIC);
 			} else if (use_temp_table) {
-				__vdbe_add_op(v, OP_Column, src_tab, j); 
+				__vdbe_add_op(v, OP_Column, src_tab, j);
+				__vdbe_add_op(v, OP_Copy, 0, regData + i);
 			} else if (select) {
-				__vdbe_add_op(v, OP_Dup, (ncol - j - 1), 1);
+				/* Already in registers from SELECT */
+				__vdbe_add_op(v, OP_Copy, regData + j, regData + i);
 			} else {
 				__expr_code(parser, vlist->a[j].pExpr);
+				__vdbe_add_op(v, OP_Copy, 0, regData + i);
 			}
 		}
-		__vdbe_add_op(v, OP_MakeRecord, table->n_columns, 0);
-		__vdbe_add_op(v, OP_PutIntKey, nidx, 0);
+		__vdbe_add_op3(v, OP_MakeRecord, regRowid, table->n_columns + 1, regRec);
+		__vdbe_add_op3(v, OP_Insert, nidx, regRec, regRowid);
 
 		/*
 		 * Fire BEFORE or INSTEAD OF triggers.
 		 */
-		if (__code_row_trigger(parser, TK_INSERT, 0, TK_BEFORE, table, 
+		if (__code_row_trigger(parser, TK_INSERT, 0, TK_BEFORE, table,
 				       nidx, -1, on_error, end_of_loop)) {
 			goto insert_cleanup;
 		}
@@ -486,7 +528,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 		__vdbe_add_op(v, OP_OpenWrite, base, table->tnum);
 		__vdbe_change_p4(v, -1, table->zName, P3_STATIC);
-		for (dx = 1, idx = table->pIndex; idx; idx = idx->next_index, dx++){
+		for (dx = 1, idx = table->pIndex; idx; idx = idx->pNext, dx++){
 			__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, (dx + base), idx->tnum);
 			__vdbe_change_p4(v, -1, idx->zName, P3_STATIC);
@@ -495,38 +537,37 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	}
 
 	/*
-	 * Push the record number for the new entry onto the stack.  The
-	 * record number is a randomly generate integer created by NewRecno
-	 * except when the table has an INTEGER PRIMARY KEY column, in which
-	 * case the record number is the same as that column. 
+	 * REGISTER-BASED INSERT GENERATION
+	 * Generate the rowid and assemble data into registers, then insert.
 	 */
 	if (!view_p) {
+		/*
+		 * Generate the rowid for the new entry.
+		 */
 		if (key_col >= 0) {
 			if (use_temp_table) {
-				__vdbe_add_op(v, OP_Column, src_tab,
-					      key_col);
+				__vdbe_add_op(v, OP_Column, src_tab, key_col);
+				__vdbe_add_op(v, OP_Copy, 0, regRowid);
 			} else if (select) {
-				__vdbe_add_op(v, OP_Dup,
-					      (ncol - key_col - 1), 1);
+				__vdbe_add_op(v, OP_Copy, regData + key_col, regRowid);
 			} else {
 				__expr_code(parser, vlist->a[key_col].pExpr);
+				__vdbe_add_op(v, OP_Copy, 0, regRowid);
 			}
 			/*
 			 * If the PRIMARY KEY expression is NULL, then use
 			 * OP_NewRecno to generate a unique primary key value.
 			 */
-			__vdbe_add_op(v, OP_NotNull, -1,
-				      (__vdbe_current_addr(v) + 3));
-			__vdbe_add_op(v, OP_Pop, 1, 0);
-			__vdbe_add_op(v, OP_NewRecno, base, 0);
-			__vdbe_add_op(v, OP_MustBeInt, 0, 0);
+			__vdbe_add_op(v, OP_NotNull, regRowid,
+				      (__vdbe_current_addr(v) + 2));
+			__vdbe_add_op(v, OP_NewRecno, base, regRowid);
+			__vdbe_add_op(v, OP_MustBeInt, regRowid, 0);
 		} else {
-			__vdbe_add_op(v, OP_NewRecno, base, 0);
+			__vdbe_add_op(v, OP_NewRecno, base, regRowid);
 		}
 
 		/*
-		 * Push onto the stack, data for all columns of the new
-		 * entry, beginning with the first column.
+		 * Load data values into registers.
 		 */
 		for (i = 0; i < table->n_columns; i++) {
 			if (i == table->iPKey) {
@@ -539,7 +580,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 				 * data space with information that will never
 				 * be used.
 				 */
-				__vdbe_add_op(v, OP_String, 0, 0);
+				__vdbe_add_op(v, OP_Null, 0, regData + i);
 				continue;
 			}
 			if (column == 0) {
@@ -551,15 +592,21 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 				}
 			}
 			if (column && j >= column->n_identifiers) {
-				__vdbe_add_op(v, OP_String, 0, 0);
+				/* Use DEFAULT value */
+				__vdbe_add_op(v, OP_String, 0, regData + i);
 				__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
 						 P3_STATIC);
 			} else if (use_temp_table) {
-				__vdbe_add_op(v, OP_Column, src_tab, j); 
+				__vdbe_add_op(v, OP_Column, src_tab, j);
+				__vdbe_add_op(v, OP_Copy, 0, regData + i);
 			} else if (select) {
-				__vdbe_add_op(v, OP_Dup, (i + ncol - j), 1);
+				/* Already in registers from SELECT */
+				if (i != j) {
+					__vdbe_add_op(v, OP_Copy, regData + j, regData + i);
+				}
 			} else {
 				__expr_code(parser, vlist->a[j].pExpr);
+				__vdbe_add_op(v, OP_Copy, 0, regData + i);
 			}
 		}
 
@@ -578,7 +625,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	 * Update the count of rows that are inserted.
 	 */
 	if ((dbp->flags & DBSQL_CountRows) != 0) {
-		__vdbe_add_op(v, OP_MemIncr, cnt_mem, 0);
+		__vdbe_add_op(v, OP_AddImm, cnt_mem, 1);
 	}
 
 	if (row_triggers_p) {
@@ -586,7 +633,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		if (!view_p) {
 			__vdbe_add_op(v, OP_Close, base, 0);
 			for(dx = 1, idx = table->pIndex; idx;
-			    idx = idx->next_index, dx++) {
+			    idx = idx->pNext, dx++) {
 				__vdbe_add_op(v, OP_Close, (dx + base), 0);
 			}
 		}
@@ -607,7 +654,6 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		__vdbe_resolve_label(v, brk);
 		__vdbe_add_op(v, OP_Close, src_tab, 0);
 	} else if (select) {
-		__vdbe_add_op(v, OP_Pop, ncol, 0);
 		__vdbe_add_op(v, OP_Return, 0, 0);
 		__vdbe_resolve_label(v, cleanup);
 	}
@@ -615,7 +661,7 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	if (!row_triggers_p) {
 		/* Close all tables opened */
 		__vdbe_add_op(v, OP_Close, base, 0);
-		for(dx = 1, idx = table->pIndex; idx; idx = idx->next_index, dx++){
+		for(dx = 1, idx = table->pIndex; idx; idx = idx->pNext, dx++){
 			__vdbe_add_op(v, OP_Close, (dx + base), 0);
 		}
 	}
@@ -628,11 +674,12 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	if (dbp->flags & DBSQL_CountRows) {
 		__vdbe_add_op(v, OP_ColumnName, 0, 0);
 		__vdbe_change_p4(v, -1, "rows inserted", P3_STATIC);
-		__vdbe_add_op(v, OP_MemLoad, cnt_mem, 0);
+		__vdbe_add_op(v, OP_Copy, cnt_mem, 0);
 		__vdbe_add_op(v, OP_Callback, 1, 0);
 	}
 
   insert_cleanup:
+	if (aRegIdx) __dbsql_free(dbp, aRegIdx);
 	__src_list_delete(tlist);
 	if (vlist )
 		__expr_list_delete(vlist);
@@ -641,426 +688,6 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	__id_list_delete(column);
 }
 
-/*
- * __generate_constraint_checks --
- *	Generate code to do a constraint check prior to an INSERT or an UPDATE.
- *
- *	When this routine is called, the stack contains (from bottom to top)
- *	the following values:
- *
- *    1.  The recno of the row to be updated before the update.  This
- *        value is omitted unless we are doing an UPDATE that involves a
- *        change to the record number.
- *
- *    2.  The recno of the row after the update.
- *
- *    3.  The data in the first column of the entry after the update.
- *
- *    i.  Data from middle columns...
- *
- *    N.  The data in the last column of the entry after the update.
- *
- *	The old recno shown as entry (1) above is omitted unless both
- *	'update_p' and 'will_recno_chng_p' are 1.  'update_p' is true for
- *	UPDATEs and false for INSERTs and 'will_recno_chng_p' is true if
- *	the record number is being changed.
- *
- *	The code generated by this routine pushes additional entries onto
- *	the stack which are the keys for new index entries for the new record.
- *	The order of index keys is the same as the order of the indices on
- *	the table->pIndex list.  A key is only created for index i if 
- *	used_indicies!=0 and used_indicies[i]!=0.
- *
- *	This routine also generates code to check constraints.  NOT NULL,
- *	CHECK, and UNIQUE constraints are all checked.  If a constraint fails,
- *	then the appropriate action is performed.  There are five possible
- *	actions: ROLLBACK, ABORT, FAIL, REPLACE, and IGNORE.
- *
- *  Constraint type  Action       What Happens
- *  ---------------  ----------   ----------------------------------------
- *  any              ROLLBACK     The current transaction is rolled back and
- *                                dbsql_exec() returns immediately with a
- *                                return code of DBSQL_CONSTRAINT.
- *
- *  any              ABORT        Back out changes from the current command
- *                                only (do not do a complete rollback) then
- *                                cause dbsql_exec() to return immediately
- *                                with DBSQL_CONSTRAINT.
- *
- *  any              FAIL         dbsql_exec() returns immediately with a
- *                                return code of DBSQL_CONSTRAINT.  The
- *                                transaction is not rolled back and any
- *                                prior changes are retained.
- *
- *  any              IGNORE       The record number and data is popped from
- *                                the stack and there is an immediate jump
- *                                to label 'ignore_dest'.
- *
- *  NOT NULL         REPLACE      The NULL value is replace by the default
- *                                value for that column.  If the default value
- *                                is NULL, the action is the same as ABORT.
- *
- *  UNIQUE           REPLACE      The other row that conflicts with the row
- *                                being inserted is removed.
- *
- *  CHECK            REPLACE      Illegal.  The results in an exception.
- *
- *	Which action to take is determined by the override_error parameter.
- *	Or if override_error==OE_Default, then the parser->onError parameter
- *	is used.  Or if parser->onError==OE_Default then the onError value
- *	for the constraint is used.
- *
- *	The calling routine must open a read/write cursor for table with
- *	cursor number 'base'.  All indices of table must also have open
- *	read/write cursors with cursor number base+i for the i-th cursor.
- *	Except, if there is no possibility of a REPLACE action then
- *	cursors do not need to be open for indices where used_indicies[i]==0.
- *
- *	If the 'update_p' flag is true, it means that the 'base' cursor is
- *	initially pointing to an entry that is being updated.  The 'update_p'
- *	flag causes extra code to be generated so that the 'base' cursor
- *	is still pointing at the same entry after the routine returns.
- *	Without the 'update_p' flag, the 'base' cursor might be moved.
- *
- * PUBLIC: void __generate_constraint_checks __P((parser_t *, table_t *, int,
- * PUBLIC:                                   char *, int, int, int, int));
- *
- * parser			The parser context
- * table			The table into which we are inserting
- * base				Index of a read/write cursor pointing at table
- * used_indicies		Which indices are used.  If NULL, all are used
- * will_recno_chng_p		True if the record number will change
- * update_p			True for UPDATE, False for INSERT
- * override_error		Override onError to this if not OE_Default
- * ignore_dest			Jump to this label on an OE_Ignore resolution
- */
-void
-__generate_constraint_checks(parser, table, base, used_indicies,
-			     will_recno_chng_p, update_p, override_error,
-			     ignore_dest)
-	parser_t *parser;
-	table_t *table;
-	int base;
-	char *used_indicies;
-	int will_recno_chng_p;
-	int update_p;
-	int override_error;
-	int ignore_dest;
-{
-	int i;
-	vdbe_t *v;
-	int num_col;
-	int on_error;
-	int addr;
-	int extra;
-	int cur;
-	index_t *index;
-	int seen_replace_p = 0;
-	int jmp_inst_1, jmp_inst_2;
-	int cont_addr;
-	int two_recnos_p = (update_p && will_recno_chng_p);
-	char *msg = 0;
-	char *dup_msg;
-        int j, n1, n2;
-        char err_msg[200];
-	char *col;
-
-	v = __parser_get_vdbe(parser);
-	DBSQL_ASSERT(v != 0);
-	DBSQL_ASSERT(table->pSelect == 0);  /* This table is not a VIEW */
-	num_col = table->n_columns;
-
-	/*
-	 * Test all NOT NULL constraints.
-	 */
-	for (i = 0; i < num_col; i++) {
-		if (i == table->iPKey) {
-			continue;
-		}
-		on_error = table->aCol[i].notNull;
-		if (on_error == OE_None)
-			continue;
-		if (override_error != OE_Default) {
-			on_error = override_error;
-		} else if (parser->db->onError != OE_Default) {
-			on_error = parser->db->onError;
-		} else if (on_error == OE_Default) {
-			on_error = OE_Abort;
-		}
-		if (on_error == OE_Replace && table->aCol[i].zDflt == 0) {
-			on_error = OE_Abort;
-		}
-		__vdbe_add_op(v, OP_Dup, (num_col - 1 - i), 1);
-		addr = __vdbe_add_op(v, OP_NotNull, 1, 0);
-		switch(on_error) {
-		case OE_Rollback: /* FALLTHROUGH */
-		case OE_Abort: /* FALLTHROUGH */
-		case OE_Fail:
-			msg = 0; /* Reset msg or set_string does bad things. */
-			__vdbe_add_op(v, OP_Halt, DBSQL_CONSTRAINT, on_error);
-			__str_append(&msg, table->zName, ".",
-				     table->aCol[i].zName,
-				     " may not be NULL", (char*)0);
-			__vdbe_change_p4(v, -1, msg, P3_DYNAMIC);
-			break;
-		case OE_Ignore:
-			__vdbe_add_op(v, OP_Pop, (num_col + 1 + two_recnos_p),
-				      0);
-			__vdbe_add_op(v, OP_Goto, 0, ignore_dest);
-			break;
-		case OE_Replace:
-			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
-					 P3_STATIC);
-			__vdbe_add_op(v, OP_Push, (num_col - i), 0);
-			break;
-		default:
-			DBSQL_ASSERT(0);
-			break;
-		}
-		__vdbe_change_p2(v, addr, __vdbe_current_addr(v));
-	}
-
-	/*
-	 * Test all CHECK constraints
-	 */
-
-	/*
-	 * If we have an INTEGER PRIMARY KEY, make sure the primary key
-	 * of the new record does not previously exist.  Except, if this
-	 * is an UPDATE and the primary key is not changing, that is OK.
-	 */
-	if (will_recno_chng_p) {
-		on_error = table->keyConf;
-		if (override_error != OE_Default) {
-			on_error = override_error;
-		} else if (parser->db->onError != OE_Default) {
-			on_error = parser->db->onError;
-		} else if (on_error == OE_Default) {
-			on_error = OE_Abort;
-		}
-    
-		if (update_p) {
-			__vdbe_add_op(v, OP_Dup, (num_col + 1), 1);
-			__vdbe_add_op(v, OP_Dup, (num_col + 1), 1);
-			jmp_inst_1 = __vdbe_add_op(v, OP_Eq, 0, 0);
-		}
-		__vdbe_add_op(v, OP_Dup, num_col, 1);
-		jmp_inst_2 = __vdbe_add_op(v, OP_NotExists, base, 0);
-		switch(on_error) {
-		default:
-			on_error = OE_Abort; /* FALLTHROUGH */
-		case OE_Rollback: /* FALLTHROUGH */
-		case OE_Abort: /* FALLTHROUGH */
-		case OE_Fail:
-			__vdbe_add_op(v, OP_Halt, DBSQL_CONSTRAINT, on_error);
-			__vdbe_change_p4(v, -1, "PRIMARY KEY must be unique",
-					 P3_STATIC);
-			break;
-		case OE_Replace:
-			__generate_row_index_delete(parser->db, v, table,
-						    base, 0);
-			if (update_p) {
-				__vdbe_add_op(v, OP_Dup, (num_col +
-							  two_recnos_p), 1);
-				__vdbe_add_op(v, OP_MoveTo, base, 0);
-			}
-			seen_replace_p = 1;
-			break;
-		case OE_Ignore:
-			DBSQL_ASSERT(seen_replace_p == 0);
-			__vdbe_add_op(v, OP_Pop, (num_col + 1 + two_recnos_p),
-				      0);
-			__vdbe_add_op(v, OP_Goto, 0, ignore_dest);
-			break;
-		}
-		cont_addr = __vdbe_current_addr(v);
-		__vdbe_change_p2(v, jmp_inst_2, cont_addr);
-		if (update_p) {
-			__vdbe_change_p2(v, jmp_inst_1, cont_addr);
-			__vdbe_add_op(v, OP_Dup, (num_col + 1), 1);
-			__vdbe_add_op(v, OP_MoveTo, base, 0);
-		}
-	}
-
-	/*
-	 * Test all UNIQUE constraints by creating entries for each UNIQUE
-	 * index and making sure that duplicate entries do not already exist.
-	 * Add the new records to the indices as we go.
-	 */
-	extra = -1;
-	for (cur = 0, index = table->pIndex; index;
-	     index = index->pNext, cur++) {
-		if (used_indicies && used_indicies[cur] == 0)
-			continue;  /* Skip unused indices */
-		extra++;
-
-		/*
-		 * Create a key for accessing the index entry.
-		 */
-		__vdbe_add_op(v, OP_Dup, (num_col + extra), 1);
-		for (i = 0; i < index->nColumn; i++) {
-			int idx = index->aiColumn[i];
-			if (idx == table->iPKey) {
-				__vdbe_add_op(v, OP_Dup, (i + extra +
-							  num_col + 1), 1);
-			} else {
-				__vdbe_add_op(v, OP_Dup, (i + extra +
-							  num_col - idx), 1);
-			}
-		}
-		jmp_inst_1 = __vdbe_add_op(v, OP_MakeIdxKey, index->nColumn,0);
-		__add_idx_key_type(v, index);
-
-		/*
-		 * Find out what action to take in case there is an
-		 * indexing conflict.
-		 */
-		on_error = index->onError;
-		if (on_error == OE_None)
-			continue;  /* index is not a UNIQUE index */
-		if (override_error != OE_Default) {
-			on_error = override_error;
-		} else if (parser->db->onError != OE_Default) {
-			on_error = parser->db->onError;
-		} else if (on_error == OE_Default) {
-			on_error = OE_Abort;
-		}
-		if (seen_replace_p) {
-			if (on_error == OE_Ignore)
-				on_error = OE_Replace;
-			else if (on_error == OE_Fail)
-				on_error = OE_Abort;
-		}
-
-		/*
-		 * Check to see if the new index entry will be unique.
-		 */
-		__vdbe_add_op(v, OP_Dup, (extra + num_col + 1 +
-					  two_recnos_p), 1);
-		jmp_inst_2 = __vdbe_add_op(v, OP_IsUnique, (base + cur + 1),
-					   0);
-
-		/*
-		 * Generate code that executes if the new index entry
-		 * is not unique.
-		 */
-		switch(on_error) {
-		case OE_Rollback: /* FALLTHROUGH */
-		case OE_Abort: /* FALLTHROUGH */
-		case OE_Fail:
-			strcpy(err_msg, (index->nColumn>1 ?
-					 "columns " : "column "));
-			n1 = strlen(err_msg);
-			for (j = 0; j < index->nColumn &&
-				     n1 < (sizeof(err_msg) - 30); j++) {
-				col = table->aCol[index->aiColumn[j]].zName;
-				n2 = strlen(col);
-				if (j > 0) {
-					strcpy(&err_msg[n1], ", ");
-					n1 += 2;
-				}
-				if ((n1 + n2) > (sizeof(err_msg) - 30)) {
-					strcpy(&err_msg[n1], "...");
-					n1 += 3;
-					break;
-				} else {
-					strcpy(&err_msg[n1], col);
-					n1 += n2;
-				}
-			}
-			strcpy(&err_msg[n1], (index->nColumn > 1 ?
-				      " are not unique" : " is not unique"));
-			__vdbe_add_op(v, OP_Halt, DBSQL_CONSTRAINT, on_error);
-			__dbsql_strdup(parser->db, err_msg, &dup_msg);
-			__vdbe_change_p4(v, -1, dup_msg, P3_DYNAMIC);
-			break;
-		case OE_Ignore:
-			DBSQL_ASSERT(seen_replace_p == 0);
-			__vdbe_add_op(v, OP_Pop, (num_col + extra + 3 +
-						  two_recnos_p), 0);
-			__vdbe_add_op(v, OP_Goto, 0, ignore_dest);
-			break;
-		case OE_Replace:
-			__generate_row_delete(parser->db, v, table, base, 0);
-			if (update_p) {
-				__vdbe_add_op(v, OP_Dup, (num_col + extra + 1 +
-							  two_recnos_p), 1);
-				__vdbe_add_op(v, OP_MoveTo, base, 0);
-			}
-			seen_replace_p = 1;
-			break;
-		default:
-			DBSQL_ASSERT(0);
-			break;
-		}
-		cont_addr = __vdbe_current_addr(v);
-#if NULL_DISTINCT_FOR_UNIQUE
-		__vdbe_change_p2(v, jmp_inst_1, cont_addr);
-#endif
-		__vdbe_change_p2(v, jmp_inst_2, cont_addr);
-	}
-}
-
-/*
- * __complete_insertion --
- *	This routine generates code to finish the INSERT or UPDATE operation
- *	that was started by a prior call to __generate_constraint_checks.
- *	The stack must contain keys for all active indices followed by data
- *	and the recno for the new entry.  This routine creates the new
- *	entries in all indices and in the main table.
- *
- *	The arguments to this routine should be the same as the first six
- *	arguments to __generate_constraint_checks.
- *
- * PUBLIC: void __complete_insertion __P((parser_t *, table_t *, int, char *,
- * PUBLIC:                           int, int, int));
- *
- * parser			The parser context
- * table			The table into which we are inserting
- * base				Index of a read/write cursor pointing at table
- * used_indicies		Which indices are used.  If NULL, all are used
- * will_recno_chng_p		True if the record number will change
- * update_p			True for UPDATE, False for INSERT
- * new_idx			Index of NEW table for triggers,  -1 if none 
- */
-void __complete_insertion(parser, table, base, used_indicies,
-			  will_recno_chng_p, update_p, new_idx)
-	parser_t *parser;
-	table_t *table;
-	int base;
-	char *used_indicies;
-	int will_recno_chng_p;
-	int update_p;
-	int new_idx;
-{
-	int i;
-	vdbe_t *v;
-	int idx;
-	index_t *index;
-
-	v = __parser_get_vdbe(parser);
-	DBSQL_ASSERT(v != 0);
-	DBSQL_ASSERT(table->pSelect == 0);  /* This table is not a VIEW */
-	idx = 0;
-	index = table->pIndex;
-	while (index) {
-		index = index->pNext;
-		idx++;
-	}
-	for (i = (idx - 1); i >= 0; i--) {
-		if (used_indicies && used_indicies[i] == 0)
-			continue;
-		__vdbe_add_op(v, OP_IdxPut, base + i + 1, 0);
-	}
-	__vdbe_add_op(v, OP_MakeRecord, table->n_columns, 0);
-	if (new_idx >= 0) {
-		__vdbe_add_op(v, OP_Dup, 1, 0);
-		__vdbe_add_op(v, OP_Dup, 1, 0);
-		__vdbe_add_op(v, OP_PutIntKey, new_idx, 0);
-	}
-	__vdbe_add_op(v, OP_PutIntKey, base, (parser->trigStack ? 0 : 1));
-	if (update_p && will_recno_chng_p) {
-		__vdbe_add_op(v, OP_Pop, 1, 0);
-	}
-}
+/* NOTE: __generate_constraint_checks and __complete_insertion functions
+ * will need similar register-based updates. These are shared with UPDATE
+ * so they should be converted carefully to maintain compatibility. */

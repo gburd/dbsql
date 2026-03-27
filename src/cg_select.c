@@ -1062,7 +1062,7 @@ __fill_in_column_list(parser_t* parser, select_t* select)
 				 */
 				if (tables->a[i].pSelect == 0) {
 					tables->a[i].pSelect =
-						__select_dup(table->pSelect);
+						__select_dup(parser->db, table->pSelect);
 				}
 			}
 		}

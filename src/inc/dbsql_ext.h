@@ -126,7 +126,7 @@ table_t *__select_result_set __P((parser_t *, char *, select_t *));
 void __vdbe_delete_trigger_step __P((trigger_step_t *));
 void __begin_trigger __P((parser_t *, token_t *, int, int, id_list_t *, src_list_t *, int, expr_t *, int));
 void __finish_trigger __P((parser_t *, trigger_step_t *, token_t *));
-trigger_step_t *__trigger_select_step __P((DBSQL *, select_t *));
+trigger_step_t * __trigger_select_step __P((DBSQL *, select_t *));
 trigger_step_t *__trigger_insert_step __P((DBSQL *, token_t *, id_list_t *, expr_list_t *, select_t *, int));
 trigger_step_t *__trigger_update_step __P((DBSQL *, token_t *, expr_list_t *, expr_t *, int));
 trigger_step_t *__trigger_delete_step __P((DBSQL *, token_t *, expr_t *));

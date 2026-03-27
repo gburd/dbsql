@@ -2172,13 +2172,21 @@ case OP_MakeRecord: {
 		/* Store record in output register */
 		pOut->n = nByte;
 		if (nByte <= NBFS) {
+			/* Small record: zNewRecord is on stack (zTemp), need to allocate */
 			DBSQL_ASSERT(zNewRecord == zTemp);
+			if (__dbsql_malloc(NULL, nByte, &pOut->z) == ENOMEM)
+				goto no_mem;
 			memcpy(pOut->z, zTemp, nByte);
-			pOut->flags = MEM_Str;
+			pOut->flags = MEM_Str | MEM_Dyn;
+			pOut->zMalloc = pOut->z;
+			pOut->szMalloc = nByte;
 		} else {
+			/* Large record: zNewRecord was already allocated */
 			DBSQL_ASSERT(zNewRecord != zTemp);
 			pOut->z = zNewRecord;
 			pOut->flags = MEM_Str | MEM_Dyn;
+			pOut->zMalloc = zNewRecord;
+			pOut->szMalloc = nByte;
 		}
 	} else {
 		/* STACK MODE (P3 <= 0): use legacy stack-based implementation */
@@ -2248,11 +2256,14 @@ case OP_MakeRecord: {
 		pTos++;
 		pTos->n = nByte;
 		if (nByte <= NBFS) {
+			/* Small record: zNewRecord is on stack (zTemp), need to allocate */
 			DBSQL_ASSERT(zNewRecord == zTemp);
+			if (__dbsql_malloc(NULL, nByte, &pTos->z) == ENOMEM)
+				goto no_mem;
 			memcpy(pTos->z, zTemp, nByte);
-			pTos->z = pTos->z;
-			pTos->flags = MEM_Str;
+			pTos->flags = MEM_Str | MEM_Dyn;
 		} else {
+			/* Large record: zNewRecord was already allocated */
 			DBSQL_ASSERT(zNewRecord != zTemp);
 			pTos->z = zNewRecord;
 			pTos->flags = MEM_Str | MEM_Dyn;

@@ -572,7 +572,7 @@ open_db(p)
 		if (!strcmp(p->db_filename, ":memory:")) {
 			/* In-memory database - no directory needed */
 			envdir = 0;
-			dbname = 0;
+			dbname = ":memory:";
 		} else {
 			/* Extract directory and base filename */
 			char *last_sep = strrchr(p->db_filename, '/');

@@ -257,8 +257,10 @@ __sm_init(sm_t* sm, int* init)
 			   DB_BTREE,
 			   DB_CREATE | DB_EXCL | flags, 0)) == EEXIST) {
 		/* The database already exists, try to open it */
-		if ((rc = db->open(db, txn, sm->name, SM_META_NAME, DB_BTREE,
-				   flags, 0)) == 0)
+		if ((rc = db->open(db, txn,
+				   (F_ISSET(sm, SM_INMEM_DB) ? NULL : sm->name),
+				   (F_ISSET(sm, SM_INMEM_DB) ? NULL : SM_META_NAME),
+				   DB_BTREE, flags, 0)) == 0)
 			*init = 0;
 		else
 			goto err;

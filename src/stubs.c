@@ -91,26 +91,26 @@ void __drop_trigger_ptr(parser_t *parser, trigger_t *trigger, int nested) {
 	/* DROP TRIGGER not yet implemented */
 }
 
-trigger_step_t *__trigger_select_step(select_t *select) {
-	(void)select;
+trigger_step_t *__trigger_select_step(DBSQL *dbp, select_t *select) {
+	(void)dbp; (void)select;
 	return NULL;
 }
 
-trigger_step_t *__trigger_insert_step(token_t *b, id_list_t *columns,
+trigger_step_t *__trigger_insert_step(DBSQL *dbp, token_t *b, id_list_t *columns,
                                        expr_list_t *elist, select_t *select,
                                        int orconf) {
-	(void)b; (void)columns; (void)elist; (void)select; (void)orconf;
+	(void)dbp; (void)b; (void)columns; (void)elist; (void)select; (void)orconf;
 	return NULL;
 }
 
-trigger_step_t *__trigger_update_step(token_t *b, expr_list_t *elist,
+trigger_step_t *__trigger_update_step(DBSQL *dbp, token_t *b, expr_list_t *elist,
                                        expr_t *where, int orconf) {
-	(void)b; (void)elist; (void)where; (void)orconf;
+	(void)dbp; (void)b; (void)elist; (void)where; (void)orconf;
 	return NULL;
 }
 
-trigger_step_t *__trigger_delete_step(token_t *b, expr_t *where) {
-	(void)b; (void)where;
+trigger_step_t *__trigger_delete_step(DBSQL *dbp, token_t *b, expr_t *where) {
+	(void)dbp; (void)b; (void)where;
 	return NULL;
 }
 

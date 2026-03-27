@@ -397,7 +397,7 @@ __api_open(dbp, filename, mode, err_msgs)
 	if (__dbsql_calloc(dbp, 2, sizeof(dbsql_db_t), &dbp->aDb) == ENOMEM)
 		goto no_mem_on_open1;
 
-	if (filename[0] == ':' && strcmp(filename, ":memory:") == 0)
+	if (filename && filename[0] == ':' && strcmp(filename, ":memory:") == 0)
 		mem = 1;
 
 	for (i = 0; i < dbp->nDb; i++) {
@@ -580,8 +580,8 @@ __process_sql(DBSQL *dbp, const char *sql, dbsql_callback callback,	void *arg, c
 		return DBSQL_ERROR;
 	}
 	*/
-	if (dbp->vdbe == 0)
-		dbp->_num_last_changes = 0;
+	/* Always reset change counter at start of new SQL execution */
+	dbp->_num_last_changes = 0;
 	memset(&parser, 0, sizeof(parser_t));
 	parser.db = dbp;
 	parser.xCallback = callback;
