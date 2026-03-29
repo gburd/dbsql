@@ -118,6 +118,7 @@ void __delete_from(parser, list, where)
 	int regOldRowid;    /* Register for OLD.rowid in triggers */
 	int regOldData;     /* First register for OLD.* columns in triggers */
 	int regRec;         /* Register for assembled record in triggers */
+	int curRowSet;      /* Ephemeral cursor for rowid collection */
 
 	context.pParse = 0;
 	if (parser->nErr || parser->rc == ENOMEM) {
@@ -260,9 +261,15 @@ void __delete_from(parser, list, where)
 		 * scan through the table and pick which records to delete.
 		 */
 
-		/* Allocate register for rowset */
+		/* Allocate ephemeral cursor for rowid collection */
+		curRowSet = parser->nTab++;
+		__vdbe_add_op(v, OP_OpenTemp, curRowSet, 0);
+
+		/* Allocate registers for row counting */
 		regRowSet = parser->nMem++;
-		__vdbe_add_op(v, OP_Null, 0, regRowSet);
+		if (dbp->flags & DBSQL_CountRows) {
+			__vdbe_add_op(v, OP_Integer, 0, regRowSet);
+		}
 
 		/*
 		 * Begin the database scan.
@@ -273,13 +280,13 @@ void __delete_from(parser, list, where)
 
 		/*
 		 * Remember the key of every item to be deleted.
-		 * Use OP_SetInsert to add rowids to the set.
+		 * Store rowids in ephemeral table instead of Set.
 		 */
 		regRowid = parser->nMem++;
 		__vdbe_add_op(v, OP_Rowid, cur, regRowid);
-		__vdbe_add_op(v, OP_SetInsert, regRowSet, regRowid);
+		__vdbe_add_op3(v, OP_Insert, curRowSet, regRowid, regRowid);
 		if (dbp->flags & DBSQL_CountRows) {
-			__vdbe_add_op(v, OP_AddImm, regRowSet + 1, 1);
+			__vdbe_add_op(v, OP_AddImm, regRowSet, 1);
 		}
 
 		/*
@@ -303,13 +310,17 @@ void __delete_from(parser, list, where)
 		 */
 		end = __vdbe_make_label(v);
 
+		/* Rewind the ephemeral table for iteration */
+		__vdbe_add_op(v, OP_Rewind, curRowSet, end);
+
 		/*
 		 * This is the beginning of the delete loop when there are
 		 * row triggers.
 		 */
 		if (row_triggers_exist) {
-			addr = __vdbe_add_op(v, OP_SetNext, regRowSet, end);
-			__vdbe_add_op(v, OP_Copy, regRowSet, regRowid);
+			addr = __vdbe_current_addr(v);
+			/* Get rowid from ephemeral table */
+			__vdbe_add_op(v, OP_Rowid, curRowSet, regRowid);
 			if (!view) {
 				__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 				__vdbe_add_op(v, OP_OpenRead, cur,
@@ -363,9 +374,9 @@ void __delete_from(parser, list, where)
 			 * there are no row triggers.
 			 */
 			if (!row_triggers_exist) {
-				addr = __vdbe_add_op(v, OP_SetNext,
-						    regRowSet, end);
-				__vdbe_add_op(v, OP_Copy, regRowSet, regRowid);
+				addr = __vdbe_current_addr(v);
+				/* Get rowid from ephemeral table */
+				__vdbe_add_op(v, OP_Rowid, curRowSet, regRowid);
 			}
 
 			/*
@@ -400,8 +411,11 @@ void __delete_from(parser, list, where)
 		/*
 		 * End of the delete loop.
 		 */
-		__vdbe_add_op(v, OP_Goto, 0, addr);
+		__vdbe_add_op(v, OP_Next, curRowSet, addr);
 		__vdbe_resolve_label(v, end);
+
+		/* Close the ephemeral cursor */
+		__vdbe_add_op(v, OP_Close, curRowSet, 0);
 
 		/*
 		 * Close the cursors after the loop if there are no row
