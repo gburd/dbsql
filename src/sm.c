@@ -386,6 +386,12 @@ __sm_close_db(sm_t* sm)
 
 	DBSQL_ASSERT(sm != 0);
 
+	/* Abort any active transaction before closing databases */
+	if (sm->txn) {
+		sm->txn->abort(sm->txn);
+		sm->txn = 0;
+	}
+
 /*	MUTEX_THREAD_LOCK(dbp->dbenv, sm->sm_mutexp);*/
 	sm->n->close(sm->n, 0);
 	sm->meta->close(sm->meta, 0);
@@ -559,14 +565,21 @@ int
 __sm_close_cursor(sm_cursor_t* smc)
 {
 	int rc = DBSQL_SUCCESS;
+	int ret;
 	DBSQL_ASSERT(smc != 0);
 
-
-	if (smc->dbc->c_close(smc->dbc)  == DB_LOCK_DEADLOCK) {
+	/* Close the Berkeley DB cursor */
+	ret = smc->dbc->c_close(smc->dbc);
+	if (ret == 0) {
+		/* Cursor closed successfully, commit the transaction */
+		if (smc->txn->commit(smc->txn, 0) != 0) {
+			rc = DBSQL_INTERNAL;
+		}
+	} else {
+		/* Cursor close failed, abort the transaction */
 		smc->txn->abort(smc->txn);
 		rc = DBSQL_INTERNAL;
-	} else
-		smc->txn->commit(smc->txn, 0);
+	}
 	__dbsql_free(smc->sm->dbp, smc);
 	return rc;
 }
@@ -1992,29 +2005,29 @@ __sm_insert_ex(smc, pPayload, flags, seekResult)
 		 * The data is the record body, possibly with nZero
 		 * trailing zeros.
 		 */
-		__sm_i64_to_key(pPayload->n_key_bytes, keybuf);
+		__sm_i64_to_key(pPayload->nKey, keybuf);
 		key.data = keybuf;
 		key.size = sizeof(keybuf);
 
-		if (pPayload->n_zero_bytes > 0) {
+		if (pPayload->nZero > 0) {
 			/*
 			 * Expand the data to include trailing zeros.
 			 * Allocate a single buffer for pData + nZero bytes.
 			 */
-			int total = pPayload->n_data_bytes + pPayload->n_zero_bytes;
+			int total = pPayload->nData + pPayload->nZero;
 			if (__dbsql_umalloc(smc->sm->dbp, total,
 					    &expanded_data) == ENOMEM)
 				return DBSQL_NOMEM;
-			if (pPayload->n_data_bytes > 0)
+			if (pPayload->nData > 0)
 				memcpy(expanded_data, pPayload->pData,
-				       pPayload->n_data_bytes);
-			memset((char *)expanded_data + pPayload->n_data_bytes, 0,
-			       pPayload->n_zero_bytes);
+				       pPayload->nData);
+			memset((char *)expanded_data + pPayload->nData, 0,
+			       pPayload->nZero);
 			data.data = expanded_data;
 			data.size = total;
 		} else {
 			data.data = (void *)pPayload->pData;
-			data.size = pPayload->n_data_bytes;
+			data.size = pPayload->nData;
 		}
 	} else {
 		/*
@@ -2022,7 +2035,7 @@ __sm_insert_ex(smc, pPayload, flags, seekResult)
 		 * No separate data.
 		 */
 		key.data = (void *)pPayload->pKey;
-		key.size = (u_int32_t)pPayload->n_key_bytes;
+		key.size = (u_int32_t)pPayload->nKey;
 		data.data = (void *)"";
 		data.size = 0;
 	}
@@ -2039,7 +2052,7 @@ __sm_insert_ex(smc, pPayload, flags, seekResult)
 		else {
 			smc->eState = SMC_STATE_VALID;
 			if (F_ISSET(smc, SMC_INTKEY)) {
-				smc->cachedRowid = pPayload->n_key_bytes;
+				smc->cachedRowid = pPayload->nKey;
 				smc->cachedRowidValid = 1;
 			}
 		}

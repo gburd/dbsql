@@ -1,0 +1,15 @@
+break vdbe.c:806
+break vdbe.c:1093
+break vdbe.c:4449
+break vdbe.c:4464
+break vdbe.c:4476
+break vdbe.c:4498
+break vdbe.c:4557
+break vdbe.c:4993
+break vdbe.c:5034
+break vdbe.c:5183
+break vdbe.c:5192
+break vdbe.c:5258
+run
+bt
+quit

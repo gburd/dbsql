@@ -12,6 +12,7 @@
  */
 
 #include "dbsql_int.h"
+#include <stdarg.h>
 
 /* ATTACH/DETACH stubs (from cg_attach.c) */
 void __attach(parser_t *parser, token_t *name, token_t *type) {
@@ -159,4 +160,95 @@ void __complete_insertion(parser_t *parser, table_t *table, int base_reg,
 
 void __dbsql_assert(void) {
 	/* Assert stub */
+}
+
+/* Parser function wrappers */
+extern void *sql_parserAlloc(DBSQL *dbp, int (*mallocProc)(DBSQL *, size_t, void *));
+extern void sql_parserFree(DBSQL *dbp, void *p, void (*freeProc)(DBSQL *, void*));
+extern void sql_parser(void *yyp, int yymajor, token_t yyminor, parser_t *pParse);
+
+void *__sql_parser_alloc(void *dbp, void *(*mallocProc)(DBSQL *, size_t)) {
+    return sql_parserAlloc((DBSQL *)dbp, (int (*)(DBSQL *, size_t, void *))mallocProc);
+}
+
+void __sql_parser_free(void *dbp, void *p, void (*freeProc)(void *, void *)) {
+    sql_parserFree((DBSQL *)dbp, p, (void (*)(DBSQL *, void*))freeProc);
+}
+
+void __sql_parser(void *yyp, int yymajor, token_t yyminor, parser_t *pParse) {
+    sql_parser(yyp, yymajor, yyminor, pParse);
+}
+
+/* String manipulation stubs */
+void __set_string(char **pz, const char *zNew, ...) {
+    if (*pz) free(*pz);
+    *pz = strdup(zNew);
+}
+
+void __set_stringn(char **pz, const char *zNew, int len, ...) {
+    va_list ap;
+    const char *z;
+    int n;
+    size_t total_len = 0;
+    char *result;
+    char *p;
+
+    /* Free existing string */
+    if (*pz) {
+        free(*pz);
+        *pz = NULL;
+    }
+
+    /* First pass: compute total length */
+    z = zNew;
+    n = len;
+    va_start(ap, len);
+    while (z != NULL) {
+        if (n < 0) {
+            n = strlen(z);
+        }
+        total_len += n;
+
+        /* Get next pair */
+        z = va_arg(ap, const char *);
+        if (z != NULL) {
+            n = va_arg(ap, int);
+        }
+    }
+    va_end(ap);
+
+    /* Allocate result buffer */
+    result = (char*)malloc(total_len + 1);
+    if (result == NULL) {
+        return;
+    }
+
+    /* Second pass: copy strings */
+    p = result;
+    z = zNew;
+    n = len;
+    va_start(ap, len);
+    while (z != NULL) {
+        if (n < 0) {
+            n = strlen(z);
+        }
+        memcpy(p, z, n);
+        p += n;
+
+        /* Get next pair */
+        z = va_arg(ap, const char *);
+        if (z != NULL) {
+            n = va_arg(ap, int);
+        }
+    }
+    va_end(ap);
+
+    *p = '\0';
+    *pz = result;
+}
+
+extern void sql_parserTrace(FILE *TraceFILE, char *zTracePrompt);
+
+void __sql_parser_trace(FILE *fp, char *zPrefix) {
+    sql_parserTrace(fp, zPrefix);
 }

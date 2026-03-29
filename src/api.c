@@ -406,7 +406,10 @@ __api_open(dbp, filename, mode, err_msgs)
 		if (rc != DBSQL_SUCCESS) {
 			__str_append(err_msgs, "unable to open database: ",
 				     filename, (char*)0);
-			__dbsql_free(dbp, dbp);
+			/* Clean up the aDb array we allocated, but don't free dbp itself */
+			if (dbp->aDb) {
+				__dbsql_free(dbp, dbp->aDb);
+			}
 			__str_urealloc(err_msgs);
 			return DBSQL_CANTOPEN;
 		}
@@ -438,7 +441,10 @@ __api_open(dbp, filename, mode, err_msgs)
 	return DBSQL_SUCCESS;
 
   no_mem_on_open2:
-	__dbsql_free(NULL, dbp);
+	/* Clean up allocated resources, but don't free dbp itself */
+	if (dbp->aDb) {
+		__dbsql_free(dbp, dbp->aDb);
+	}
   no_mem_on_open1:
 	__str_append(err_msgs, "out of memory", (char*)0);
 	__str_urealloc(err_msgs);

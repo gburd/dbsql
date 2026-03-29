@@ -172,7 +172,7 @@ __str_nappend(char **result, ...)
 	size_t len;
 	const char *tmp;
 	char *r;
-	unsigned long n;
+	int n;
 
 	if (result == 0)
 		return;

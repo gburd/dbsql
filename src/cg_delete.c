@@ -48,7 +48,7 @@ __src_list_lookup(parser_t* parser, src_list_t* src)
 {
 	table_t *table = 0;
 	int i;
-	for (i = 0; i < src->n_sources; i++) {
+	for (i = 0; i < src->nSrc; i++) {
 		const char *tb_name = src->a[i].zName;
 		const char *db_name = src->a[i].zDatabase;
 		table = __locate_table(parser, tb_name, db_name);
@@ -120,12 +120,12 @@ void __delete_from(parser, list, where)
 	int regRec;         /* Register for assembled record in triggers */
 
 	context.pParse = 0;
-	if (parser->n_errors || parser->rc == ENOMEM) {
+	if (parser->nErr || parser->rc == ENOMEM) {
 		list = 0;
 		goto delete_from_cleanup;
 	}
 	dbp = parser->db;
-	DBSQL_ASSERT(list->n_sources == 1);
+	DBSQL_ASSERT(list->nSrc == 1);
 
 	/*
 	 * Locate the table which we want to delete.  This table has to be
@@ -136,9 +136,9 @@ void __delete_from(parser, list, where)
 	table = __src_list_lookup(parser, list);
 	if (table == 0)
 		goto delete_from_cleanup;
-	before_triggers = __triggers_exist(parser, table->pTrigger,
+	before_triggers = __triggers_exist(parser, table->first_trigger,
 					   TK_DELETE, TK_BEFORE, TK_ROW, 0);
-	after_triggers = __triggers_exist(parser, table->pTrigger,
+	after_triggers = __triggers_exist(parser, table->first_trigger,
 					  TK_DELETE, TK_AFTER, TK_ROW, 0);
 	row_triggers_exist = (before_triggers || after_triggers);
 	view = (table->pSelect != 0);
@@ -162,18 +162,18 @@ void __delete_from(parser, list, where)
 	 * Allocate registers for trigger OLD.* data.
 	 */
 	if (row_triggers_exist) {
-		old_idx = parser->n_tables++;
-		regOldRowid = parser->n_memory++;
-		regOldData = parser->n_memory;
-		parser->n_memory += table->n_columns;
-		regRec = parser->n_memory++;
+		old_idx = parser->nTab++;
+		regOldRowid = parser->nMem++;
+		regOldData = parser->nMem;
+		parser->nMem += table->nCol;
+		regRec = parser->nMem++;
 	}
 
 	/*
 	 * Resolve the column names in all the expressions.
 	 */
-	DBSQL_ASSERT(list->n_sources == 1);
-	cur = list->a[0].iCursor = parser->n_tables++;
+	DBSQL_ASSERT(list->nSrc == 1);
+	cur = list->a[0].iCursor = parser->nTab++;
 	if (where) {
 		if (__expr_resolve_ids(parser, list, 0, where)) {
 			goto delete_from_cleanup;
@@ -215,7 +215,7 @@ void __delete_from(parser, list, where)
 	 */
 	regRowSet = 0;
 	if (dbp->flags & DBSQL_CountRows) {
-		regRowSet = parser->n_memory++;
+		regRowSet = parser->nMem++;
 		__vdbe_add_op(v, OP_Integer, 0, regRowSet);
 	}
 
@@ -232,7 +232,7 @@ void __delete_from(parser, list, where)
 			 */
 			int end_of_loop = __vdbe_make_label(v);
 			int addr;
-			int regCount = parser->n_memory++;
+			int regCount = parser->nMem++;
 			if (!view) {
 				__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 				__vdbe_add_op(v, OP_OpenRead, cur,
@@ -249,7 +249,7 @@ void __delete_from(parser, list, where)
 		}
 		if (!view) {
 			__vdbe_add_op(v, OP_Clear, table->tnum, table->iDb);
-			for (idx = table->pIndex; idx; idx = idx->pNext) {
+			for (idx = table->first_index; idx; idx = idx->next_index) {
 				__vdbe_add_op(v, OP_Clear, idx->tnum,
 					      idx->iDb);
 			}
@@ -261,7 +261,7 @@ void __delete_from(parser, list, where)
 		 */
 
 		/* Allocate register for rowset */
-		regRowSet = parser->n_memory++;
+		regRowSet = parser->nMem++;
 		__vdbe_add_op(v, OP_Null, 0, regRowSet);
 
 		/*
@@ -275,7 +275,7 @@ void __delete_from(parser, list, where)
 		 * Remember the key of every item to be deleted.
 		 * Use OP_SetInsert to add rowids to the set.
 		 */
-		regRowid = parser->n_memory++;
+		regRowid = parser->nMem++;
 		__vdbe_add_op(v, OP_Rowid, cur, regRowid);
 		__vdbe_add_op(v, OP_SetInsert, regRowSet, regRowid);
 		if (dbp->flags & DBSQL_CountRows) {
@@ -320,12 +320,12 @@ void __delete_from(parser, list, where)
 
 			/* Load OLD.* into registers */
 			__vdbe_add_op(v, OP_Rowid, cur, regOldRowid);
-			for (i = 0; i < table->n_columns; i++) {
+			for (i = 0; i < table->nCol; i++) {
 				__vdbe_add_op(v, OP_Column, cur, i);
 				__vdbe_add_op(v, OP_Copy, 0, regOldData + i);
 			}
 			__vdbe_add_op3(v, OP_MakeRecord, regOldRowid,
-				      table->n_columns + 1, regRec);
+				      table->nCol + 1, regRec);
 			__vdbe_add_op3(v, OP_Insert, old_idx, regRec,
 				      regOldRowid);
 
@@ -348,13 +348,13 @@ void __delete_from(parser, list, where)
 			 * fires.  If there are no row triggers, the cursors
 			 * are opened only once on the outside the loop.
 			 */
-			parser->n_tables = cur + 1;
+			parser->nTab = cur + 1;
 			__vdbe_add_op(v, OP_Integer, table->iDb, 0);
 			__vdbe_add_op(v, OP_OpenWrite, cur, table->tnum);
-			for (i = 1, idx = table->pIndex; idx;
-			     i++, idx = idx->pNext) {
+			for (i = 1, idx = table->first_index; idx;
+			     i++, idx = idx->next_index) {
 				__vdbe_add_op(v, OP_Integer, idx->iDb, 0);
-				__vdbe_add_op(v, OP_OpenWrite, parser->n_tables++,
+				__vdbe_add_op(v, OP_OpenWrite, parser->nTab++,
 					      idx->tnum);
 			}
 
@@ -383,8 +383,8 @@ void __delete_from(parser, list, where)
 		 */
 		if (row_triggers_exist) {
 			if (!view) {
-				for(i = 1, idx = table->pIndex; idx;
-				    i++, idx = idx->pNext) {
+				for(i = 1, idx = table->first_index; idx;
+				    i++, idx = idx->next_index) {
 					__vdbe_add_op(v, OP_Close, cur + i,
 						      idx->tnum);
 				}
@@ -408,12 +408,12 @@ void __delete_from(parser, list, where)
 		 * triggers.
 		 */
 		if (!row_triggers_exist) {
-			for (i = 1, idx = table->pIndex; idx;
-			     i++, idx = idx->pNext) {
+			for (i = 1, idx = table->first_index; idx;
+			     i++, idx = idx->next_index) {
 				__vdbe_add_op(v, OP_Close, cur + i, idx->tnum);
 			}
 			__vdbe_add_op(v, OP_Close, cur, 0);
-			parser->n_tables = cur;
+			parser->nTab = cur;
 		}
 	}
 	__vdbe_conclude_write(parser);
@@ -519,7 +519,7 @@ void __generate_row_index_delete(dbp, v, table, cur, idx_used)
 	int i;
 	index_t *idx;
 
-	for (i = 1, idx = table->pIndex; idx; i++, idx = idx->pNext) {
+	for (i = 1, idx = table->first_index; idx; i++, idx = idx->next_index) {
 		int j;
 		int regIdx;  /* Register to hold index key */
 
@@ -529,7 +529,7 @@ void __generate_row_index_delete(dbp, v, table, cur, idx_used)
 		/* Build index key in register */
 		regIdx = 0;  /* Will be allocated by index key builder */
 		__vdbe_add_op(v, OP_Rowid, cur, regIdx);
-		for (j = 0; j < idx->n_key_columns; j++) {
+		for (j = 0; j < idx->nKeyCol; j++) {
 			int n = idx->aiColumn[j];
 			if (n == table->iPKey) {
 				/* Use rowid already in register */
@@ -538,7 +538,7 @@ void __generate_row_index_delete(dbp, v, table, cur, idx_used)
 				__vdbe_add_op(v, OP_Column, cur, n);
 			}
 		}
-		__vdbe_add_op(v, OP_MakeIdxKey, idx->n_key_columns, 0);
+		__vdbe_add_op(v, OP_MakeIdxKey, idx->nKeyCol, 0);
 		__add_idx_key_type(v, idx);
 		__vdbe_add_op(v, OP_IdxDelete, cur + i, 0);
 	}

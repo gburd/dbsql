@@ -672,6 +672,8 @@ __vdbe_exec(vdbe_t* p)
 
 	/* Note: popStack logic removed - not needed in register-based VDBE */
 
+
+
 	for(pc = p->pc; rc == DBSQL_SUCCESS; pc++) {
 		DBSQL_ASSERT(pc >= 0 && pc < p->nOp);
 		/* Note: aStack assertion removed - register-based VDBE */
@@ -2686,7 +2688,7 @@ case OP_OpenWrite: {
 	/* Get KeyInfo or nField from P4 */
 	if (op->p4type == P4_KEYINFO) {
 		pKeyInfo = op->p4.pKeyInfo;
-		nField = pKeyInfo->n_all_fields;  /* Was nField + nXField */
+		nField = pKeyInfo->nAllField;  /* Was nField + nXField */
 	} else if (op->p4type == P4_INT32) {
 		nField = op->p4.i;
 	}
@@ -3437,6 +3439,7 @@ case OP_NewRecno: {
 	VdbeCursor *pC;
 	DBSQL_ASSERT(i >= 0 && i < p->nCursor);
 	if ((pC = p->cursors[i])->uc.pCursor == 0) {
+	fprintf(stderr, "DEBUG OP_NewRecno: cursor=%d pgnoRoot=%u\n", i, pC->pgnoRoot);
 		v = 0;
 	} else {
 		/* !!!
@@ -4426,6 +4429,10 @@ case OP_CreateTable: {
 		pTos->u.i = pgno;
 		pTos->flags = MEM_Int;
 		/* Note: Old code tried to write via p3 pointer - removed for register-based VDBE */
+		/* Write back via P4_POINTER if provided */
+		if (op->p4type == P4_POINTER && op->p4.p) {
+			*(int*)op->p4.p = pgno;
+		}
 	} else {
 		pTos->flags = MEM_Null;
 	}

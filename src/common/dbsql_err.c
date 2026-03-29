@@ -330,7 +330,7 @@ __error_msg(parser_t *parser, const char *fmt, ...)
 	char *z;
 	static char null[] = "NULL";
 
-	parser->n_errors++;
+	parser->nErr++;
 	len = 1 + strlen(fmt);
 	va_start(ap, fmt);
 	for(i = 0; fmt[i]; i++) {
@@ -359,7 +359,7 @@ __error_msg(parser_t *parser, const char *fmt, ...)
 		case 'S': {
 			src_list_t *p = va_arg(ap, src_list_t*);
 			int k = va_arg(ap, int);
-			DBSQL_ASSERT(p->n_sources > k && k >= 0);
+			DBSQL_ASSERT(p->nSrc > k && k >= 0);
 			len += strlen(p->a[k].zName);
 			if (p->a[k].zDatabase && p->a[k].zDatabase[0]) {
 				len += strlen(p->a[k].zDatabase) + 1;
@@ -418,7 +418,7 @@ __error_msg(parser_t *parser, const char *fmt, ...)
 			int len;
 			src_list_t *p = va_arg(ap, src_list_t*);
 			int k = va_arg(ap, int);
-			assert(p->n_sources > k && k >= 0);
+			assert(p->nSrc > k && k >= 0);
 			if (p->a[k].zDatabase && p->a[k].zDatabase[0]) {
 				len = strlen(p->a[k].zDatabase);
 				memcpy(z, p->a[k].zDatabase, len);

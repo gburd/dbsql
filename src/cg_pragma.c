@@ -213,23 +213,23 @@ if (strcasecmp(left_name, "table_info") == 0) {
 		__vdbe_add_op(v, OP_ColumnName, 5, 0);
 		__vdbe_change_p4(v, -1, "pk", P4_STATIC);
 		__view_get_column_names(parser, table);
-		for (i = 0; i < table->n_columns; i++) {
+		for (i = 0; i < table->nCol; i++) {
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p4(v, -1, table->aCol[i].zName,
+			__vdbe_change_p4(v, -1, table->columns[i].zName,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_String, 0, 0);
 			__vdbe_change_p4(v, -1, 
-					 table->aCol[i].zType ?
-					   table->aCol[i].zType :
+					 table->columns[i].zType ?
+					   table->columns[i].zType :
 					   "numeric", P3_STATIC);
 			__vdbe_add_op(v, OP_Integer,
-			      table->aCol[i].notNull, 0);
+			      table->columns[i].notNull, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_change_p4(v, -1, table->aCol[i].zDflt,
+			__vdbe_change_p4(v, -1, table->columns[i].zDflt,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Integer,
-				      table->aCol[i].isPrimKey, 0);
+				      table->columns[i].isPrimKey, 0);
 			__vdbe_add_op(v, OP_Callback, 6, 0);
 		}
 	}
@@ -243,7 +243,7 @@ if (strcasecmp(left_name, "index_info") == 0) {
 	index = __find_index(dbp, right_name, 0);
 	if (index) {
 		int i;
-		table = index->pTable;
+		table = index->table;
 		/* Add column names dynamically (can't use static initializer with p4 strings) */
 		__vdbe_add_op(v, OP_ColumnName, 0, 0);
 		__vdbe_change_p4(v, -1, "seqno", P4_STATIC);
@@ -251,14 +251,14 @@ if (strcasecmp(left_name, "index_info") == 0) {
 		__vdbe_change_p4(v, -1, "cid", P4_STATIC);
 		__vdbe_add_op(v, OP_ColumnName, 2, 0);
 		__vdbe_change_p4(v, -1, "name", P4_STATIC);
-		for (i = 0; i < index->n_key_columns; i++) {
+		for (i = 0; i < index->nKeyCol; i++) {
 			int cnum = index->aiColumn[i];
 			__vdbe_add_op(v, OP_Integer, i, 0);
 			__vdbe_add_op(v, OP_Integer, cnum, 0);
 			__vdbe_add_op(v, OP_String, 0, 0);
-			DBSQL_ASSERT(table->n_columns > cnum);
+			DBSQL_ASSERT(table->nCol > cnum);
 			__vdbe_change_p4(v, -1,
-					 table->aCol[cnum].zName,
+					 table->columns[cnum].zName,
 					 P3_STATIC);
 			__vdbe_add_op(v, OP_Callback, 3, 0);
 		}
@@ -273,7 +273,7 @@ if (strcasecmp(left_name, "index_list") == 0) {
 	table = __find_table(dbp, right_name, 0);
 	if (table) {
 		v = __parser_get_vdbe(parser);
-		index = table->pIndex;
+		index = table->first_index;
 	}
 	if (table && index) {
 		int i = 0;
@@ -293,7 +293,7 @@ if (strcasecmp(left_name, "index_list") == 0) {
 				      index->onError != OE_None, 0);
 			__vdbe_add_op(v, OP_Callback, 3, 0);
 			++i;
-			index = index->pNext;
+			index = index->next_index;
 		}
 	}
 } else
@@ -323,7 +323,7 @@ if (strcasecmp(left_name, "foreign_key_list") == 0) {
 		__vdbe_change_p4(v, -1, "to", P4_STATIC);
 		while(fk) {
 			int j;
-			for (j = 0; j < fk->n_columns; j++) {
+			for (j = 0; j < fk->nCol; j++) {
 				__vdbe_add_op(v, OP_Integer, i, 0);
 				__vdbe_add_op(v, OP_Integer, j, 0);
 				__vdbe_add_op(v, OP_String, 0, 0);
@@ -331,7 +331,7 @@ if (strcasecmp(left_name, "foreign_key_list") == 0) {
 						 P3_STATIC);
 				__vdbe_add_op(v, OP_String, 0, 0);
 				__vdbe_change_p4(v, -1,
-				  table->aCol[fk->aCol[j].iFrom].zName,
+				  table->columns[fk->aCol[j].iFrom].zName,
 				  P3_STATIC);
 				__vdbe_add_op(v, OP_String, 0, 0);
 				__vdbe_change_p4(v, -1,

@@ -1,0 +1,16 @@
+break /home/gburd/ws/dbsql/src/vdbe.c:806
+break /home/gburd/ws/dbsql/src/vdbe.c:1093
+break /home/gburd/ws/dbsql/src/vdbe.c:4449
+break /home/gburd/ws/dbsql/src/vdbe.c:4464
+break /home/gburd/ws/dbsql/src/vdbe.c:4476
+break /home/gburd/ws/dbsql/src/vdbe.c:4498
+break /home/gburd/ws/dbsql/src/vdbe.c:4557
+break /home/gburd/ws/dbsql/src/vdbe.c:4993
+break /home/gburd/ws/dbsql/src/vdbe.c:5034
+break /home/gburd/ws/dbsql/src/vdbe.c:5183
+break /home/gburd/ws/dbsql/src/vdbe.c:5192
+break /home/gburd/ws/dbsql/src/vdbe.c:5258
+run
+info break
+where
+quit

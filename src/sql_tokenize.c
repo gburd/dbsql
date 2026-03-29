@@ -790,7 +790,7 @@ __run_sql_parser(parser_t *parser, const char *sql, char **err_msgs)
 			nerr++;
 	}
 	if (parser->vdbe
-	    && (parser->useCallback || parser->n_errors > 0)) {
+	    && (parser->useCallback || parser->nErr > 0)) {
 		__vdbe_delete(parser->vdbe);
 		parser->vdbe = 0;
 	}

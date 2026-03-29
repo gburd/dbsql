@@ -91,10 +91,10 @@ void __update(parser, tab_list, changes, where, on_error)
 	select_t *view;
 
 	auth.pParse = 0;
-	if (parser->n_errors || parser->rc == ENOMEM)
+	if (parser->nErr || parser->rc == ENOMEM)
 		goto update_cleanup;
 	dbp = parser->db;
-	DBSQL_ASSERT(tab_list->n_sources == 1);
+	DBSQL_ASSERT(tab_list->nSrc == 1);
 
 	/*
 	 * Locate the table which we want to update. 
@@ -118,9 +118,9 @@ void __update(parser, tab_list, changes, where, on_error)
 			goto update_cleanup;
 		}
 	}
-	if (__dbsql_calloc(dbp, table->n_columns, sizeof(int), &xref) == ENOMEM)
+	if (__dbsql_calloc(dbp, table->nCol, sizeof(int), &xref) == ENOMEM)
 		goto update_cleanup;
-	for (i = 0; i < table->n_columns; i++) {
+	for (i = 0; i < table->nCol; i++) {
 		xref[i] = -1;
 	}
 
@@ -129,8 +129,8 @@ void __update(parser, tab_list, changes, where, on_error)
 	 * special OLD and NEW tables.
 	 */
 	if (row_triggers_exist) {
-		new_idx = parser->n_tables++;
-		old_idx = parser->n_tables++;
+		new_idx = parser->nTab++;
+		old_idx = parser->nTab++;
 	}
 
 	/*
@@ -139,12 +139,12 @@ void __update(parser, tab_list, changes, where, on_error)
 	 * need to occur right after the database cursor. So go ahead and
 	 * allocate enough space, just in case.
 	 */
-	cur = parser->n_tables++;
+	cur = parser->nTab++;
 	data_cur = cur;
-	idx_cur = parser->n_tables;
+	idx_cur = parser->nTab;
 	tab_list->a[0].iCursor = data_cur;
-	for (idx = table->pIndex; idx; idx = idx->next_index) {
-		parser->n_tables++;
+	for (idx = table->first_index; idx; idx = idx->next_index) {
+		parser->nTab++;
 	}
 
 	/*
@@ -163,8 +163,8 @@ void __update(parser, tab_list, changes, where, on_error)
 		if (__expr_check(parser, changes->a[i].pExpr, 0, 0)) {
 			goto update_cleanup;
 		}
-		for (j = 0; j < table->n_columns; j++) {
-			if (strcasecmp(table->aCol[j].zName,
+		for (j = 0; j < table->nCol; j++) {
+			if (strcasecmp(table->columns[j].zName,
 						  changes->a[i].zEName) == 0) {
 				if (j == table->iPKey) {
 					recno_will_change_p = 1;
@@ -174,7 +174,7 @@ void __update(parser, tab_list, changes, where, on_error)
 				break;
 			}
 		}
-		if (j >= table->n_columns) {
+		if (j >= table->nCol) {
 			if (__is_row_id(changes->a[i].zEName)) {
 				recno_will_change_p = 1;
 				recno = changes->a[i].pExpr;
@@ -186,7 +186,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		}
 #ifndef DBSQL_NO_AUTH
 		rc = __auth_check(parser, DBSQL_UPDATE, table->zName,
-				  table->aCol[j].zName,
+				  table->columns[j].zName,
 				  dbp->aDb[table->iDb].zName);
 		if (rc == DBSQL_DENY) {
 			goto update_cleanup;
@@ -204,7 +204,7 @@ void __update(parser, tab_list, changes, where, on_error)
 	 *
 	 * Also allocate register space for each index that needs updating.
 	 */
-	for (num_idx = total_num_idx = 0, idx = table->pIndex;
+	for (num_idx = total_num_idx = 0, idx = table->first_index;
 	     idx; idx = idx->next_index, total_num_idx++) {
 		if (recno_will_change_p) {
 			i = 0;
@@ -226,7 +226,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		idx_used = (char*)&indices[num_idx];
 		areg_idx = (int*)&idx_used[total_num_idx];
 	}
-	for (num_idx = j = 0, idx = table->pIndex; idx; idx = idx->next_index, j++){
+	for (num_idx = j = 0, idx = table->first_index; idx; idx = idx->next_index, j++){
 		if (recno_will_change_p) {
 			i = 0;
 		} else {
@@ -239,16 +239,16 @@ void __update(parser, tab_list, changes, where, on_error)
 			indices[num_idx++] = idx;
 			idx_used[j] = 1;
 			/* Allocate registers for this index key */
-			areg_idx[j] = parser->n_memory + 1;
-			parser->n_memory += idx->nColumn + 1;
+			areg_idx[j] = parser->nMem + 1;
+			parser->nMem += idx->nColumn + 1;
 		} else {
 			idx_used[j] = 0;
 			areg_idx[j] = 0;
 		}
 	}
 	/* Register for the main table record */
-	areg_idx[total_num_idx] = parser->n_memory + 1;
-	parser->n_memory++;
+	areg_idx[total_num_idx] = parser->nMem + 1;
+	parser->nMem++;
 
 	/*
 	 * Resolve the column names in all the expressions in the
@@ -285,22 +285,22 @@ void __update(parser, tab_list, changes, where, on_error)
 	 *   - reg_old for old column values (if triggers or foreign keys)
 	 *   - reg_new for new column values
 	 */
-	reg_old_rowid = parser->n_memory + 1;
+	reg_old_rowid = parser->nMem + 1;
 	reg_new_rowid = reg_old_rowid;
-	parser->n_memory++;
+	parser->nMem++;
 
 	if (recno_will_change_p || row_triggers_exist) {
-		reg_new_rowid = parser->n_memory + 1;
-		parser->n_memory++;
+		reg_new_rowid = parser->nMem + 1;
+		parser->nMem++;
 	}
 
 	if (row_triggers_exist) {
-		reg_old = parser->n_memory + 1;
-		parser->n_memory += table->n_columns;
+		reg_old = parser->nMem + 1;
+		parser->nMem += table->nCol;
 	}
 
-	reg_new = parser->n_memory + 1;
-	parser->n_memory += table->n_columns;
+	reg_new = parser->nMem + 1;
+	parser->nMem += table->nCol;
 
 	/*
 	 * If we are trying to update a view, construct that view into
@@ -334,8 +334,8 @@ void __update(parser, tab_list, changes, where, on_error)
 	 */
 	if (dbp->flags & DBSQL_CountRows && !parser->trigStack) {
 		if (reg_row_count == 0) {
-			reg_row_count = parser->n_memory + 1;
-			parser->n_memory++;
+			reg_row_count = parser->nMem + 1;
+			parser->nMem++;
 		}
 		__vdbe_add_op3(v, OP_Integer, 0, reg_row_count, 0);
 	}
@@ -366,7 +366,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		/*
 		 * Read OLD column values into registers for triggers.
 		 */
-		for(i = 0; i < table->n_columns; i++) {
+		for(i = 0; i < table->nCol; i++) {
 			if (i == table->iPKey) {
 				__vdbe_add_op3(v, OP_Integer, 0, reg_old + i, 0);
 			} else {
@@ -381,13 +381,13 @@ void __update(parser, tab_list, changes, where, on_error)
 			int expr_reg;
 			__expr_code(parser, recno);
 			/* Result is at top of register stack */
-			expr_reg = parser->n_memory;
+			expr_reg = parser->nMem;
 			__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new_rowid, 0);
 		} else {
 			__vdbe_add_op3(v, OP_Dup, reg_old_rowid, reg_new_rowid, 0);
 		}
 
-		for(i = 0; i < table->n_columns; i++) {
+		for(i = 0; i < table->nCol; i++) {
 			if (i == table->iPKey) {
 				__vdbe_add_op3(v, OP_Integer, 0, reg_new + i, 0);
 				continue;
@@ -399,7 +399,7 @@ void __update(parser, tab_list, changes, where, on_error)
 				int expr_reg;
 				__expr_code(parser, changes->a[j].pExpr);
 				/* Result is at top of register stack */
-				expr_reg = parser->n_memory;
+				expr_reg = parser->nMem;
 				__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new + i, 0);
 			}
 		}
@@ -431,18 +431,18 @@ void __update(parser, tab_list, changes, where, on_error)
 			open_all_p = 1;
 		} else {
 			open_all_p = 0;
-			for (idx = table->pIndex; idx; idx = idx->next_index) {
+			for (idx = table->first_index; idx; idx = idx->next_index) {
 				if (idx->onError == OE_Replace) {
 					open_all_p = 1;
 					break;
 				}
 			}
 		}
-		for(i = 0, idx = table->pIndex; idx; idx = idx->next_index, i++) {
+		for(i = 0, idx = table->first_index; idx; idx = idx->next_index, i++) {
 			if (open_all_p || idx_used[i]) {
 				__vdbe_add_op3(v, OP_OpenWrite, (idx_cur + i),
 					       idx->tnum, idx->iDb);
-				DBSQL_ASSERT(parser->n_tables > (idx_cur + i));
+				DBSQL_ASSERT(parser->nTab > (idx_cur + i));
 			}
 		}
 
@@ -470,7 +470,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		if (recno_will_change_p) {
 			int expr_reg;
 			__expr_code(parser, recno);
-			expr_reg = parser->n_memory;
+			expr_reg = parser->nMem;
 			__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new_rowid, 0);
 			__vdbe_add_op(v, OP_MustBeInt, reg_new_rowid, 0);
 		} else {
@@ -480,7 +480,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		/*
 		 * Compute new data for this record into registers.
 		 */
-		for (i = 0; i < table->n_columns; i++) {
+		for (i = 0; i < table->nCol; i++) {
 			if (i == table->iPKey) {
 				__vdbe_add_op3(v, OP_Integer, 0, reg_new + i, 0);
 				continue;
@@ -491,7 +491,7 @@ void __update(parser, tab_list, changes, where, on_error)
 			} else {
 				int expr_reg;
 				__expr_code(parser, changes->a[j].pExpr);
-				expr_reg = parser->n_memory;
+				expr_reg = parser->nMem;
 				__vdbe_add_op3(v, OP_Dup, expr_reg, reg_new + i, 0);
 			}
 		}
@@ -523,7 +523,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		 * The record is now in registers reg_new through reg_new+nCol-1.
 		 * Use OP_MakeRecord to pack it, then OP_PutIntKey to write it.
 		 */
-		__vdbe_add_op3(v, OP_MakeRecord, reg_new, table->n_columns,
+		__vdbe_add_op3(v, OP_MakeRecord, reg_new, table->nCol,
 			       areg_idx[total_num_idx]);
 		if (recno_will_change_p) {
 			__vdbe_add_op3(v, OP_PutIntKey, data_cur,
@@ -536,7 +536,7 @@ void __update(parser, tab_list, changes, where, on_error)
 		/*
 		 * Update indices.
 		 */
-		for(i = 0, idx = table->pIndex; idx; idx = idx->next_index, i++) {
+		for(i = 0, idx = table->first_index; idx; idx = idx->next_index, i++) {
 			if (idx_used[i]) {
 				int reg_idx = areg_idx[i];
 				/* Generate index key in registers */
@@ -575,7 +575,7 @@ void __update(parser, tab_list, changes, where, on_error)
 	 */
 	if (row_triggers_exist) {
 		if (!is_view_p) {
-			for(i = 0, idx = table->pIndex; idx;
+			for(i = 0, idx = table->first_index; idx;
 			    idx = idx->next_index, i++) {
 				if (open_all_p || idx_used[i]) {
 					__vdbe_add_op(v, OP_Close,
@@ -583,7 +583,7 @@ void __update(parser, tab_list, changes, where, on_error)
 				}
 			}
 			__vdbe_add_op(v, OP_Close, data_cur, 0);
-			parser->n_tables = cur;
+			parser->nTab = cur;
 		}
 		if (__code_row_trigger(parser, TK_UPDATE, changes,
 				       TK_AFTER, table, reg_new, reg_old,
@@ -604,13 +604,13 @@ void __update(parser, tab_list, changes, where, on_error)
 	 * Close all tables if there were no FOR EACH ROW triggers.
 	 */
 	if (!row_triggers_exist) {
-		for (i = 0, idx = table->pIndex; idx; idx = idx->next_index, i++) {
+		for (i = 0, idx = table->first_index; idx; idx = idx->next_index, i++) {
 			if (open_all_p || idx_used[i]) {
 				__vdbe_add_op(v, OP_Close, (idx_cur + i), 0);
 			}
 		}
 		__vdbe_add_op(v, OP_Close, data_cur, 0);
-		parser->n_tables = cur;
+		parser->nTab = cur;
 	}
 
 	__vdbe_conclude_write(parser);

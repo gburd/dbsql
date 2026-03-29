@@ -1,0 +1,103 @@
+/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=link gcc -o lemon  \
+    lemon.lo -lm
+/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=compile gcc -c -I. -I../dist/../src  -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 opcodes.c
+/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=compile gcc -c -I. -I../dist/../src  -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 ../dist/../src/vdbe.c
+/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=compile gcc -c -I. -I../dist/../src  -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 ../dist/../src/vdbe_method.c
+libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 ../dist/../src/vdbe.c  -fPIC -DPIC -o .libs/vdbe.o
+libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 ../dist/../src/vdbe_method.c  -fPIC -DPIC -o .libs/vdbe_method.o
+libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 opcodes.c  -fPIC -DPIC -o .libs/opcodes.o
+libtool: link: gcc -o lemon .libs/lemon.o  -lm 
+libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 opcodes.c -o opcodes.o >/dev/null 2>&1
+/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=compile gcc -c -I. -I../dist/../src  -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 ../dist/../src/sm.c
+/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=execute true lemon
+libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 ../dist/../src/sm.c  -fPIC -DPIC -o .libs/sm.o
+../dist/../src/vdbe.c: In function ‘__entity_to_int’:
+../dist/../src/vdbe.c:362:48: warning: passing argument 2 of ‘__dbsql_atoi’ from incompatible pointer type [-Wincompatible-pointer-types]
+  362 |                         __dbsql_atoi(stack->z, &stack->u.i);
+      |                                                ^~~~~~~~~~~
+      |                                                |
+      |                                                i64 * {aka long int *}
+In file included from ./dbsql_int.h:50,
+                 from ../dist/../src/vdbe.c:62:
+../dist/../src/inc/common_ext.h:19:37: note: expected ‘int *’ but argument is of type ‘i64 *’ {aka ‘long int *’}
+   19 | int __dbsql_atoi __P((const char *, int *));
+      |                                     ^~~~~
+./dbsql.h:41:30: note: in definition of macro ‘__P’
+   41 | #define      __P(protos)     protos
+      |                              ^~~~~~
+../dist/../src/vdbe.c: In function ‘__vdbe_exec’:
+../dist/../src/vdbe.c:837:53: warning: passing argument 2 of ‘__str_append’ makes pointer from integer without a cast [-Wint-conversion]
+  837 |                         __str_append(&p->zErrMsg, op->p3, (char*)0);
+      |                                                   ~~^~~~
+      |                                                     |
+      |                                                     int
+../dist/../src/inc/common_ext.h:37:33: note: expected ‘const char *’ but argument is of type ‘int’
+   37 | void __str_append __P((char **, const char *, ...));
+      |                                 ^~~~~~~~~~~~
+./dbsql.h:41:30: note: in definition of macro ‘__P’
+   41 | #define      __P(protos)     protos
+      |                              ^~~~~~
+../dist/../src/vdbe.c:867:33: warning: assignment to ‘char *’ from ‘int’ makes pointer from integer without a cast [-Wint-conversion]
+  867 |                         pTos->z = op->p3;
+      |                                 ^
+../dist/../src/vdbe.c:869:44: warning: passing argument 1 of ‘strlen’ makes pointer from integer without a cast [-Wint-conversion]
+  869 |                         pTos->n = strlen(op->p3) + 1;
+      |                                          ~~^~~~
+      |                                            |
+      |                                            int
+In file included from ./dbsql_int.h:32:
+/nix/store/y8wfrgk7br5rfz4221lfb9v8w3n0cnyd-glibc-2.37-8-dev/include/string.h:407:35: note: expected ‘const char *’ but argument is of type ‘int’
+  407 | extern size_t strlen (const char *__s)
+      |                       ~~~~~~~~~~~~^~~
+../dist/../src/vdbe.c:883:19: warning: initialization of ‘char *’ from ‘int’ makes pointer from integer without a cast [-Wint-conversion]
+  883 |         char *z = op->p3;
+      |                   ^~
+../dist/../src/vdbe.c:1118:14: warning: assignment to ‘char *’ from ‘int’ makes pointer from integer without a cast [-Wint-conversion]
+ 1118 |         zSep = op->p3;
+      |              ^
+../dist/../src/vdbe.c:2691:36: error: ‘key_info_t’ {aka ‘struct key_info’} has no member named ‘n_all_fields’; did you mean ‘nAllField’?
+ 2691 |                 nField = pKeyInfo->n_all_fields;  /* Was nField + nXField */
+      |                                    ^~~~~~~~~~~~
+      |                                    nAllField
+cp ../dist/../src/lemon/lempar.c .
+/nix/store/xdqlrixlspkks50m9b0mpvag65m3pf2w-bash-5.2-p15/bin/sh ./libtool --mode=compile gcc -c -I. -I../dist/../src  -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 ../dist/../src/clib/snprintf.c
+make: *** [Makefile:462: vdbe.lo] Error 1
+make: *** Waiting for unfinished jobs....
+libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 ../dist/../src/clib/snprintf.c  -fPIC -DPIC -o .libs/snprintf.o
+../dist/../src/sm.c: In function ‘__sm_insert_ex’:
+../dist/../src/sm.c:2010:41: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_key_bytes’
+ 2010 |                 __sm_i64_to_key(pPayload->n_key_bytes, keybuf);
+      |                                         ^~
+../dist/../src/sm.c:2014:29: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_zero_bytes’
+ 2014 |                 if (pPayload->n_zero_bytes > 0) {
+      |                             ^~
+../dist/../src/sm.c:2019:45: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_data_bytes’
+ 2019 |                         int total = pPayload->n_data_bytes + pPayload->n_zero_bytes;
+      |                                             ^~
+../dist/../src/sm.c:2019:70: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_zero_bytes’
+ 2019 |                         int total = pPayload->n_data_bytes + pPayload->n_zero_bytes;
+      |                                                                      ^~
+../dist/../src/sm.c:2023:37: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_data_bytes’
+ 2023 |                         if (pPayload->n_data_bytes > 0)
+      |                                     ^~
+../dist/../src/sm.c:2025:48: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_data_bytes’
+ 2025 |                                        pPayload->n_data_bytes);
+      |                                                ^~
+../dist/../src/sm.c:2026:64: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_data_bytes’
+ 2026 |                         memset((char *)expanded_data + pPayload->n_data_bytes, 0,
+      |                                                                ^~
+../dist/../src/sm.c:2027:40: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_zero_bytes’
+ 2027 |                                pPayload->n_zero_bytes);
+      |                                        ^~
+../dist/../src/sm.c:2032:45: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_data_bytes’
+ 2032 |                         data.size = pPayload->n_data_bytes;
+      |                                             ^~
+../dist/../src/sm.c:2040:47: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_key_bytes’
+ 2040 |                 key.size = (u_int32_t)pPayload->n_key_bytes;
+      |                                               ^~
+../dist/../src/sm.c:2057:60: error: ‘sm_payload_t’ {aka ‘const struct sm_payload’} has no member named ‘n_key_bytes’
+ 2057 |                                 smc->cachedRowid = pPayload->n_key_bytes;
+      |                                                            ^~
+make: *** [Makefile:434: sm.lo] Error 1
+libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 ../dist/../src/clib/snprintf.c -o snprintf.o >/dev/null 2>&1
+libtool: compile:  gcc -c -I. -I../dist/../src -I/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/include -D_GNU_SOURCE -D_REENTRANT -g -O2 ../dist/../src/vdbe_method.c -o vdbe_method.o >/dev/null 2>&1
