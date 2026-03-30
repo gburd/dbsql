@@ -2600,6 +2600,26 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 		goto select_end;
 
 	/*
+	 * Initialize a read transaction if not already in one.
+	 * This ensures SELECT can see data from previous committed transactions.
+	 * Without this, SELECT operates in a different Berkeley DB transaction
+	 * context than INSERT/UPDATE/DELETE and cannot see their committed data
+	 * due to MVCC isolation.
+	 */
+	if (tables && tables->nSrc > 0 && tables->a[0].pTab) {
+		int idb = tables->a[0].pTab->iDb;
+		DBSQL *dbp = parser->db;
+
+		if (!DB_PROPERTY_HAS_VALUE(dbp, idb, DBSQL_SCHEMA_LOCKED)) {
+			if (!dbp->aDb[idb].inTrans) {
+				__vdbe_add_op(v, OP_Transaction, idb, 0);
+				DB_PROPERTY_SET(dbp, idb, DBSQL_SCHEMA_LOCKED);
+				__code_verify_schema(parser, idb);
+			}
+		}
+	}
+
+	/*
 	 * Identify column names if we will be using them in a callback.  This
 	 * step is skipped if the output is going to some other destination.
 	 */

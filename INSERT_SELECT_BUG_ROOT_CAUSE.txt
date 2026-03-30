@@ -1,0 +1,110 @@
+================================================================================
+DBSQL INSERT/SELECT BUG - COMPLETE ROOT CAUSE ANALYSIS
+================================================================================
+
+CRITICAL FINDINGS:
+=================
+
+1. BUG CONFIRMED: After exec("INSERT..."), prepare("SELECT...") + step() 
+   returns NO ROWS (returns DBSQL_DONE instead of DBSQL_ROW).
+
+2. ROOT CAUSE IDENTIFIED: Transaction context mismatch in Berkeley DB
+
+   INSERT (via exec):
+   - Creates sm->txn transaction (0x1f2f7f20)
+   - Creates nested smc->txn for cursor (0x1f31de10) 
+   - Data written to nested transaction
+   - After OP_Commit, sm->txn is cleared (set to NULL)
+
+   SELECT (via prepare + step):
+   - NO OP_Transaction generated for SELECT
+   - sm->txn is NULL when OP_OpenRead executes
+   - Creates NEW root-level transaction (0x1f2f7f20 - different object!)
+   - Berkeley DB cursor cannot see data from different transaction context
+   - __sm_first() returns DB_NOTFOUND → OP_Rewind jumps over result set
+
+3. EVIDENCE FROM DEBUGGING:
+
+   INSERT cursor transaction:
+   __sm_cursor: sm->txn=0x1f2f7f20, creating cursor for db 3, write=1
+     txn_begin result=0, smc->txn=0x1f31de10 (parent was 0x1f2f7f20)
+                        ↑ NESTED TRANSACTION
+
+   SELECT cursor transaction:
+   __sm_cursor: sm->txn=(nil), creating cursor for db 3, write=0
+     txn_begin result=0, smc->txn=0x1f2f7f20 (parent was (nil))
+                        ↑ NEW ROOT-LEVEL TRANSACTION (different context!)
+
+4. OP_REWIND OUTPUT CONFIRMS THE ISSUE:
+
+   OP_Rewind: PC=5, cursor[0]=0x1e55e610
+     Cursor exists, eCurType=0 (CURTYPE_BTREE=0)
+     pCrsr=0x1e53a360
+     __sm_first returned rc=0, res=1    ← RES=1 means EMPTY (DB_NOTFOUND)
+     Final res=1, jumping=YES            ← JUMPS OVER RESULT SET
+
+5. PAGE NUMBER MISMATCH ALSO IDENTIFIED:
+
+   First SELECT tries pgnoRoot=2 (CREATE TABLE's page)
+   INSERT writes to pgnoRoot=3 (new table after migrations)
+   Second SELECT tries pgnoRoot=3 (where data was written)
+   → But still sees empty because of TRANSACTION CONTEXT MISMATCH
+
+   Both issues combine to make SELECT fail.
+
+6. BERKELEY DB BEHAVIOR:
+
+   - Berkeley DB uses MVCC (Multi-Version Concurrency Control)
+   - Each transaction sees a consistent snapshot
+   - The new READ transaction created with NULL parent cannot see data
+     committed in the previous transaction's nested context
+   - This is correct MVCC behavior, but indicates wrong transaction setup
+
+================================================================================
+KEY CODE LOCATIONS:
+================================================================================
+
+1. INSERT Transaction Management:
+   /home/gburd/ws/dbsql/src/vdbe.c:2510-2520 (OP_Transaction opcode)
+   /home/gburd/ws/dbsql/src/vdbe.c:2540-2548 (OP_Commit opcode)
+   /home/gburd/ws/dbsql/src/sm.c:451-474 (__sm_begin_txn, __sm_commit_txn)
+
+2. SELECT Transaction Problem:
+   /home/gburd/ws/dbsql/src/cg_select.c (NO OP_Transaction generated!)
+   /home/gburd/ws/dbsql/src/vdbe.c:2677-2750 (OP_OpenRead with NULL sm->txn)
+
+3. Cursor Creation in Wrong Context:
+   /home/gburd/ws/dbsql/src/sm.c:506-555 (__sm_cursor creates nested txn)
+
+4. Read Operation Sees Empty:
+   /home/gburd/ws/dbsql/src/sm.c:1013-1040 (__sm_first returns DB_NOTFOUND)
+
+================================================================================
+RECOMMENDED FIX:
+================================================================================
+
+Ensure SELECT statements generate OP_Transaction opcode before opening cursors.
+
+This ensures sm->txn is properly initialized for READ operations, making SELECT
+transactions consistent with INSERT/UPDATE/DELETE transactions.
+
+Location: /home/gburd/ws/dbsql/src/cg_select.c
+
+The SELECT compiler should call __vdbe_prepare_write() or similar to ensure
+a transaction is active when the statement begins, similar to write operations.
+
+Alternative (simpler) fix: Modify __sm_cursor() to use DB_READ_UNCOMMITTED
+flag when sm->txn is NULL for read operations, allowing access to committed
+data from previous transaction contexts.
+
+================================================================================
+FILES FOR REFERENCE:
+================================================================================
+
+/home/gburd/ws/dbsql/ROOT_CAUSE_INSERT_SELECT_BUG.md
+  - Full technical analysis with code locations and transaction flow
+
+/tmp/claude/test_insert_debug.c
+  - Reproducible test case demonstrating the bug
+
+================================================================================

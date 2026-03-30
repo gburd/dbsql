@@ -2720,6 +2720,9 @@ case OP_OpenWrite: {
 	pCur->iDb = iDb;
 	pCur->nullRow = 1;
 	pCur->isOrdered = 1;
+	/* DEBUG: Log cursor opening with pgnoRoot */
+	fprintf(stderr, "OP_Open%s: PC=%d, iCur=%d, pgnoRoot=%u, wrFlag=%d\n",
+	        (wrFlag) ? "Write" : "Read", pc, iCur, p2, wrFlag);
 	pCur->pgnoRoot = p2;
 	pCur->pKeyInfo = pKeyInfo;
 	pCur->isTable = (op->p4type != P4_KEYINFO);

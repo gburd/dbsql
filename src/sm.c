@@ -526,10 +526,13 @@ __sm_cursor(sm_t* sm, int id, int write, sm_cursor_t* *smcp)
 	smc->sm = sm;
 	smc->db = smr->db;
 	smc->id = id;
+	fprintf(stderr, "__sm_cursor: sm->txn=%p, creating cursor for db %d, write=%d\n", (void*)sm->txn, id, write);
 	smc->eState = SMC_STATE_INVALID;
 	smc->cachedRowidValid = 0;
 
-	if (dbenv->txn_begin(dbenv, sm->txn, &smc->txn, 0) != 0) {
+	int txn_result = dbenv->txn_begin(dbenv, sm->txn, &smc->txn, 0);
+	fprintf(stderr, "  txn_begin result=%d, smc->txn=%p (parent was %p)\n", txn_result, (void*)smc->txn, (void*)sm->txn);
+	if (txn_result != 0) {
 		__dbsql_free(sm->dbp, smc);
 		return DBSQL_INTERNAL;
 	}
