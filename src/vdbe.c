@@ -683,6 +683,10 @@ __vdbe_exec(vdbe_t* p)
 #endif
 		op = &p->opcodes[pc];
 
+		/* DEBUG: Always print opcode execution */
+		fprintf(stderr, "VDBE: PC=%d, opcode=%d, p1=%d, p2=%d, p3=%d\n",
+		        pc, op->opcode, op->p1, op->p2, op->p3);
+
 		/*
 		 * Only allow tracing if NDEBUG is not defined.
 		 * TODO, DIAGNOSTIC?
@@ -1089,9 +1093,14 @@ case OP_ResultRow: {
 ** in cases where the result set is empty.
 */
 case OP_NullCallback:
-	/* Legacy callback (xCallback/azColName removed) */
-	rc = DBSQL_INTERNAL;
-	goto abort_due_to_error;
+	/*
+	 * Legacy callback for reporting column names when result set is empty.
+	 * For prepared statements, this is a no-op since column names are
+	 * reported via step() API. For exec()-style queries, the callback
+	 * has already been set up by OP_ColumnName opcodes.
+	 */
+	/* No-op: Column reporting handled elsewhere */
+	break;
 
 /* Opcode: Concat P1 P2 P3
 **
@@ -5365,6 +5374,11 @@ abort_due_to_misuse:
 	 * should hold the error number.
 	 */
 abort_due_to_error:
+	/* DEBUG: Print which opcode caused the error */
+	fprintf(stderr, "VDBE ERROR at PC=%d, opcode=%d (%s), rc=%d\n",
+	        pc, op ? op->opcode : -1,
+	        op ? (op->opcode < 256 ? "VALID" : "INVALID") : "NULL",
+	        rc);
 	if (p->zErrMsg == 0) {
 		__str_append(&p->zErrMsg, dbsql_strerror(rc), (char*)0);
 	}
