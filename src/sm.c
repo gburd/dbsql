@@ -530,16 +530,27 @@ __sm_cursor(sm_t* sm, int id, int write, sm_cursor_t* *smcp)
 	smc->eState = SMC_STATE_INVALID;
 	smc->cachedRowidValid = 0;
 
-	int txn_result = dbenv->txn_begin(dbenv, sm->txn, &smc->txn, 0);
-	fprintf(stderr, "  txn_begin result=%d, smc->txn=%p (parent was %p)\n", txn_result, (void*)smc->txn, (void*)sm->txn);
-	if (txn_result != 0) {
-		__dbsql_free(sm->dbp, smc);
-		return DBSQL_INTERNAL;
-	}
-	if (write)
+	/*
+	 * For write cursors, create a child transaction for isolation.
+	 * For read-only cursors, use the parent transaction directly to see
+	 * committed data from sibling transactions.
+	 * This matches Berkeley DB's transactional isolation model where
+	 * child transactions are isolated from each other.
+	 */
+	if (write) {
+		int txn_result = dbenv->txn_begin(dbenv, sm->txn, &smc->txn, 0);
+		fprintf(stderr, "  txn_begin result=%d, smc->txn=%p (parent was %p)\n", txn_result, (void*)smc->txn, (void*)sm->txn);
+		if (txn_result != 0) {
+			__dbsql_free(sm->dbp, smc);
+			return DBSQL_INTERNAL;
+		}
 		F_SET(smc, SMC_RW_CURSOR);
-	else
+	} else {
+		/* Read-only cursor: use parent transaction directly */
+		smc->txn = sm->txn;
+		fprintf(stderr, "  using parent txn directly: smc->txn=%p\n", (void*)smc->txn);
 		F_SET(smc, SMC_RO_CURSOR);
+	}
 
 	/* Set cursor type based on the resource type. */
 	if (F_ISSET(smr, SMR_TYPE_TABLE))
@@ -574,13 +585,23 @@ __sm_close_cursor(sm_cursor_t* smc)
 	/* Close the Berkeley DB cursor */
 	ret = smc->dbc->c_close(smc->dbc);
 	if (ret == 0) {
-		/* Cursor closed successfully, commit the transaction */
-		if (smc->txn->commit(smc->txn, 0) != 0) {
-			rc = DBSQL_INTERNAL;
+		/*
+		 * For write cursors, commit the child transaction.
+		 * For read-only cursors, transaction is owned by parent - don't commit.
+		 */
+		if (F_ISSET(smc, SMC_RW_CURSOR)) {
+			if (smc->txn->commit(smc->txn, 0) != 0) {
+				rc = DBSQL_INTERNAL;
+			}
 		}
+		/* Read-only cursor: parent owns txn, don't commit here */
 	} else {
-		/* Cursor close failed, abort the transaction */
-		smc->txn->abort(smc->txn);
+		/* Cursor close failed */
+		if (F_ISSET(smc, SMC_RW_CURSOR)) {
+			/* Abort child transaction for write cursor */
+			smc->txn->abort(smc->txn);
+		}
+		/* Read-only cursor: parent owns txn, don't abort here */
 		rc = DBSQL_INTERNAL;
 	}
 	__dbsql_free(smc->sm->dbp, smc);
