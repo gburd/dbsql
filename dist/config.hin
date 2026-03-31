@@ -30,7 +30,8 @@
 /* Define to 1 if you want a version with run-time diagnostic checking. */
 #undef DIAGNOSTIC
 
-/* Define to 1 if you have the <dirent.h> header file, and it defines `DIR'. */
+/* Define to 1 if you have the <dirent.h> header file, and it defines `DIR'.
+   */
 #undef HAVE_DIRENT_H
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
@@ -45,17 +46,14 @@
 /* Define to 1 if you have the `getopt' function. */
 #undef HAVE_GETOPT
 
+/* Define to 1 if you have the <history.h> header file. */
+#undef HAVE_HISTORY_H
+
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
 /* Define if you have a readline compatible library */
 #undef HAVE_LIBREADLINE
-
-/* Define to 1 if you have readline support enabled. */
-#undef HAVE_READLINE
-
-/* Define if your readline library has `add_history' */
-#undef HAVE_READLINE_HISTORY
 
 /* Define to 1 if you have the `localtime_r' function. */
 #undef HAVE_LOCALTIME_R
@@ -78,11 +76,26 @@
 /* Define to 1 if building on QNX. */
 #undef HAVE_QNX
 
+/* Define to 1 if you have readline support enabled. */
+#undef HAVE_READLINE
+
+/* Define to 1 if you have the <readline.h> header file. */
+#undef HAVE_READLINE_H
+
+/* Define if your readline library has \`add_history' */
+#undef HAVE_READLINE_HISTORY
+
+/* Define to 1 if you have the <readline/history.h> header file. */
+#undef HAVE_READLINE_HISTORY_H
+
+/* Define to 1 if you have the <readline/readline.h> header file. */
+#undef HAVE_READLINE_READLINE_H
+
 /* Define to 1 if you have the `snprintf' function. */
 #undef HAVE_SNPRINTF
 
 /* Define to 1 if you have the `srand48_r' function. */
-#define HAVE_SRAND48_R 1
+#undef HAVE_SRAND48_R
 
 /* Define to 1 if building statistics support. */
 #undef HAVE_STATISTICS

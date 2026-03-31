@@ -94,15 +94,27 @@ AH_TEMPLATE(DBSQL_OMIT_DATETIME_FUNCS,
 AC_MSG_CHECKING([if --with-berkeleydb=DIR option specified])
 AC_ARG_WITH(berkeleydb,
 	[AS_HELP_STRING([--with-berkeleydb=DIR],
-		[Path of Berkeley DB. [DIR="/usr/local/BerkeleyDB.4.5"]])],
+		[Path of Berkeley DB. [DIR="$srcdir/../deps/libdb/build_unix"]])],
 	[with_berkeleydb="$withval"], [with_berkeleydb="no"])
 AC_MSG_RESULT($with_berkeleydb)
-# If --with-berkeleydb isn't specified, assume it's here | wc -l` -gt 0
+# If --with-berkeleydb isn't specified, use the submodule
 if test "$with_berkeleydb" = "no"; then
-	with_berkeleydb="/usr/local/BerkeleyDB.4.5"
+	with_berkeleydb="$srcdir/../deps/libdb/build_unix"
 fi
 DB_PATH="$with_berkeleydb"
-if test `ls "$with_berkeleydb"/lib/libdb-*.la 2>/dev/null | wc -l` -gt 0 ; then
+# Check for Berkeley DB in build_unix directory (submodule structure)
+if test `ls "$with_berkeleydb"/libdb-*.la 2>/dev/null | wc -l` -gt 0 ; then
+	AC_MSG_CHECKING([for Berkeley DB version from submodule])
+	db_version=`ls "$with_berkeleydb"/libdb-*.la | sed 's/.*db-\(.*\).la/\1/'`
+	AC_MSG_RESULT([$db_version])
+	echo "$CPPFLAGS" | grep "$with_berkeleydb/../include" >/dev/null 2>&1 || CPPFLAGS="$CPPFLAGS -I$with_berkeleydb/../include"
+	if test `ls "$with_berkeleydb"/.libs/libdb-$db_version.so 2>/dev/null | wc -l` -gt 0 ; then
+		LIBSO_LIBS="$LIBS -L$with_berkeleydb/.libs -ldb-$db_version"
+	else
+		LIBS="$LIBS $with_berkeleydb/.libs/libdb-$db_version.a"
+	fi
+# Check for Berkeley DB in standard install tree (lib/libdb-*.la)
+elif test `ls "$with_berkeleydb"/lib/libdb-*.la 2>/dev/null | wc -l` -gt 0 ; then
 	AC_MSG_CHECKING([for Berkeley DB version from install tree])
 	db_version=`ls "$with_berkeleydb"/lib/libdb-*.la | sed 's/.*db-\(.*\).la/\1/'`
 	AC_MSG_RESULT([$db_version])
@@ -110,7 +122,7 @@ if test `ls "$with_berkeleydb"/lib/libdb-*.la 2>/dev/null | wc -l` -gt 0 ; then
 	if test `ls "$with_berkeleydb"/lib/libdb-$db_version.* 2>/dev/null | wc -l` -gt 0 ; then
 		LIBSO_LIBS="$LIBS -L$with_berkeleydb/lib -ldb-$db_version"
 	else
-		LIBS="$LIBS -l$with_berkeleydb/lib/libdb-$db_version.a"
+		LIBS="$LIBS $with_berkeleydb/lib/libdb-$db_version.a"
 	fi
 elif test `ls /usr/local/lib/db?? 2>/dev/null | wc -l` -gt 0 ; then
 	AC_MSG_CHECKING([if Berkeley DB was installed using BSD ports])
