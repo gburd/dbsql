@@ -473,16 +473,39 @@ def validate_vdbe_opcodes(filepath, lines):
                 lines[lineno - 1].rstrip(),
             ))
 
-    # Validate register number ranges (0-255 typical)
+    # Validate register number ranges (0-255 typical, up to 32767 max)
     reg_pattern = r'(?:p1|p2|p3)\s*=\s*(?P<reg>\d+)'
     for match in re.finditer(reg_pattern, text):
         reg_str = match.group('reg')
         reg = int(reg_str)
         lineno = text[:match.start()].count("\n") + 1
-        if reg > 255:
+        if reg > 32767:
             violations.append(Violation(
                 filepath, lineno, "VDBE_REG",
-                f"Register number unusually high: {reg}",
+                f"Register number exceeds maximum (32767): {reg}",
+                lines[lineno - 1].rstrip(),
+            ))
+        elif reg > 255:
+            # Warning for unusually high register numbers
+            violations.append(Violation(
+                filepath, lineno, "VDBE_REG_HIGH",
+                f"Register number unusually high (>255): {reg}",
+                lines[lineno - 1].rstrip(),
+            ))
+
+    # Check P4 type consistency
+    p4type_pattern = r'\.p4type\s*=\s*(?P<type>P4_\w+)'
+    for match in re.finditer(p4type_pattern, text):
+        p4type = match.group('type')
+        lineno = text[:match.start()].count("\n") + 1
+        # Validate p4type is a known type
+        known_types = ['P4_NOTUSED', 'P4_INT32', 'P4_INT64', 'P4_REAL',
+                      'P4_STRING', 'P4_KEYINFO', 'P4_COLLSEQ', 'P4_FUNCDEF',
+                      'P4_INTARRAY', 'P4_SUBPROGRAM', 'P4_POINTER']
+        if p4type not in known_types:
+            violations.append(Violation(
+                filepath, lineno, "VDBE_P4TYPE",
+                f"Unknown P4 type: {p4type}",
                 lines[lineno - 1].rstrip(),
             ))
 
@@ -499,17 +522,60 @@ def validate_mem_structure(filepath, lines):
     for match in re.finditer(flag_pattern, text):
         flags_str = match.group('flags')
         lineno = text[:match.start()].count("\n") + 1
-        # Validate MEM_* flag combinations
-        if 'MEM_Int' in flags_str and 'MEM_Real' in flags_str:
+
+        # Extract individual flags
+        flags = [f.strip() for f in flags_str.split('|')]
+
+        # Type flags are mutually exclusive
+        type_flags = ['MEM_Int', 'MEM_Real', 'MEM_Str', 'MEM_Blob', 'MEM_Null']
+        type_count = sum(1 for f in flags if f in type_flags)
+
+        if type_count > 1:
             violations.append(Violation(
-                filepath, lineno, "MEM_FLAGS",
-                f"Invalid MEM flag combination (Int+Real): {flags_str}",
+                filepath, lineno, "MEM_TYPE_FLAGS",
+                f"Multiple type flags (should be exclusive): {flags_str}",
                 lines[lineno - 1].rstrip(),
             ))
-        if 'MEM_Str' in flags_str and 'MEM_Blob' in flags_str:
+
+        # Check for invalid combinations
+        if 'MEM_Str' in flags and 'MEM_Blob' in flags:
             violations.append(Violation(
                 filepath, lineno, "MEM_FLAGS",
                 f"Invalid MEM flag combination (Str+Blob): {flags_str}",
+                lines[lineno - 1].rstrip(),
+            ))
+
+    # Check for proper cleanup patterns (xDel callback)
+    xdel_pattern = r'(?P<var>\w+)->x_del\s*=\s*(?P<func>\w+)'
+    for match in re.finditer(xdel_pattern, text):
+        func = match.group('func')
+        lineno = text[:match.start()].count("\n") + 1
+        # Verify MEM_Dyn flag is also set nearby
+        # This is a best-effort check
+        context_start = max(0, match.start() - 200)
+        context_end = min(len(text), match.end() + 200)
+        context = text[context_start:context_end]
+        if 'MEM_Dyn' not in context and func != 'NULL' and func != '0':
+            violations.append(Violation(
+                filepath, lineno, "MEM_XDL",
+                f"xDel set to {func} but MEM_Dyn flag not found in context",
+                lines[lineno - 1].rstrip(),
+            ))
+
+    # Check szMalloc/zMalloc consistency
+    szmalloc_pattern = r'(?P<var>\w+)->sz_malloc\s*=\s*(?P<size>\d+)'
+    for match in re.finditer(szmalloc_pattern, text):
+        var = match.group('var')
+        size = match.group('size')
+        lineno = text[:match.start()].count("\n") + 1
+        # Check if zMalloc is also set nearby
+        context_start = max(0, match.start() - 200)
+        context_end = min(len(text), match.end() + 200)
+        context = text[context_start:context_end]
+        if f'{var}->z_malloc' not in context and int(size) > 0:
+            violations.append(Violation(
+                filepath, lineno, "MEM_MALLOC",
+                f"sz_malloc set to {size} but z_malloc not found in context",
                 lines[lineno - 1].rstrip(),
             ))
 

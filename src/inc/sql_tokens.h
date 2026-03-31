@@ -101,6 +101,9 @@
 #ifndef TK_NOTHING
 #define TK_NOTHING                        231
 #endif
+#ifndef TK_EXCLUDED
+#define TK_EXCLUDED                       232
+#endif
 
 /* Generated column tokens */
 #ifndef TK_GENERATED

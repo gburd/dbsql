@@ -34,6 +34,8 @@ char *strndup __P((const char *, size_t));
 #endif
 char *xvprintf __P((DBSQL *, const char *, va_list));
 char *xprintf __P((DBSQL *, const char *, ...));
+int __get_keyword_code __P((const char *, int));
+int __run_sql_parser __P((parser_t *, const char *, char **));
 
 #if defined(__cplusplus)
 }

@@ -96,6 +96,16 @@ cmd ::= COMMIT trans_opt.      {__dbsql_txn_commit(pParse);}
 cmd ::= END trans_opt.         {__dbsql_txn_commit(pParse);}
 cmd ::= ROLLBACK trans_opt.    {__dbsql_txn_abort(pParse);}
 
+///////////////////// SAVEPOINT support ////////////////////////////
+//
+cmd ::= SAVEPOINT nm(X).                    {__dbsql_savepoint(pParse, 0, &X);}
+cmd ::= ROLLBACK TO nm(X).                  {__dbsql_savepoint(pParse, 1, &X);}
+cmd ::= ROLLBACK TO SAVEPOINT nm(X).        {__dbsql_savepoint(pParse, 1, &X);}
+cmd ::= ROLLBACK TRANSACTION TO nm(X).      {__dbsql_savepoint(pParse, 1, &X);}
+cmd ::= ROLLBACK TRANSACTION TO SAVEPOINT nm(X). {__dbsql_savepoint(pParse, 1, &X);}
+cmd ::= RELEASE nm(X).                      {__dbsql_savepoint(pParse, 2, &X);}
+cmd ::= RELEASE SAVEPOINT nm(X).            {__dbsql_savepoint(pParse, 2, &X);}
+
 ///////////////////// The CREATE TABLE statement ////////////////////////////
 //
 cmd ::= create_table create_table_args.
@@ -176,7 +186,16 @@ carg ::= DEFAULT MINUS INTEGER(X).   {__add_default_value(pParse,&X,1);}
 carg ::= DEFAULT FLOAT(X).           {__add_default_value(pParse,&X,0);}
 carg ::= DEFAULT PLUS FLOAT(X).      {__add_default_value(pParse,&X,0);}
 carg ::= DEFAULT MINUS FLOAT(X).     {__add_default_value(pParse,&X,1);}
-carg ::= DEFAULT NULL. 
+carg ::= DEFAULT NULL.
+carg ::= GENERATED ALWAYS AS LP expr(X) RP.
+                                     {__add_generated_column(pParse,X,0);}
+carg ::= GENERATED ALWAYS AS LP expr(X) RP VIRTUAL.
+                                     {__add_generated_column(pParse,X,0);}
+carg ::= GENERATED ALWAYS AS LP expr(X) RP STORED.
+                                     {__add_generated_column(pParse,X,1);}
+carg ::= AS LP expr(X) RP.           {__add_generated_column(pParse,X,0);}
+carg ::= AS LP expr(X) RP VIRTUAL.   {__add_generated_column(pParse,X,0);}
+carg ::= AS LP expr(X) RP STORED.    {__add_generated_column(pParse,X,1);} 
 
 // In addition to the type name, we also care about the primary key and
 // UNIQUE constraints.
@@ -473,7 +492,10 @@ limit_opt(A) ::= LIMIT signed(X) COMMA signed(Y).
 /////////////////////////// The DELETE statement /////////////////////////////
 //
 cmd ::= DELETE FROM nm(X) dbnm(D) where_opt(Y). {
-   __delete_from(pParse, __src_list_append(0,&X,&D), Y);
+   __delete_from(pParse, __src_list_append(0,&X,&D), Y, 0);
+}
+cmd ::= DELETE FROM nm(X) dbnm(D) where_opt(Y) RETURNING selcollist(R). {
+   __delete_from(pParse, __src_list_append(0,&X,&D), Y, R);
 }
 
 %type where_opt {expr_t*}
@@ -488,7 +510,9 @@ where_opt(A) ::= WHERE expr(X).       {A = X;}
 ////////////////////////// The UPDATE command ////////////////////////////////
 //
 cmd ::= UPDATE orconf(R) nm(X) dbnm(D) SET setlist(Y) where_opt(Z).
-    {__update(pParse,__src_list_append(0,&X,&D),Y,Z,R);}
+    {__update(pParse,__src_list_append(0,&X,&D),Y,Z,R,0);}
+cmd ::= UPDATE orconf(R) nm(X) dbnm(D) SET setlist(Y) where_opt(Z) RETURNING selcollist(RET).
+    {__update(pParse,__src_list_append(0,&X,&D),Y,Z,R,RET);}
 
 setlist(A) ::= setlist(Z) COMMA nm(X) EQ expr(Y).
     {A = __expr_list_append(Z,Y,&X);}
@@ -496,11 +520,16 @@ setlist(A) ::= nm(X) EQ expr(Y).   {A = __expr_list_append(0,Y,&X);}
 
 ////////////////////////// The INSERT command /////////////////////////////////
 //
-cmd ::= insert_cmd(R) INTO nm(X) dbnm(D) inscollist_opt(F) 
+cmd ::= insert_cmd(R) INTO nm(X) dbnm(D) inscollist_opt(F)
         VALUES LP itemlist(Y) RP.
-            {__insert(pParse, __src_list_append(0,&X,&D), Y, 0, F, R);}
+            {__insert(pParse, __src_list_append(0,&X,&D), Y, 0, F, R, 0);}
 cmd ::= insert_cmd(R) INTO nm(X) dbnm(D) inscollist_opt(F) select(S).
-            {__insert(pParse, __src_list_append(0,&X,&D), 0, S, F, R);}
+            {__insert(pParse, __src_list_append(0,&X,&D), 0, S, F, R, 0);}
+cmd ::= insert_cmd(R) INTO nm(X) dbnm(D) inscollist_opt(F)
+        VALUES LP itemlist(Y) RP RETURNING selcollist(RET).
+            {__insert(pParse, __src_list_append(0,&X,&D), Y, 0, F, R, RET);}
+cmd ::= insert_cmd(R) INTO nm(X) dbnm(D) inscollist_opt(F) select(S) RETURNING selcollist(RET).
+            {__insert(pParse, __src_list_append(0,&X,&D), 0, S, F, R, RET);}
 
 %type insert_cmd {int}
 insert_cmd(A) ::= INSERT orconf(R).   {A = R;}
@@ -899,3 +928,23 @@ database_kw_opt ::= .
 cmd ::= DETACH database_kw_opt nm(D). {
   __detach(pParse, &D);
 }
+
+///////////////////////////// The ALTER TABLE command ////////////////////////////
+//
+cmd ::= ALTER TABLE fullname(X) RENAME TO nm(Y). {
+  __alter_rename_table(pParse,X,&Y);
+}
+cmd ::= ALTER TABLE fullname(X) ADD column_opt nm(Y) type carglist. {
+  __alter_finish_add_column(pParse,&Y);
+}
+cmd ::= ALTER TABLE fullname(X) RENAME column_opt nm(Y) TO nm(Z). {
+  __alter_rename_column(pParse,X,&Y,&Z);
+}
+cmd ::= ALTER TABLE fullname(X) DROP column_opt nm(Y). {
+  __alter_drop_column(pParse,X,&Y);
+}
+column_opt ::= COLUMN.
+column_opt ::= .
+%type fullname {src_list_t*}
+%destructor fullname {__src_list_delete($$);}
+fullname(A) ::= nm(X) dbnm(D). {A = __src_list_append(0,&X,&D);}

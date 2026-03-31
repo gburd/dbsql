@@ -1329,6 +1329,8 @@ __get_temp_reg(parser_t* parser)
 void
 __release_temp_reg(parser_t* parser, int reg)
 {
+	(void)parser; /* Future: maintain register free list */
+	(void)reg;
 	/* For now, no-op.  Future optimization: maintain free list */
 	/* Could track if reg == parser->nMem and decrement, but
 	 * need to be careful about ordering */
@@ -1361,6 +1363,9 @@ __get_temp_range(parser_t* parser, int nreg)
 void
 __release_temp_range(parser_t* parser, int base, int nreg)
 {
+	(void)parser; /* Future: maintain register free list */
+	(void)base;
+	(void)nreg;
 	/* For now, no-op.  Future optimization: maintain free list */
 }
 
@@ -1381,7 +1386,7 @@ int
 __expr_code_target(parser_t* parser, expr_t* expr, int target)
 {
 	vdbe_t *v = parser->vdbe;
-	int i, op, dest, nexpr, nid, addr, expr_end_label, jump_inst;
+	int i, op, nexpr, nid, addr, expr_end_label, jump_inst;
 	int r1, r2;
 	int regFree1 = 0;
 	int regFree2 = 0;
@@ -1430,9 +1435,8 @@ __expr_code_target(parser_t* parser, expr_t* expr, int target)
 			__vdbe_add_op(v, OP_AggGet, 0, expr->iAgg);
 			__vdbe_add_op(v, OP_Dup, parser->nMem - 1, target);
 		} else if (expr->iColumn >= 0) {
-			__vdbe_add_op(v, OP_Column, expr->iTable,
-				      expr->iColumn);
-			__vdbe_add_op3(v, OP_Integer, 0, target, 0);
+			/* REGISTER MODE: Write column directly to target register */
+			__vdbe_add_op3(v, OP_Column, expr->iTable, expr->iColumn, target);
 		} else {
 			__vdbe_add_op(v, OP_Rowid, expr->iTable, target);
 		}
@@ -1977,7 +1981,6 @@ __expr_compare(expr_t* a, expr_t* b)
 static int
 __append_agg_info(parser_t* parser)
 {
-	agg_expr_t *agg;
 	if ((parser->nAgg & 0x7) == 0) {
 		int amt = parser->nAgg + 8;
 		if (__dbsql_realloc(parser->db, amt * sizeof(parser->aAgg[0]),

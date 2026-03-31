@@ -46,10 +46,17 @@ echo
 echo "=== Running Tests ==="
 echo
 
+# Clean up any leftover database files from previous runs
+echo "Cleaning up old database files..."
+rm -f *.db *.db_* __db.* 2>/dev/null || true
+echo
+
 # Run each test
 for test in $TESTS; do
     echo "--- Running $test ---"
     ./$test || echo "FAILED: $test"
+    # Clean up database files after each test
+    rm -f *.db *.db_* __db.* 2>/dev/null || true
     echo
 done
 

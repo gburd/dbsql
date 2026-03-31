@@ -105,9 +105,7 @@
  */
 #ifndef HAVE_MEMCMP
 int
-memcmp(s1, s2, n)
-	char *s1, *s2;
-	size_t n;
+memcmp(const void *s1, const void *s2, size_t n)
 {
 	if (n != 0) {
 		unsigned char *p1 = (unsigned char *)s1,

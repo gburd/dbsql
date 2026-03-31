@@ -2301,7 +2301,7 @@ struct lemon *gp;
   struct pstate ps;
   FILE *fp;
   char *filebuf;
-  int filesize;
+  long filesize;
   int lineno;
   int c;
   char *cp, *nextcp;
@@ -2329,7 +2329,7 @@ struct lemon *gp;
     gp->errorcnt++;
     return;
   }
-  if( fread(filebuf,1,filesize,fp)!=filesize ){
+  if( fread(filebuf,1,(size_t)filesize,fp)!=(size_t)filesize ){
     ErrorMsg(ps.filename,0,"Can't read in all %d bytes of this file.",
       filesize);
     free(filebuf);

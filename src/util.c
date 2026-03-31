@@ -83,6 +83,7 @@ __dbsql_atoi64(const char *z, i64 *pNum)
 int
 __sql_parser_fallback(int iToken)
 {
+	(void)iToken; /* Unused - no fallback tokens configured */
 	/* No fallback tokens configured - stub implementation */
 	return 0;
 }
@@ -104,7 +105,7 @@ __vdbe_dequote_p3(vdbe_t *v, int addr)
 		return;
 
 	pOp = &v->opcodes[addr];
-	z = pOp->p3;
+	z = pOp->p4.z;  /* String stored in p4 union, not p3 */
 
 	if (z == 0 || z[0] == 0)
 		return;

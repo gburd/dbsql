@@ -1041,6 +1041,8 @@ __current_time_sql_func(context, argc, argv)
 	int argc;
 	const char **argv;
 {
+	(void)argc; /* No arguments for current_time() */
+	(void)argv;
 	__time_sql_func(context, 0, 0);
 }
 
@@ -1060,6 +1062,8 @@ __current_date_sql_func(context, argc, argv)
 	int argc;
 	const char **argv;
 {
+	(void)argc; /* No arguments for current_date() */
+	(void)argv;
 	__date_sql_func(context, 0, 0);
 }
 
@@ -1079,6 +1083,8 @@ __current_timestamp_sql_func(context, argc, argv)
 	int argc;
 	const char **argv;
 {
+	(void)argc; /* No arguments for current_timestamp() */
+	(void)argv;
 	__datetime_sql_func(context, 0, 0);
 }
 
@@ -1109,6 +1115,7 @@ __timediff_sql_func(context, argc, argv)
 	char buf[64];
 
 	DBSQL_ASSERT(argc == 2);
+	(void)argc; /* Used in assertion only */
 	if (argv[0] == 0 || argv[1] == 0)
 		return;
 	if (__is_date(1, &argv[0], &d1))

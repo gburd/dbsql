@@ -646,10 +646,9 @@ struct __dbsql_db {
  * - New: funcFlags, xValue, xInverse (window function support),
  *   zName, u union
  *
- * NOTE: The function pointer signatures still use dbsql_func_t* for
- * the context parameter.  As the VDBE is updated (Tasks 8-9), these
- * will transition to the new sqlite3_value** style.  For now, we
- * keep the existing DBSQL function call convention.
+ * Function pointer signatures use dbsql_func_t* for the context parameter,
+ * maintaining compatibility with existing DBSQL function implementations.
+ * Future enhancement: transition to SQLite-style sqlite3_value** parameters.
  * ================================================================
  */
 struct func_def {
@@ -721,6 +720,7 @@ struct column {
 	u16 iDflt;             /* 1-based index into pDfltList for DEFAULT.
 				  0 means "no default" */
 	u16 colFlags;          /* Boolean properties.  See COLFLAG_ defines */
+	expr_t *pDflt;         /* Expression for DEFAULT or generated column */
 
 	/* Legacy DBSQL compatibility shims */
 	char *zName;           /* Alias for zCnName */
@@ -756,6 +756,9 @@ struct column {
 #define COLFLAG_HASTYPE   0x0004   /* Type name follows column name in zCnName */
 #define COLFLAG_UNIQUE    0x0008   /* Column def contains "UNIQUE" or "PK" */
 #define COLFLAG_SORTERREF 0x0010   /* Use sorter-refs with this column */
+#define COLFLAG_VIRTUAL   0x0020   /* VIRTUAL generated column */
+#define COLFLAG_STORED    0x0040   /* STORED generated column */
+#define COLFLAG_GENERATED 0x0060   /* Mask for generated column types */
 #define COLFLAG_VIRTUAL   0x0020   /* GENERATED ALWAYS AS ... VIRTUAL */
 #define COLFLAG_STORED    0x0040   /* GENERATED ALWAYS AS ... STORED */
 #define COLFLAG_NOTAVAIL  0x0080   /* STORED column not yet calculated */
@@ -1301,9 +1304,8 @@ struct expr_list {
 		u8 sortOrder;    /* Legacy: same as fg.sortFlags & 1 */
 		u8 isAgg;        /* Legacy: 1 if aggregate function */
 	} *a;          /* Pointer to array of expressions (old DBSQL style) */
-	/* NOTE: SQLite 3.52 uses a[FLEXARRAY] here, but old DBSQL code
-	 * allocates the array separately with realloc. To maintain compatibility
-	 * with existing __expr_list_append code, we use a pointer. */
+	/* Uses pointer instead of FLEXARRAY for compatibility with existing
+	 * __expr_list_append code that allocates/reallocs separately. */
 };
 
 /*
@@ -1943,7 +1945,7 @@ struct parser {
 	ynVar nVar;              /* Number of '?' variables seen in SQL */
 	u8 iPkSortOrder;         /* ASC or DESC for INTEGER PRIMARY KEY */
 	u8 explain;              /* True if EXPLAIN flag found on query */
-	u8 eParseMode;           /* PARSE_MODE_XXX constant */
+	u8 eParseMode;           /* Parse mode (see PARSE_MODE_* below) */
 
 #ifndef DBSQL_OMIT_VIRTUALTABLE
 	int nVtabLock;           /* Number of virtual tables to lock */
@@ -2195,10 +2197,10 @@ struct db_fixer {
 typedef db_fixer_t ref_normalizer_ctx_t;
 
 /*
- * This global flag is set for performance testing of triggers. When it is set
- * the library will perform the overhead of building new and old trigger
- * references even when no triggers exist
- * TODO remove this(?) at least ifdef, or move it to globals
+ * Global flag for performance testing of triggers. When set, the library
+ * performs the overhead of building new/old trigger references even when
+ * no triggers exist. Defined in cg_trigger.c, controlled via PRAGMA.
+ * Known issue: should be moved to dbsql_t context or ifdef'd for testing.
  */
 extern int always_code_trigger_setup;
 

@@ -104,7 +104,7 @@ __get_table_cb(void* arg, int ncol, char* *argv, char* *colv)
 			}
 			p->result[p->num_data++] = z;
 		}
-	} else if (p->num_col != ncol) {
+	} else if (p->num_col != (u_int32_t)ncol) {
 		__str_append(&p->err_msgs,
 			     "DBSQL->get_table() called with two or more "
 			     "incompatible queries", (char*)0);

@@ -23,6 +23,9 @@
 #include <string.h>
 #include <errno.h>
 
+/* Forward declarations to avoid implicit declaration warnings */
+int __dbsql_malloc __P((DBSQL *, size_t, void *));
+int __dbsql_calloc __P((DBSQL *, size_t, size_t, void *));
 
 /*
  * __dbsql_umalloc --

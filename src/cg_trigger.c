@@ -128,13 +128,13 @@ __begin_trigger(parser, trigger, tr_tm, op, columns, tab_name, foreach,
 	if (strncasecmp(table->zName, MASTER_NAME,
 				   strlen(MASTER_NAME)) == 0) {
 		__error_msg(parser, "cannot create trigger on system table");
-		parser->n_errors++;
+		parser->nErr++;
 		goto trigger_cleanup;
 	}
 	if (strncasecmp(table->zName, TEMP_MASTER_NAME,
 				   strlen(TEMP_MASTER_NAME)) == 0) {
 		__error_msg(parser, "cannot create trigger on system table");
-		parser->n_errors++;
+		parser->nErr++;
 		goto trigger_cleanup;
 	}
 	if (table->pSelect && tr_tm != TK_INSTEAD) {
@@ -224,7 +224,7 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 	trigger_t *nt = 0; /* The trigger whose construction is finishing up */
 	DBSQL *dbp = parser->db;
 
-	if (parser->n_errors || parser->pNewTrigger == 0)
+	if (parser->nErr || parser->pNewTrigger == 0)
 		goto triggerfinish_cleanup;
 	nt = parser->pNewTrigger;
 	parser->pNewTrigger = 0;
@@ -244,8 +244,9 @@ __finish_trigger(parser_t* parser, trigger_step_t* steplist, token_t* all)
 	 * table, build the master entry.
 	 */
 	if (!parser->initFlag) {
-		int addr;
+		int addr; /* TODO: Currently unused - reserved for future opcode addressing */
 		vdbe_t *v;
+		(void)addr; /* Reserved for future use */
 
 		/*
 		 * Make an entry in the master table.
@@ -773,7 +774,7 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 	trigger_step_t * ts = steplist;
 
 	while (ts) {
-		int saveNTab = parser->n_tables;
+		int saveNTab = parser->nTab;
 		orconf = (orconfin == OE_Default)?ts->orconf:orconfin;
 		parser->trigStack->orconf = orconf;
 		switch(ts->op) {
@@ -814,8 +815,8 @@ __code_trigger_program(parser_t* parser, trigger_step_t* steplist, int orconfin)
 		}
 		default:
 			DBSQL_ASSERT(0);
-		} 
-		parser->n_tables = saveNTab;
+		}
+		parser->nTab = saveNTab;
 		ts = ts->pNext;
 	}
 	return 0;

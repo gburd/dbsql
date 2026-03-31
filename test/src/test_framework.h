@@ -79,11 +79,18 @@ extern test_context_t g_test_ctx;
 	} while (0)
 
 #define TEST(name) \
-	static void test_##name(void); \
+	static void test_##name##_impl(void); \
+	static void test_##name(void) { \
+		test_cleanup_db_files("*.db"); \
+		test_cleanup_db_files("test_*.db"); \
+		test_##name##_impl(); \
+		test_cleanup_db_files("*.db"); \
+		test_cleanup_db_files("test_*.db"); \
+	} \
 	static void __attribute__((constructor)) register_##name(void) { \
 		test_register(#name, test_##name); \
 	} \
-	static void test_##name(void)
+	static void test_##name##_impl(void)
 
 #define ASSERT_EQ(expected, actual) \
 	do { \
@@ -196,6 +203,9 @@ void test_memory_report(void);
 #define realloc(ptr, size) test_realloc(ptr, size, __FILE__, __LINE__)
 #define free(ptr) test_free(ptr, __FILE__, __LINE__)
 #endif
+
+/* Database cleanup helper */
+void test_cleanup_db_files(const char *pattern);
 
 /* Performance benchmarking */
 typedef struct {

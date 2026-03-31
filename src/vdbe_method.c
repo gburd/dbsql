@@ -63,12 +63,13 @@ __vdbe_create(DBSQL* dbp)
 	if (__dbsql_calloc(dbp, 1, sizeof(vdbe_t), &vm) != 0)
 		return 0;
 	vm->db = dbp;
-// TODO: VDBE list management - 	if (dbp->vdbe) {
-// TODO: VDBE list management - 		dbp->vdbe->prev_vdbe = vm;
-// TODO: VDBE list management - 	}
-// TODO: VDBE list management - 	vm->next_vdbe = dbp->vdbe;
-// TODO: VDBE list management - 	vm->prev_vdbe = 0;
-// TODO: VDBE list management - 	dbp->vdbe = vm;
+	/* Link VDBE to database's active VDBE list */
+	if (dbp->pVdbe) {
+		dbp->pVdbe->prev_vdbe = vm;
+	}
+	vm->next_vdbe = dbp->pVdbe;
+	vm->prev_vdbe = 0;
+	dbp->pVdbe = vm;
 	vm->magic = VDBE_MAGIC_INIT;
 	return vm;
 }
@@ -1548,15 +1549,18 @@ __vdbe_free_cursor(vdbe_t* vm, VdbeCursor* pCur)
 
 	switch (pCur->eCurType) {
 	case CURTYPE_BTREE:
-		if (pCur->uc.pCursor != 0) {
-			__sm_close_cursor(pCur->uc.pCursor);
+		if (pCur->uc.sm_cursor != 0) {
+			__sm_close_cursor(pCur->uc.sm_cursor);
 		}
-		if (pCur->isEphemeral && pCur->ub.pBtx != 0) {
-			__sm_close_db(pCur->ub.pBtx);
+		if (pCur->isEphemeral && pCur->ub.btree != 0) {
+			__sm_close_db(pCur->ub.btree);
 		}
 		break;
 	case CURTYPE_SORTER:
-		/* Sorter cleanup would go here */
+		if (pCur->uc.sorter != 0) {
+			__sorter_close(pCur->uc.sorter);
+			pCur->uc.sorter = 0;
+		}
 		break;
 	case CURTYPE_VTAB:
 		/* Virtual table cleanup would go here */
@@ -1826,8 +1830,8 @@ __vdbe_delete(vdbe_t* vm)
 	if (vm->prev_vdbe) {
 		vm->prev_vdbe->next_vdbe = vm->next_vdbe;
 	} else {
-		DBSQL_ASSERT(vm->db->vdbe == vm );
-// TODO: VDBE list management - 		vm->db->vdbe = vm->next_vdbe;
+		DBSQL_ASSERT(vm->db->pVdbe == vm);
+		vm->db->pVdbe = vm->next_vdbe;
 	}
 	if (vm->next_vdbe) {
 		vm->next_vdbe->prev_vdbe = vm->prev_vdbe;

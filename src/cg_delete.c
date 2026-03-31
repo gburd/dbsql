@@ -85,16 +85,18 @@ __is_table_read_only(parser_t* parser, table_t* table, int views_ok)
  * __delete_from --
  *	Process a DELETE FROM statement.
  *
- * PUBLIC: void __delete_from __P((parser_t *, src_list_t *, expr_t *));
+ * PUBLIC: void __delete_from __P((parser_t *, src_list_t *, expr_t *, expr_list_t *));
  *
  * parser			The parser context
  * list				The table from which we should delete things
  * where			The WHERE clause.  May be null.
+ * returning		Column list for RETURNING clause (or NULL)
  */
-void __delete_from(parser, list, where)
+void __delete_from(parser, list, where, returning)
 	parser_t *parser;
 	src_list_t *list;
 	expr_t *where;
+	expr_list_t *returning;
 {
 	vdbe_t *v;          /* The virtual database engine */
 	table_t *table;     /* The table from which records will be deleted */
@@ -380,6 +382,65 @@ void __delete_from(parser, list, where)
 			}
 
 			/*
+			 * If RETURNING clause is present, output the row data before deleting.
+			 */
+			if (returning && !view) {
+				int i, j;
+				int regOut = parser->nMem + 1;
+				parser->nMem += returning->nExpr;
+
+				/* Generate column names for RETURNING output */
+				for (i = 0; i < returning->nExpr; i++) {
+					const char *col_name;
+					if (returning->a[i].zEName && returning->a[i].zEName[0]) {
+						col_name = returning->a[i].zEName;
+					} else if (returning->a[i].pExpr->op == TK_ID) {
+						col_name = returning->a[i].pExpr->u.zToken.z;
+					} else {
+						col_name = "column";
+					}
+					__vdbe_add_op(v, OP_ColumnName, i, 0);
+					__vdbe_change_p4(v, -1, col_name, P3_STATIC);
+				}
+
+				/* Evaluate each RETURNING expression and output */
+				for (i = 0; i < returning->nExpr; i++) {
+					expr_t *expr = returning->a[i].pExpr;
+
+					if (expr->op == TK_ALL) {
+						/* RETURNING * - output rowid and all columns */
+						__vdbe_add_op(v, OP_Rowid, cur, regOut + i);
+						for (j = 0; j < table->nCol; j++) {
+							__vdbe_add_op(v, OP_Column, cur, j);
+							__vdbe_add_op(v, OP_Copy, 0, regOut + i + j + 1);
+						}
+						i += table->nCol;
+					} else if (expr->op == TK_ID) {
+						/* Column reference */
+						const char *col_name = expr->u.zToken.z;
+						if (__is_row_id(col_name)) {
+							__vdbe_add_op(v, OP_Rowid, cur, regOut + i);
+						} else {
+							for (j = 0; j < table->nCol; j++) {
+								if (strcasecmp(table->columns[j].zName, col_name) == 0) {
+									__vdbe_add_op(v, OP_Column, cur, j);
+									__vdbe_add_op(v, OP_Copy, 0, regOut + i);
+									break;
+								}
+							}
+						}
+					} else {
+						/* Expression - evaluate it */
+						__expr_code(parser, expr);
+						__vdbe_add_op(v, OP_Copy, 0, regOut + i);
+					}
+				}
+
+				/* Output the row */
+				__vdbe_add_op(v, OP_Callback, returning->nExpr, 0);
+			}
+
+			/*
 			 * Delete the row.
 			 * For register-based: __generate_row_delete expects
 			 * the rowid in the proper register and uses cursor.
@@ -446,6 +507,8 @@ void __delete_from(parser, list, where)
 	__auth_context_pop(&context);
 	__src_list_delete(list);
 	__expr_delete(where);
+	if (returning)
+		__expr_list_delete(returning);
 	return;
 }
 
@@ -532,6 +595,8 @@ void __generate_row_index_delete(dbp, v, table, cur, idx_used)
 {
 	int i;
 	index_t *idx;
+
+	(void)dbp; /* Database connection unused in current implementation */
 
 	for (i = 1, idx = table->first_index; idx; i++, idx = idx->next_index) {
 		int j;

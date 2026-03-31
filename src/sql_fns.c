@@ -1622,7 +1622,7 @@ __min_step(context, argc, argv)
 	if (p == 0 || argc < 1 || argv[0] == 0)
 		return;
 	if (p->z == 0 || __str_numeric_cmp(argv[0], p->z) < 0) {
-		int len;
+		size_t len;
 		if (!p->buf[0]) {
 			__dbsql_free(NULL, p->z);
 		}
@@ -1658,7 +1658,7 @@ __max_step(context, argc, argv)
 	if (p == 0 || argc < 1 || argv[0] == 0)
 		return;
 	if (p->z == 0 || __str_numeric_cmp(argv[0], p->z) > 0) {
-		int len;
+		size_t len;
 		if (!p->buf[0]) {
 			__dbsql_free(NULL, p->z);
 		}
@@ -1953,7 +1953,7 @@ __register_builtin_funcs(DBSQL* dbp)
 	{ "group_concat", 2, DBSQL_TEXT,
 	    __group_concat_step, __group_concat_finalize },
 	};
-	int i;
+	size_t i;
 
 	for(i = 0; i < sizeof(funcs) / sizeof(funcs[0]); i++) {
 		dbp->create_function(dbp, funcs[i].name, funcs[i].num_arg,
@@ -2015,4 +2015,5 @@ __register_builtin_funcs(DBSQL* dbp)
 	}
 
 	__register_datetime_funcs(dbp);
+	__register_json_funcs(dbp);
 }

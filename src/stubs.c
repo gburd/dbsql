@@ -60,85 +60,9 @@ int __ref_normalize_trigger_step(ref_normalizer_ctx_t *normctx,
 	return 0;
 }
 
-/* UPDATE stubs (from cg_update.c) */
-void __update(parser_t *parser, src_list_t *tab_list, expr_list_t *changes,
-              expr_t *where, int on_error) {
-	(void)parser; (void)tab_list; (void)changes; (void)where; (void)on_error;
-	/* UPDATE not yet implemented in register-based code */
-}
+/* UPDATE is now implemented in cg_update.c */
 
-/* TRIGGER stubs (from cg_trigger.c) */
-void __begin_trigger(parser_t *parser, token_t *name1, int tr_tm, int op,
-                     id_list_t *columns, src_list_t *tab_list, int isTemp,
-                     expr_t *when, int noErr) {
-	(void)parser; (void)name1; (void)tr_tm; (void)op;
-	(void)columns; (void)tab_list; (void)isTemp; (void)when; (void)noErr;
-	/* CREATE TRIGGER not yet implemented */
-}
-
-void __finish_trigger(parser_t *parser, trigger_step_t *step_list,
-                      token_t *all) {
-	(void)parser; (void)step_list; (void)all;
-	/* CREATE TRIGGER not yet implemented */
-}
-
-void __drop_trigger(parser_t *parser, src_list_t *name) {
-	(void)parser; (void)name;
-	/* DROP TRIGGER not yet implemented */
-}
-
-void __drop_trigger_ptr(parser_t *parser, trigger_t *trigger, int nested) {
-	(void)parser; (void)trigger; (void)nested;
-	/* DROP TRIGGER not yet implemented */
-}
-
-trigger_step_t *__trigger_select_step(DBSQL *dbp, select_t *select) {
-	(void)dbp; (void)select;
-	return NULL;
-}
-
-trigger_step_t *__trigger_insert_step(DBSQL *dbp, token_t *b, id_list_t *columns,
-                                       expr_list_t *elist, select_t *select,
-                                       int orconf) {
-	(void)dbp; (void)b; (void)columns; (void)elist; (void)select; (void)orconf;
-	return NULL;
-}
-
-trigger_step_t *__trigger_update_step(DBSQL *dbp, token_t *b, expr_list_t *elist,
-                                       expr_t *where, int orconf) {
-	(void)dbp; (void)b; (void)elist; (void)where; (void)orconf;
-	return NULL;
-}
-
-trigger_step_t *__trigger_delete_step(DBSQL *dbp, token_t *b, expr_t *where) {
-	(void)dbp; (void)b; (void)where;
-	return NULL;
-}
-
-void __vdbe_delete_trigger_step(trigger_step_t *trigger_step) {
-	(void)trigger_step;
-	/* Trigger cleanup not yet implemented */
-}
-
-void __vdbe_delete_trigger(trigger_t *trigger) {
-	(void)trigger;
-	/* Trigger cleanup not yet implemented */
-}
-
-int __triggers_exist(parser_t *parser, trigger_t *trigger, int op,
-                     int before, int after, expr_list_t *changes) {
-	(void)parser; (void)trigger; (void)op; (void)before; (void)after;
-	(void)changes;
-	return 0; /* No triggers */
-}
-
-int __code_row_trigger(void) {
-	/* Trigger execution not yet implemented */
-	return 0;
-}
-
-/* Trigger setup variable */
-int always_code_trigger_setup = 0;
+/* TRIGGER functions now implemented in cg_trigger.c */
 
 /* Advanced constraint checking stubs (from cg_insert.c old version) */
 void __generate_constraint_checks(parser_t *parser, table_t *table,
@@ -153,9 +77,39 @@ void __generate_constraint_checks(parser_t *parser, table_t *table,
 void __complete_insertion(parser_t *parser, table_t *table, int base_reg,
                           char *zWhere, int rowidChng, int isUpdate,
                           int newIdx) {
-	(void)parser; (void)table; (void)base_reg; (void)zWhere;
-	(void)rowidChng; (void)isUpdate; (void)newIdx;
-	/* Completion logic not yet implemented */
+	vdbe_t *v;
+	index_t *idx;
+	int i, idx_reg;
+
+	(void)zWhere; (void)rowidChng; (void)isUpdate; (void)newIdx;
+
+	v = parser->vdbe;
+	if (v == NULL) return;
+
+	/*
+	 * Generate OP_MakeRecord to pack rowid and data into a record.
+	 * regRowid is at regData-1 (allocated just before regData array)
+	 */
+	int regRowid = base_reg - 1;
+	int regData = base_reg;
+	int regRec = regData + table->nCol;
+
+	__vdbe_add_op3(v, OP_MakeRecord, regRowid, table->nCol + 1, regRec);
+
+	/*
+	 * Generate OP_Insert to write the record into the table.
+	 * P1 = cursor number, P2 = data register, P3 = key register
+	 */
+	__vdbe_add_op3(v, OP_Insert, base_reg, regRec, regRowid);
+
+	/*
+	 * Generate index insertions for each index on this table.
+	 */
+	idx_reg = regRec + 1;
+	for (i = 0, idx = table->first_index; idx; idx = idx->next_index, i++) {
+		/* Index insertion would go here - for now skip indices */
+		(void)idx_reg;
+	}
 }
 
 void __dbsql_assert(void) {

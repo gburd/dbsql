@@ -37,6 +37,7 @@ void
 __vacuum(parser_t* parser, token_t* tab_name)
 {
 	vdbe_t *v = __parser_get_vdbe(parser);
+	(void)tab_name; /* Table-specific vacuum not yet implemented */
 	__vdbe_add_op(v, OP_Vacuum, 0, 0);
 	return;
 }
@@ -51,6 +52,8 @@ __vacuum(parser_t* parser, token_t* tab_name)
 int
 __execute_vacuum(char* *err_msgs, DBSQL* dbp)
 {
+	(void)err_msgs; /* No errors in stub implementation */
+	(void)dbp;      /* Database unused in stub implementation */
 	return DBSQL_SUCCESS; /* NOTE: When DB implements compaction (someday)
 				 then this will be the place to invoke the
 				 __sm_compact() function.  For now, its

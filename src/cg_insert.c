@@ -39,6 +39,8 @@
  *
  *		insert into TABLE (IDLIST) values(EXPRLIST)
  *		insert into TABLE (IDLIST) select
+ *		insert into TABLE (IDLIST) values(EXPRLIST) RETURNING columns
+ *		insert into TABLE (IDLIST) select RETURNING columns
  *
  *	The IDLIST following the table name is always optional.  If omitted,
  *	then a list of all columns for the table is substituted.  The IDLIST
@@ -50,6 +52,9 @@
  *	NULL and 'select' is a pointer to the select statement used to generate
  *	data for the insert.
  *
+ *	The 'returning' parameter holds the column list for the RETURNING clause,
+ *	or NULL if no RETURNING clause is present.
+ *
  *	The code generated follows one of three templates.  For a simple
  *	select with data coming from a VALUES clause, the code executes
  *	once straight down through.  The template looks like this:
@@ -58,6 +63,7 @@
  *		allocate registers for rowid and data
  *		evaluate VALUES expressions into registers
  *		write the resulting record into <table>
+ *		if RETURNING: output the inserted values
  *		cleanup
  *
  *	If the statement is of the form
@@ -77,6 +83,7 @@
  *		B: open write cursor to <table> and its indices
  *		   goto A
  *		C: insert the select result into <table>
+ *		   if RETURNING: output the inserted values
  *		   return
  *		D: cleanup
  *
@@ -100,11 +107,12 @@
  *		D: open write cursor to <table> and its indices
  *		   loop over the intermediate table
  *		     transfer values form intermediate table into <table>
+ *		     if RETURNING: output the inserted values
  *		   end the loop
  *		   cleanup
  *
  * PUBLIC: void __insert __P((parser_t *, src_list_t *, expr_list_t *,
- * PUBLIC:      select_t *, id_list_t *, int));
+ * PUBLIC:      select_t *, id_list_t *, int, expr_list_t *));
  *
  * parser			Parser context
  * tlist			Name of table into which we are inserting
@@ -112,14 +120,16 @@
  * select			A SELECT statement to use as the data source
  * column			Column names corresponding to IDLIST
  * on_error			How to handle constraint errors
+ * returning		Column list for RETURNING clause (or NULL)
  */
-void __insert(parser, tlist, vlist, select, column, on_error)
+void __insert(parser, tlist, vlist, select, column, on_error, returning)
 	parser_t *parser;
 	src_list_t *tlist;
 	expr_list_t *vlist;
 	select_t *select;
 	id_list_t *column;
 	int on_error;
+	expr_list_t *returning;
 {
 	int rc, init_code;
 	int i, j, dx;        /* Loop counters */
@@ -611,6 +621,19 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 		}
 
 		/*
+		 * Generate OP_MakeRecord to pack rowid and all data columns
+		 * into a single database record.
+		 * P1 = first register (rowid), P2 = count (nCol+1), P3 = dest register
+		 */
+		__vdbe_add_op3(v, OP_MakeRecord, regRowid, table->nCol + 1, regRec);
+
+		/*
+		 * Generate OP_Insert to write the record into the table.
+		 * P1 = cursor number, P2 = data register, P3 = key register
+		 */
+		__vdbe_add_op3(v, OP_Insert, base, regRec, regRowid);
+
+		/*
 		 * Generate code to check constraints and generate index
 		 * keys and do the insertion.
 		 */
@@ -619,6 +642,63 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 					     end_of_loop);
 		__complete_insertion(parser, table, base, 0, 0, 0,
 				     after_triggers_p ? nidx : -1);
+	}
+
+	/*
+	 * If RETURNING clause is present, generate code to output the inserted values.
+	 */
+	if (returning && !view_p) {
+		int i, j;
+		int regOut = parser->nMem + 1;
+		parser->nMem += returning->nExpr;
+
+		/* Generate column names for RETURNING output */
+		for (i = 0; i < returning->nExpr; i++) {
+			const char *col_name;
+			if (returning->a[i].zEName && returning->a[i].zEName[0]) {
+				col_name = returning->a[i].zEName;
+			} else if (returning->a[i].pExpr->op == TK_ID) {
+				col_name = returning->a[i].pExpr->u.zToken.z;
+			} else {
+				col_name = "column";
+			}
+			__vdbe_add_op(v, OP_ColumnName, i, 0);
+			__vdbe_change_p4(v, -1, col_name, P3_STATIC);
+		}
+
+		/* Evaluate each RETURNING expression and output */
+		for (i = 0; i < returning->nExpr; i++) {
+			expr_t *expr = returning->a[i].pExpr;
+
+			if (expr->op == TK_ALL) {
+				/* RETURNING * - output all columns */
+				__vdbe_add_op(v, OP_Copy, regRowid, regOut + i);
+				for (j = 0; j < table->nCol; j++) {
+					__vdbe_add_op(v, OP_Copy, regData + j, regOut + i + j + 1);
+				}
+				i += table->nCol;
+			} else if (expr->op == TK_ID) {
+				/* Column reference - find column index */
+				const char *col_name = expr->u.zToken.z;
+				if (__is_row_id(col_name)) {
+					__vdbe_add_op(v, OP_Copy, regRowid, regOut + i);
+				} else {
+					for (j = 0; j < table->nCol; j++) {
+						if (strcasecmp(table->columns[j].zName, col_name) == 0) {
+							__vdbe_add_op(v, OP_Copy, regData + j, regOut + i);
+							break;
+						}
+					}
+				}
+			} else {
+				/* Expression - evaluate it */
+				__expr_code(parser, expr);
+				__vdbe_add_op(v, OP_Copy, 0, regOut + i);
+			}
+		}
+
+		/* Output the row */
+		__vdbe_add_op(v, OP_Callback, returning->nExpr, 0);
 	}
 
 	/*
@@ -686,6 +766,8 @@ void __insert(parser, tlist, vlist, select, column, on_error)
 	if (select)
 		__select_delete(select);
 	__id_list_delete(column);
+	if (returning)
+		__expr_list_delete(returning);
 }
 
 /* NOTE: __generate_constraint_checks and __complete_insertion functions

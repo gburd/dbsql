@@ -86,6 +86,10 @@ __parse_begin(parser_t* parser, int explain_flag)
 static int
 __null_callback(void* not_used, int n, char* *a, char* *b)
 {
+	(void)not_used; /* Context unused in null callback */
+	(void)n;        /* Column count unused */
+	(void)a;        /* Data columns unused */
+	(void)b;        /* Column names unused */
 	return 0;
 }
 
@@ -171,6 +175,10 @@ __parse_exec(parser_t* parser)
 					char **col_bufs = 0;  /* Buffers for integer/real conversion */
 					int i;
 
+					/* DEBUG: Print ncol and check pointers */
+					fprintf(stderr, "DEBUG __parse_exec: ncol=%d, result_row=%p, column_names=%p\n",
+						ncol, (void*)v->result_row, (void*)v->column_names);
+
 					/* Allocate arrays for callback */
 					if (__dbsql_calloc(dbp, ncol, sizeof(char*), &col_vals) != 0 ||
 					    __dbsql_calloc(dbp, ncol, sizeof(char*), &col_names) != 0 ||
@@ -201,12 +209,16 @@ __parse_exec(parser_t* parser)
 					/* Extract column values from result_row */
 					for (i = 0; i < ncol; i++) {
 						mem_t *mem = &v->result_row[i];
+						fprintf(stderr, "DEBUG col %d: flags=0x%x, z=%s\n",
+							i, mem->flags, mem->z ? mem->z : "NULL");
 						col_vals[i] = (char*)__mem_to_string(mem, col_bufs[i], 64);
 					}
 
 					/* Extract column names */
 					for (i = 0; i < ncol; i++) {
 						mem_t *name = &v->column_names[i*2];
+						fprintf(stderr, "DEBUG name %d: flags=0x%x, z=%s\n",
+							i, name->flags, name->z ? name->z : "NULL");
 						col_names[i] = (name->flags & MEM_Str) ? name->z : "";
 					}
 
@@ -614,6 +626,7 @@ __unlink_and_delete_table(DBSQL* dbp, table_t* table)
 	old = __hash_insert(&dbp->aDb[i].tblHash, table->zName,
 			    strlen(table->zName) + 1, 0);
 	DBSQL_ASSERT(old == 0 || old == table);
+	(void)old; /* Used in assertion only */
 	for (f1 = table->pFKey; f1; f1 = f1->pNextFrom) {
 		int n_to = strlen(f1->zTo) + 1;
 		f2 = __hash_find(&dbp->aDb[i].aFKey, f1->zTo, n_to);
@@ -973,6 +986,59 @@ __add_default_value(parser_t* parser, token_t* val, int minus)
 		__str_nappend(pz, val->z, val->n, NULL);
 	}
 	__str_unquote(*pz);
+}
+
+/*
+ * __add_generated_column --
+ *	Add a generated column expression to the most recently added column.
+ *	The expression is stored in the column's pDflt field, and the
+ *	colFlags are set to indicate VIRTUAL or STORED.
+ *
+ * PUBLIC: void __add_generated_column __P((parser_t *, expr_t *, int));
+ */
+void
+__add_generated_column(parser_t* parser, expr_t* expr, int is_stored)
+{
+	table_t *table;
+	int i;
+	column_t *col;
+
+	if ((table = parser->pNewTable) == 0) {
+		__expr_delete(expr);
+		return;
+	}
+	i = table->nCol - 1;
+	if (i < 0) {
+		__expr_delete(expr);
+		return;
+	}
+
+	col = &table->columns[i];
+
+	/* Check for conflicts with other column constraints */
+	if (col->colFlags & COLFLAG_PRIMKEY) {
+		__error_msg(parser, "generated columns cannot be PRIMARY KEY");
+		__expr_delete(expr);
+		return;
+	}
+	if (col->zDflt != 0 || col->pDflt != 0) {
+		__error_msg(parser, "generated columns cannot have a DEFAULT value");
+		__expr_delete(expr);
+		return;
+	}
+	if (col->colFlags & COLFLAG_GENERATED) {
+		__error_msg(parser, "duplicate generated column specification");
+		__expr_delete(expr);
+		return;
+	}
+
+	/* Store the expression and set the appropriate flag */
+	col->pDflt = expr;
+	if (is_stored) {
+		col->colFlags |= COLFLAG_STORED;
+	} else {
+		col->colFlags |= COLFLAG_VIRTUAL;
+	}
 }
 
 /*
@@ -2162,9 +2228,9 @@ __create_index(parser_t* parser, token_t* token, src_list_t* sltable, id_list_t*
 	 * Allocate the index structure.
 	 */
 	if (__dbsql_calloc(dbp, 1, sizeof(index_t) + (strlen(name) + 1) +
-			(sizeof(int) * list->nId), &index) == ENOMEM)
+			(sizeof(i16) * list->nId), &index) == ENOMEM)
 		goto exit_create_index;
-	index->aiColumn = (int*)&index[1];
+	index->aiColumn = (i16*)&index[1];  /* Correctly cast to i16* */
 	index->zName = (char*)&index->aiColumn[list->nId];
 	strcpy(index->zName, name);
 	index->table = table;
@@ -2745,6 +2811,67 @@ __dbsql_txn_abort(parser_t* parser)
 	}
 	dbp->flags &= ~DBSQL_InTrans;
 	dbp->onError = OE_Default;
+}
+
+/*
+ * __dbsql_savepoint --
+ *	Generate code for SAVEPOINT, ROLLBACK TO, and RELEASE commands.
+ *
+ * PUBLIC: void __dbsql_savepoint __P((parser_t *, int, token_t *));
+ *
+ * operation: 0=CREATE, 1=ROLLBACK TO, 2=RELEASE
+ * name: savepoint name token
+ */
+void
+__dbsql_savepoint(parser_t* parser, int operation, token_t* name)
+{
+	DBSQL *dbp;
+	vdbe_t *v;
+	char *savepointName;
+
+	if (parser == 0)
+		return;
+	dbp = parser->db;
+	if (dbp == 0 || dbp->aDb[0].pBt == 0)
+		return;
+	if (parser->nErr || parser->rc == ENOMEM)
+		return;
+
+	v = __parser_get_vdbe(parser);
+	if (v == 0)
+		return;
+
+	if (__dbsql_strndup(dbp, name->z, name->n, &savepointName) == ENOMEM) {
+		parser->rc = ENOMEM;
+		return;
+	}
+
+	switch (operation) {
+	case 0:
+		if (__auth_check(parser, DBSQL_SAVEPOINT, "SAVEPOINT",
+				 savepointName, 0)) {
+			__dbsql_free(dbp, savepointName);
+			return;
+		}
+		break;
+	case 1:
+		if (__auth_check(parser, DBSQL_SAVEPOINT, "ROLLBACK TO",
+				 savepointName, 0)) {
+			__dbsql_free(dbp, savepointName);
+			return;
+		}
+		break;
+	case 2:
+		if (__auth_check(parser, DBSQL_SAVEPOINT, "RELEASE",
+				 savepointName, 0)) {
+			__dbsql_free(dbp, savepointName);
+			return;
+		}
+		break;
+	}
+
+	__vdbe_add_op4(v, OP_Savepoint, operation, 0, 0, savepointName,
+		       P4_DYNAMIC);
 }
 
 /*

@@ -368,6 +368,62 @@ if (strcasecmp(left_name, "database_list") == 0) {
 		__vdbe_add_op(v, OP_Callback, 3, 0);
 	}
 } else
+/*
+ *   PRAGMA integrity_check
+ */
+if (strcasecmp(left_name, "integrity_check") == 0) {
+	__vdbe_add_op(v, OP_ColumnName, 0, 0);
+	__vdbe_change_p4(v, -1, "integrity_check", P4_STATIC);
+	__dbsql_integrity_check(dbp, v);
+} else
+/*
+ *   PRAGMA optimize
+ */
+if (strcasecmp(left_name, "optimize") == 0) {
+	__dbsql_optimize(dbp);
+} else
+/*
+ *   PRAGMA analysis_limit
+ */
+if (strcasecmp(left_name, "analysis_limit") == 0) {
+	static int analysis_limit = 0;
+	if (right_name && right_name[0]) {
+		analysis_limit = atoi(right_name);
+	} else {
+		__vdbe_add_op(v, OP_ColumnName, 0, 0);
+		__vdbe_change_p4(v, -1, "analysis_limit", P4_STATIC);
+		__vdbe_add_op(v, OP_Integer, analysis_limit, 0);
+		__vdbe_add_op(v, OP_Callback, 1, 0);
+	}
+} else
+/*
+ *   PRAGMA trusted_schema
+ */
+if (strcasecmp(left_name, "trusted_schema") == 0) {
+	static int trusted_schema = 1;
+	if (right_name && right_name[0]) {
+		trusted_schema = __get_boolean(right_name);
+	} else {
+		__vdbe_add_op(v, OP_ColumnName, 0, 0);
+		__vdbe_change_p4(v, -1, "trusted_schema", P4_STATIC);
+		__vdbe_add_op(v, OP_Integer, trusted_schema, 0);
+		__vdbe_add_op(v, OP_Callback, 1, 0);
+	}
+} else
+/*
+ *   PRAGMA writable_schema
+ */
+if (strcasecmp(left_name, "writable_schema") == 0) {
+	static int writable_schema = 0;
+	if (right_name && right_name[0]) {
+		writable_schema = __get_boolean(right_name);
+	} else {
+		__vdbe_add_op(v, OP_ColumnName, 0, 0);
+		__vdbe_change_p4(v, -1, "writable_schema", P4_STATIC);
+		__vdbe_add_op(v, OP_Integer, writable_schema, 0);
+		__vdbe_add_op(v, OP_Callback, 1, 0);
+	}
+} else
 #ifndef NDEBUG
  /*
   * PRAGMA parser_trace

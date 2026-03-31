@@ -117,7 +117,7 @@ C_FILES=\
 	$(srcdir)/clib/xvprintf.c $(srcdir)/dbsql/dbsql.c \
 	$(srcdir)/sm.c $(srcdir)/common/hash.c $(srcdir)/lemon/lemon.c \
 	$(srcdir)/lemon/lempar.c $(srcdir)/os/os.c $(srcdir)/clib/random.c \
-	$(srcdir)/sql_fns.c $(srcdir)/sql_tokenize.c \
+	$(srcdir)/sql_fns.c $(srcdir)/sql_json.c $(srcdir)/sql_tokenize.c \
 	$(srcdir)/cg_vacuum.c $(srcdir)/vdbe.c $(srcdir)/vdbe_method.c \
 	$(srcdir)/common/dbsql_err.c (srcdir)/clib/snprintf.c \
     $(srcdir)/os/os_jtime.c $(srcdir)/os/os_sleep.c $(srcdir)/clib/memcmp.c \
@@ -132,13 +132,14 @@ C_FILES=\
 
 C_OBJS= cg_insert@o@ stubs@o@ sql_tokenize@o@ cg_auth@o@ \
 	cg_copy@o@ api_table@o@ cg_date@o@ api@o@ xvprintf@o@ \
-	cg_pragma@o@ cg_where@o@ cg_build@o@ \
-	sql_fns@o@ random@o@ cg_delete@o@ hash@o@ \
+	cg_pragma@o@ cg_where@o@ cg_build@o@ cg_update@o@ \
+	sql_fns@o@ sql_json@o@ random@o@ cg_delete@o@ hash@o@ \
 	cg_expr@o@ opcodes@o@ sql_parser@o@ cg_vacuum@o@ \
-	vdbe@o@ vdbe_method@o@ sm@o@ snprintf@o@ dbsql_err@o@ \
+	cg_trigger@o@ vdbe@o@ vdbe_method@o@ sm@o@ snprintf@o@ dbsql_err@o@ \
 	dbsql_fop@o@ cg_select@o@ os_sleep@o@ os_jtime@o@ memcmp@o@ \
 	dbsql_atof@o@ safety@o@ dbsql_atoi@o@ strcasecmp@o@ \
-	strdup@o@ dbsql_alloc@o@ str@o@ util@o@
+	strdup@o@ dbsql_alloc@o@ str@o@ util@o@ integrity@o@ \
+	cg_upsert@o@ cg_alter@o@ vtab@o@ vtab_csv@o@
 
 LEMON_OBJS=\
 	lemon@o@
@@ -434,6 +435,8 @@ snprintf@o@: $(srcdir)/clib/snprintf.c
 	 $(CC) $(CFLAGS) $?
 sql_fns@o@: $(srcdir)/sql_fns.c
 	 $(CC) $(CFLAGS) $?
+sql_json@o@: $(srcdir)/sql_json.c
+	 $(CC) $(CFLAGS) $?
 sql_parser.c: $(srcdir)/sql_parser.y lemon
 	@$(cp) $(srcdir)/sql_parser.y .
 	@$(LEMON) $(LEMON_FLAGS) sql_parser.y
@@ -455,6 +458,8 @@ sql_tokenize@o@: $(srcdir)/sql_tokenize.c
 strcasecmp@o@: $(srcdir)/clib/strcasecmp.c
 	 $(CC) $(CFLAGS) $?
 strdup@o@: $(srcdir)/clib/strdup.c
+	 $(CC) $(CFLAGS) $?
+stubs@o@: $(srcdir)/stubs.c
 	 $(CC) $(CFLAGS) $?
 vdbe@o@: $(srcdir)/vdbe.c
 	 $(CC) $(CFLAGS) $?

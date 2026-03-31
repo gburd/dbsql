@@ -64,7 +64,8 @@ __dbsql_omode(dbp, mode)
         const char *mode;
 {
         u_int t;
-        int ret;
+
+        (void)dbp; /* Database connection unused in mode parsing */
 
 
 #define __SETMODE(offset, valid_ch, mask) {                             \

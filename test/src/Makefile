@@ -79,7 +79,7 @@ else
 endif
 
 # Test sources
-TEST_SRCS := test_api.c test_vdbe.c test_memory.c test_fts.c test_comprehensive.c
+TEST_SRCS := test_api.c test_vdbe.c test_memory.c test_fts.c test_comprehensive.c test_returning.c
 TEST_FRAMEWORK_SRCS := test_framework.c
 TEST_OBJS := $(TEST_SRCS:.c=.o)
 TEST_FRAMEWORK_OBJS := $(TEST_FRAMEWORK_SRCS:.c=.o)
@@ -97,19 +97,22 @@ test_framework.o: test_framework.c test_framework.h
 
 # Individual test binaries
 test_api: test_api.o test_framework.o
-	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-__EDIT_DBSQL_VERSION_MAJOR__.__EDIT_DBSQL_VERSION_MINOR__.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-0.4.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm $(LDFLAGS)
 
 test_vdbe: test_vdbe.o test_framework.o
-	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-__EDIT_DBSQL_VERSION_MAJOR__.__EDIT_DBSQL_VERSION_MINOR__.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-0.4.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm $(LDFLAGS)
 
 test_memory: test_memory.o test_framework.o
-	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-__EDIT_DBSQL_VERSION_MAJOR__.__EDIT_DBSQL_VERSION_MINOR__.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm -lpthread $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-0.4.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm -lpthread $(LDFLAGS)
 
 test_fts: test_fts.o test_framework.o
-	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-__EDIT_DBSQL_VERSION_MAJOR__.__EDIT_DBSQL_VERSION_MINOR__.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-0.4.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm $(LDFLAGS)
 
 test_comprehensive: test_comprehensive.o test_framework.o
-	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-__EDIT_DBSQL_VERSION_MAJOR__.__EDIT_DBSQL_VERSION_MINOR__.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm -lpthread $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-0.4.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm -lpthread $(LDFLAGS)
+
+test_returning: test_returning.o test_framework.o
+	$(CC) $(CFLAGS) -o $@ $^ -L$(BUILD_DIR)/.libs ../../build_unix.old/.libs/libdbsql-0.4.a -L/nix/store/mlhib3c2ra8bj36vhxmwqhyxph8a8sgf-db-4.8.30/lib -ldb-4.8 -lm $(LDFLAGS)
 
 # Pattern rules
 %.o: %.c test_framework.h

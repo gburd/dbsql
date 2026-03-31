@@ -219,39 +219,88 @@
     "p2": "Secondary parameter (register, cursor, jump target)",
     "p3": "Tertiary parameter (register)",
     "p4": "Union parameter (string, int, pointer, keyinfo)",
-    "p4type": "P4 union discriminator (P4_INT32, P4_STRING, P4_KEYINFO, etc.)",
+    "p4type": "P4 union discriminator (P4_INT32, P4_STRING, P4_KEYINFO, P4_POINTER, P4_REAL, P4_FUNCDEF, P4_INTARRAY, P4_SUBPROGRAM)",
     "p5": "Flags (u16 bitfield for opcode-specific options)",
-    "comment": "Debug comment string (only if SQLITE_ENABLE_EXPLAIN_COMMENTS)"
+    "comment": "Debug comment string (only if SQLITE_ENABLE_EXPLAIN_COMMENTS)",
+    "p4_types": {
+      "P4_NOTUSED": "p4 not used",
+      "P4_INT32": "p4.i is 32-bit signed integer",
+      "P4_INT64": "p4.i is 64-bit signed integer",
+      "P4_REAL": "p4.pReal points to 8-byte real",
+      "P4_STRING": "p4.z is null-terminated string",
+      "P4_KEYINFO": "p4.pKeyInfo is KeyInfo structure",
+      "P4_COLLSEQ": "p4.pColl is CollSeq structure",
+      "P4_FUNCDEF": "p4.pFunc is FuncDef structure",
+      "P4_INTARRAY": "p4.ai is array of integers",
+      "P4_SUBPROGRAM": "p4.pProgram is SubProgram",
+      "P4_POINTER": "p4.p is generic pointer"
+    },
+    "p5_common_flags": {
+      "OPFLAG_NCHANGE": "Increment db->nChange counter",
+      "OPFLAG_LASTROWID": "Set db->lastRowid",
+      "OPFLAG_ISUPDATE": "Treat as UPDATE not INSERT",
+      "OPFLAG_APPEND": "Cursor hint: append operation",
+      "OPFLAG_USESEEKRESULT": "Use seekResult for efficiency",
+      "OPFLAG_LENGTHARG": "Make arg length available",
+      "OPFLAG_TYPEOFARG": "Request type of argument",
+      "OPFLAG_BULKCSR": "Cursor is for bulk operations",
+      "OPFLAG_SEEKEQ": "Seek exactly this key",
+      "OPFLAG_FORDELETE": "Cursor opened for delete"
+    }
   },
   "mem_fields_3_52_0": {
     "description": "Memory cell structure fields (SQLite 3.52.0)",
     "flags": "Type flags (MEM_Int, MEM_Real, MEM_Str, MEM_Blob, etc.)",
     "enc": "String encoding (SQLITE_UTF8, SQLITE_UTF16LE, SQLITE_UTF16BE)",
-    "eSubtype": "Subtype for JSON/custom types (0=none)",
+    "e_subtype": "Subtype for JSON/custom types (0=none) [DBSQL: eSubtype->e_subtype]",
     "n": "String length (bytes) or blob size",
     "z": "String/blob pointer (may be zMalloc or external)",
-    "zMalloc": "Owned malloc buffer (if MEM_Dyn flag set)",
-    "szMalloc": "Size of zMalloc buffer",
+    "z_malloc": "Owned malloc buffer (if MEM_Dyn flag set) [DBSQL: zMalloc->z_malloc]",
+    "sz_malloc": "Size of zMalloc buffer [DBSQL: szMalloc->sz_malloc]",
     "u": "Union of i64/double/nZero/pDef",
     "u.i": "Integer value (if MEM_Int)",
     "u.r": "Real (double) value (if MEM_Real)",
-    "u.nZero": "Zero-blob size (if MEM_Zero)",
-    "u.pDef": "Function definition pointer (if MEM_Agg)",
-    "uTemp": "Temporary value for operations",
-    "xDel": "Destructor callback for external memory"
+    "u.n_zero": "Zero-blob size (if MEM_Zero) [DBSQL: nZero->n_zero]",
+    "u.p_def": "Function definition pointer (if MEM_Agg) [DBSQL: pDef->p_def]",
+    "u_temp": "Temporary value for operations [DBSQL: uTemp->u_temp]",
+    "x_del": "Destructor callback for external memory [DBSQL: xDel->x_del]",
+    "mem_flags": {
+      "MEM_Null": "NULL value",
+      "MEM_Int": "Value is i64 integer",
+      "MEM_Real": "Value is double",
+      "MEM_Str": "Value is string",
+      "MEM_Blob": "Value is binary blob",
+      "MEM_AffMask": "Affinity mask",
+      "MEM_RowSet": "Value is RowSet object",
+      "MEM_Frame": "Value is VdbeFrame object",
+      "MEM_Undefined": "Value undefined (internal use)",
+      "MEM_Cleared": "Memory cleared (internal use)",
+      "MEM_TypeMask": "Type mask (Null|Int|Real|Str|Blob)",
+      "MEM_Term": "String is null-terminated",
+      "MEM_Dyn": "String/blob needs deallocation",
+      "MEM_Static": "String/blob in static memory",
+      "MEM_Ephem": "String/blob is ephemeral",
+      "MEM_Agg": "Aggregate accumulator",
+      "MEM_Zero": "Allocate zero-blob"
+    }
   },
   "parser_fields_3_52_0": {
     "description": "Parser state structure fields (SQLite 3.52.0)",
-    "nRangeReg": "Size of temporary register block",
-    "iRangeReg": "First register in temp register block",
-    "nLabelAlloc": "Number of slots allocated in aLabel array",
-    "aLabel": "Space to hold labels (array of int)",
-    "nLabel": "Negative of number of labels used",
-    "nQueryLoop": "Estimated iterations of query (10*log2(N))",
-    "isMultiWrite": "True if may modify/insert multiple rows",
-    "eTriggerOp": "TK_UPDATE, TK_INSERT, or TK_DELETE",
-    "eOrconf": "Default ON CONFLICT policy for triggers",
-    "selId": "Unique identifier for SELECT statements"
+    "n_range_reg": "Size of temporary register block [DBSQL: nRangeReg->n_range_reg]",
+    "i_range_reg": "First register in temp register block [DBSQL: iRangeReg->i_range_reg]",
+    "n_label_alloc": "Number of slots allocated in aLabel array [DBSQL: nLabelAlloc->n_label_alloc]",
+    "a_label": "Space to hold labels (array of int) [DBSQL: aLabel->a_label]",
+    "n_label": "Negative of number of labels used [DBSQL: nLabel->n_label]",
+    "n_query_loop": "Estimated iterations of query (10*log2(N)) [DBSQL: nQueryLoop->n_query_loop]",
+    "is_multi_write": "True if may modify/insert multiple rows [DBSQL: isMultiWrite->is_multi_write]",
+    "e_trigger_op": "TK_UPDATE, TK_INSERT, or TK_DELETE [DBSQL: eTriggerOp->e_trigger_op]",
+    "e_orconf": "Default ON CONFLICT policy for triggers [DBSQL: eOrconf->e_orconf]",
+    "sel_id": "Unique identifier for SELECT statements [DBSQL: selId->sel_id]",
+    "n_var": "Number of SQL variables [DBSQL: nVar->n_var]",
+    "n_mem": "Number of memory cells [DBSQL: nMem->n_mem]",
+    "n_tab": "Number of cursors [DBSQL: nTab->n_tab]",
+    "explain": "True if EXPLAIN statement [DBSQL: explain->explain]",
+    "nested": "Depth of nested parse [DBSQL: nested->nested]"
   },
   "expr_fields_3_52_0": {
     "description": "Expression tree node structure fields (SQLite 3.52.0)",
@@ -277,6 +326,29 @@
     "iColumn": "TK_COLUMN: column index (-1=rowid); TK_VARIABLE: variable number",
     "iAgg": "Entry in pAggInfo->aCol[] or ->aFunc[]"
   },
+  "sqlite_3_52_0_opcodes": {
+    "description": "SQLite 3.52.0 opcodes (documented for reference, no name changes needed)",
+    "opcode_categories": {
+      "memory": ["OP_Move", "OP_Copy", "OP_SCopy", "OP_IntCopy"],
+      "arithmetic": ["OP_Add", "OP_Subtract", "OP_Multiply", "OP_Divide", "OP_Remainder"],
+      "bitwise": ["OP_BitAnd", "OP_BitOr", "OP_ShiftLeft", "OP_ShiftRight", "OP_BitNot"],
+      "comparison": ["OP_Eq", "OP_Ne", "OP_Lt", "OP_Le", "OP_Gt", "OP_Ge"],
+      "control_flow": ["OP_If", "OP_IfNot", "OP_Goto", "OP_Gosub", "OP_Return"],
+      "cursor_ops": ["OP_OpenRead", "OP_OpenWrite", "OP_Close", "OP_Rewind", "OP_Next"],
+      "seek_ops": ["OP_SeekGE", "OP_SeekGT", "OP_SeekLE", "OP_SeekLT", "OP_SeekRowid"],
+      "data_ops": ["OP_Column", "OP_MakeRecord", "OP_Insert", "OP_Delete", "OP_Rowid"],
+      "result_ops": ["OP_ResultRow", "OP_Halt", "OP_Integer", "OP_String", "OP_Null"],
+      "aggregate_ops": ["OP_AggStep", "OP_AggFinal", "OP_AggValue", "OP_AggInverse"],
+      "sorter_ops": ["OP_SorterOpen", "OP_SorterInsert", "OP_SorterSort", "OP_SorterNext"]
+    },
+    "register_addressing": {
+      "note": "Registers are 0-indexed in SQLite 3.52.0 and DBSQL",
+      "p1_usage": "Often register number, cursor id, or jump target",
+      "p2_usage": "Often register number, count, or flags",
+      "p3_usage": "Often destination register",
+      "valid_register_range": "0-255 typical, up to 32767 theoretical"
+    }
+  },
   "notes": [
     "Hungarian notation requires semantic analysis and cannot be fully automated",
     "The 'a' vs 'p' distinction: 'a' is for arrays accessed by index, 'p' for single items or linked lists",
@@ -285,6 +357,10 @@
     "Line wrapping at 79 chars may require manual adjustment for readability",
     "PUBLIC/STATIC/EXTERN markers placement requires understanding of function scope and API",
     "SQLite 3.52.0 structure field mappings added for VdbeOp, Mem, Parse, and Expr",
-    "VDBE validation rules check P5 flags, register ranges, and MEM flag combinations"
+    "VDBE validation rules check P5 flags, register ranges, and MEM flag combinations",
+    "Register addressing is 0-indexed: register 0 is valid and often used",
+    "P5 flags are u16 (0-65535), used for opcode-specific options",
+    "MEM flag validation: Int/Real/Str/Blob are mutually exclusive type flags",
+    "P4 type must match p4type discriminator for proper union access"
   ]
 }

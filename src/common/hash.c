@@ -168,6 +168,7 @@ __int_hash(key, len)
 	const void *key;
 	int len;
 {
+	(void)key; /* Hash based on length only for integer keys */
 	return len ^ (len << 8) ^ (len >> 8);
 }
 
@@ -183,6 +184,8 @@ __h_int_cmp(k1, n1, k2, n2)
 	const void *k2;
 	int n2;
 {
+	(void)k1; /* Integer comparison uses lengths only */
+	(void)k2;
 	return n2 - n1;
 }
 

@@ -4,6 +4,8 @@
 
 #include "test_framework.h"
 #include <assert.h>
+#include <glob.h>
+#include <unistd.h>
 
 /* Global test context */
 test_context_t g_test_ctx = {0};
@@ -45,6 +47,36 @@ test_run_all(void)
 		fprintf(g_test_ctx.tap_output, "# Running test: %s\n", entry->name);
 		entry->func();
 		entry = entry->next;
+	}
+}
+
+/**
+ * test_cleanup_db_files - Remove all database files
+ * This ensures tests start with a clean slate and don't fail due to
+ * leftover files from previous runs.
+ */
+void
+test_cleanup_db_files(const char *pattern)
+{
+	glob_t globbuf;
+	size_t i;
+	const char *patterns[] = {
+		"*.db",
+		"*.db_*",
+		"__db.*",
+		NULL
+	};
+
+	(void)pattern; /* Unused for now, clean all db files */
+
+	for (i = 0; patterns[i] != NULL; i++) {
+		if (glob(patterns[i], GLOB_NOSORT, NULL, &globbuf) == 0) {
+			size_t j;
+			for (j = 0; j < globbuf.gl_pathc; j++) {
+				unlink(globbuf.gl_pathv[j]);
+			}
+			globfree(&globbuf);
+		}
 	}
 }
 

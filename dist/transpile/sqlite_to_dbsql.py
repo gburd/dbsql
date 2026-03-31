@@ -141,51 +141,105 @@ STRUCTURE_FIELD_MAPPINGS = {
 }
 
 # ----------------------------------------------------------------
-# SQLite 3.52.0 Opcodes (70+ new opcodes)
+# SQLite 3.52.0 structure field mappings - New additions
+# VdbeOp, Mem, Parser structures
+# ----------------------------------------------------------------
+VDBE_OP_FIELD_MAPPINGS = {
+    # VdbeOp structure - SQLite 3.52.0 fields
+    # These are typically already lowercase or use simple names
+    "p1": "p1",         # register/cursor/label (no change)
+    "p2": "p2",         # register/cursor/jump (no change)
+    "p3": "p3",         # register (no change)
+    "p4": "p4",         # union parameter (no change)
+    "p5": "p5",         # u16 flags (no change)
+    "p4type": "p4type", # P4 discriminator (no change)
+}
+
+MEM_FIELD_MAPPINGS = {
+    # Mem structure - SQLite 3.52.0 fields
+    # CamelCase fields get converted by convert_field_names()
+    "szMalloc": "sz_malloc",   # size of zMalloc buffer
+    "uTemp": "u_temp",         # temporary value
+    "eSubtype": "e_subtype",   # JSON/custom subtype
+}
+
+PARSER_FIELD_MAPPINGS = {
+    # Parse structure - SQLite 3.52.0 additions
+    "nRangeReg": "n_range_reg",       # temp register block size
+    "iRangeReg": "i_range_reg",       # first temp register
+    "nLabelAlloc": "n_label_alloc",   # allocated label slots
+    "aLabel": "a_label",               # label array
+}
+
+# ----------------------------------------------------------------
+# SQLite 3.52.0 Opcodes (70+ opcodes for reference)
+# These don't require transformation (OP_* prefix stays the same)
+# but are documented here for completeness.
 # ----------------------------------------------------------------
 NEW_OPCODES_3_52_0 = [
     # Load/Store
-    "OP_Move", "OP_Copy", "OP_SCopy",
+    "OP_Move", "OP_Copy", "OP_SCopy", "OP_IntCopy",
 
     # Arithmetic
     "OP_Add", "OP_Subtract", "OP_Multiply", "OP_Divide",
-    "OP_Remainder", "OP_Concat",
+    "OP_Remainder", "OP_Concat", "OP_BitAnd", "OP_BitOr",
+    "OP_ShiftLeft", "OP_ShiftRight", "OP_BitNot",
 
     # Comparison
     "OP_Eq", "OP_Ne", "OP_Lt", "OP_Le", "OP_Gt", "OP_Ge",
+    "OP_ElseEq", "OP_Compare", "OP_IsNull", "OP_NotNull",
 
     # Control Flow
     "OP_If", "OP_IfNot", "OP_IfPos", "OP_IfNeg", "OP_IfZero",
-    "OP_Gosub", "OP_Return", "OP_Yield",
+    "OP_IfNotZero", "OP_Gosub", "OP_Return", "OP_Yield",
+    "OP_Goto", "OP_Once", "OP_InitCoroutine", "OP_EndCoroutine",
 
     # Cursor Operations
-    "OP_OpenRead", "OP_OpenWrite", "OP_Close",
+    "OP_OpenRead", "OP_OpenWrite", "OP_OpenAutoindex",
+    "OP_OpenEphemeral", "OP_Close", "OP_ColumnsUsed",
     "OP_SeekGE", "OP_SeekGT", "OP_SeekLE", "OP_SeekLT",
-    "OP_SeekRowid", "OP_NotExists", "OP_Found", "OP_NotFound",
+    "OP_SeekRowid", "OP_SeekScan", "OP_NotExists", "OP_NoConflict",
+    "OP_Found", "OP_NotFound", "OP_SeekHit",
     "OP_Rewind", "OP_Next", "OP_Prev", "OP_Last",
+    "OP_SorterNext", "OP_SorterSort", "OP_SorterData",
 
     # Data Operations
-    "OP_Column", "OP_Rowid", "OP_NewRowid",
-    "OP_MakeRecord", "OP_InsertInt", "OP_Delete",
+    "OP_Column", "OP_Affinity", "OP_MakeRecord",
+    "OP_Rowid", "OP_NewRowid", "OP_Insert", "OP_InsertInt",
+    "OP_Delete", "OP_ResetCount", "OP_RealAffinity",
     "OP_IdxInsert", "OP_IdxDelete", "OP_IdxRowid",
+    "OP_IdxLE", "OP_IdxGE", "OP_IdxLT", "OP_IdxGT",
 
     # Results
-    "OP_ResultRow", "OP_Halt", "OP_Integer", "OP_String",
-    "OP_Null", "OP_Blob", "OP_Variable",
+    "OP_ResultRow", "OP_Halt", "OP_Integer", "OP_Int64",
+    "OP_String", "OP_String8", "OP_Null", "OP_Blob",
+    "OP_Variable", "OP_Real",
 
     # Aggregates
     "OP_AggStep", "OP_AggFinal", "OP_AggValue", "OP_AggInverse",
 
     # Sorting
     "OP_SorterOpen", "OP_SorterInsert", "OP_SorterSort",
-    "OP_SorterData", "OP_SorterNext",
+    "OP_SorterData", "OP_SorterNext", "OP_SorterCompare",
 
     # Functions
-    "OP_Function", "OP_PureFunc",
+    "OP_Function", "OP_PureFunc", "OP_CollSeq",
+
+    # Transactions
+    "OP_Transaction", "OP_AutoCommit", "OP_Savepoint",
+
+    # Program Control
+    "OP_Noop", "OP_Explain", "OP_Init", "OP_Program",
 
     # Utilities
-    "OP_Cast", "OP_Affinity", "OP_MustBeInt",
-    "OP_BitAnd", "OP_BitOr", "OP_ShiftLeft", "OP_ShiftRight",
+    "OP_Cast", "OP_MustBeInt", "OP_Checkpoint",
+    "OP_JournalMode", "OP_VUpdate", "OP_VFilter",
+    "OP_VColumn", "OP_VNext", "OP_VRename",
+    "OP_Expire", "OP_TableLock", "OP_VBegin",
+    "OP_VCreate", "OP_VDestroy", "OP_VOpen",
+    "OP_Param", "OP_FkCounter", "OP_FkIfZero",
+    "OP_MemMax", "OP_OffsetLimit", "OP_AggStep0",
+    "OP_AggInverse0", "OP_FilterAdd",
 ]
 
 
@@ -338,10 +392,20 @@ def convert_structure_fields(text):
     Convert SQLite 3.52.0 structure field references to DBSQL
     conventions.
 
-    This is now a wrapper that calls convert_field_names() for the
-    actual conversion work.
+    Handles VdbeOp, Mem, and Parser structure fields from SQLite 3.52.0.
+    Most conversions are automatic via convert_field_names(), but some
+    fields have explicit mappings.
     """
-    return convert_field_names(text)
+    text = convert_field_names(text)
+
+    # Apply explicit field mappings for structures
+    for mapping_dict in [MEM_FIELD_MAPPINGS, PARSER_FIELD_MAPPINGS]:
+        for original, replacement in mapping_dict.items():
+            # Match field access patterns: ->field or .field
+            pattern = r'(->|\.)\b' + re.escape(original) + r'\b'
+            text = re.sub(pattern, r'\1' + replacement, text)
+
+    return text
 
 
 def convert_opcode_names(text):

@@ -1,0 +1,66 @@
+--- src/cg_select.c.orig
++++ src/cg_select.c
+@@ -406,40 +406,52 @@
+
+ /*
+  * __push_onto_sorter --
+- *	Insert code into "v" that will push the record on the top of the
+- *	stack into the sorter.
++ *	Generate VDBE code to insert a record into a sorter cursor.
++ *	This replaces the legacy OP_SortPut/OP_SortMakeKey opcodes with
++ *	the new OP_SorterInsert opcode.
++ *
++ *	The calling code must have already created a MakeRecord blob in
++ *	a register. This function generates code to insert that blob into
++ *	the sorter cursor.
+  *
+  * STATIC: static void __push_onto_sorter __P((parser_t *, vdbe_t *,
+- * STATIC:                                expr_list_t *));
++ * STATIC:                                int, int));
++ *
++ * parser			Parser context
++ * v				VDBE to generate code into
++ * sorter_cursor		Cursor number of open sorter
++ * record_reg		Register containing MakeRecord blob
+  */
+ static void
+-__push_onto_sorter(parser_t* parser, vdbe_t* v, expr_list_t* orderby_clause)
++__push_onto_sorter(parser_t* parser, vdbe_t* v, int sorter_cursor, int record_reg)
+ {
+-	int i, order, type, c;
+-	char *sort_order;
+-
+-	if (__dbsql_calloc(parser->db, 1, orderby_clause->nExpr + 1,
+-			&sort_order) == ENOMEM)
+-		return;
+-	for (i = 0; i < orderby_clause->nExpr; i++) {
+-		order = orderby_clause->a[i].sortOrder;
+-		if ((order & DBSQL_SO_TYPEMASK) == DBSQL_SO_TEXT) {
+-			type = DBSQL_SO_TEXT;
+-		} else if ((order & DBSQL_SO_TYPEMASK) == DBSQL_SO_NUM) {
+-			type = DBSQL_SO_NUM;
+-		} else {
+-			type = __expr_type(orderby_clause->a[i].pExpr);
+-		}
+-		if ((order & DBSQL_SO_DIRMASK) == DBSQL_SO_ASC) {
+-			c = (type == DBSQL_SO_TEXT ? 'A' : '+');
+-		} else {
+-			c = (type == DBSQL_SO_TEXT ? 'D' : '-');
+-		}
+-		sort_order[i] = c;
+-		__expr_code(parser, orderby_clause->a[i].pExpr);
+-	}
+-	sort_order[orderby_clause->nExpr] = 0;
+-	__vdbe_add_op(v, OP_SortMakeKey, orderby_clause->nExpr, 0);
+-	__vdbe_change_p4(v, -1, sort_order, strlen(sort_order));
+-	__dbsql_free(parser->db, sort_order);
+-	__vdbe_add_op(v, OP_SortPut, 0, 0);
++	/*
++	 * Insert the record blob into the sorter cursor.
++	 * OP_SorterInsert P1 P2:
++	 *   P1 = sorter cursor number
++	 *   P2 = register containing record blob
++	 */
++	__vdbe_add_op(v, OP_SorterInsert, sorter_cursor, record_reg);
+ }
+

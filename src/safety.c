@@ -47,10 +47,11 @@ __safety_on(DBSQL* dbp)
 	if (dbp->magic == DBSQL_STATUS_OPEN) {
 		dbp->magic = DBSQL_STATUS_BUSY;
 		return 0;
-	} else if (dbp->magic == DBSQL_STATUS_BUSY ||
-		   dbp->magic == DBSQL_STATUS_ERROR ||
-		   dbp->want_to_close) {
+	} else if (dbp->magic == DBSQL_STATUS_BUSY) {
+		/* Already busy - this is an error (possible threading issue) */
 		dbp->magic = DBSQL_STATUS_ERROR;
+		dbp->flags |= DBSQL_Interrupt;
+	} else if (dbp->magic == DBSQL_STATUS_ERROR) {
 		dbp->flags |= DBSQL_Interrupt;
 	}
 	return 1;
@@ -70,10 +71,11 @@ __safety_off(DBSQL* dbp)
 	if (dbp->magic == DBSQL_STATUS_BUSY) {
 		dbp->magic = DBSQL_STATUS_OPEN;
 		return 0;
-	} else if (dbp->magic == DBSQL_STATUS_OPEN ||
-		   dbp->magic == DBSQL_STATUS_ERROR ||
-		   dbp->want_to_close) {
+	} else if (dbp->magic == DBSQL_STATUS_OPEN) {
+		/* Already open - this is an error (possible threading issue) */
 		dbp->magic = DBSQL_STATUS_ERROR;
+		dbp->flags |= DBSQL_Interrupt;
+	} else if (dbp->magic == DBSQL_STATUS_ERROR) {
 		dbp->flags |= DBSQL_Interrupt;
 	}
 	return 1;
@@ -93,10 +95,13 @@ __safety_off(DBSQL* dbp)
 int
 __safety_check(DBSQL* dbp)
 {
-	// TODO: Check VDBE list - need dbp->pVdbe field
-	// if (dbp->pVdbe != 0) {
-	// 	dbp->magic = DBSQL_STATUS_ERROR;
-	// 	return 1;
-	// }
+	/*
+	 * Check if there are any active VDBEs.
+	 * If so, it's not safe to close the database.
+	 */
+	if (dbp->pVdbe != 0) {
+		dbp->magic = DBSQL_STATUS_ERROR;
+		return 1;
+	}
 	return 0;
 }

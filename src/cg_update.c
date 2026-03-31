@@ -32,20 +32,22 @@
  *           on_error   tab_list      changes              where
  *
  * PUBLIC: void __update __P((parser_t *, src_list_t *, expr_list_t *,
- * PUBLIC:               expr_t *, int));
+ * PUBLIC:               expr_t *, int, expr_list_t *));
  *
  * parser			The parser context
  * tab_list			The table in which we should change things
  * changes			Things to be changed
  * where			The WHERE clause.  May be null
  * on_error			How to handle constraint errors
+ * returning		Column list for RETURNING clause (or NULL)
  */
-void __update(parser, tab_list, changes, where, on_error)
+void __update(parser, tab_list, changes, where, on_error, returning)
 	parser_t *parser;
 	src_list_t *tab_list;
 	expr_list_t *changes;
 	expr_t *where;
 	int on_error;
+	expr_list_t *returning;
 {
 	int rc;
 	int i, j;             /* Loop counters */
@@ -84,9 +86,7 @@ void __update(parser, tab_list, changes, where, on_error)
 	int reg_new_rowid = 0;   /* New rowid register */
 	int reg_old = 0;         /* First register for old column values */
 	int reg_new = 0;         /* First register for new column values */
-	int reg_rowset = 0;      /* RowSet for multi-pass updates */
-	int new_idx = 0;         /* Cursor for NEW pseudo-table */
-	int old_idx = 0;         /* Cursor for OLD pseudo-table */
+	/* reg_rowset, new_idx, old_idx removed - unused in current implementation */
 
 	select_t *view;
 
@@ -129,8 +129,8 @@ void __update(parser, tab_list, changes, where, on_error)
 	 * special OLD and NEW tables.
 	 */
 	if (row_triggers_exist) {
-		new_idx = parser->nTab++;
-		old_idx = parser->nTab++;
+		/* TODO: Trigger implementation needs new_idx and old_idx cursors */
+		parser->nTab += 2; /* Reserve cursor slots for trigger pseudo-tables */
 	}
 
 	/*
@@ -307,7 +307,7 @@ void __update(parser, tab_list, changes, where, on_error)
 	 * a temporary table.
 	 */
 	if (is_view_p) {
-		view = __select_dup(table->u.view.pSelect);
+		view = __select_dup(dbp, table->u.view.pSelect);
 		__select(parser, view, SRT_TempTable, cur, 0, 0, 0);
 		__select_delete(view);
 	}
@@ -560,6 +560,69 @@ void __update(parser, tab_list, changes, where, on_error)
 					       reg_idx + idx->nColumn, 0);
 			}
 		}
+
+		/*
+		 * If RETURNING clause is present, generate code to output the updated values.
+		 */
+		if (returning && !is_view_p) {
+			int k;
+			int regOut = parser->nMem + 1;
+			parser->nMem += returning->nExpr;
+
+			/* Generate column names for RETURNING output */
+			for (k = 0; k < returning->nExpr; k++) {
+				const char *col_name;
+				if (returning->a[k].zEName && returning->a[k].zEName[0]) {
+					col_name = returning->a[k].zEName;
+				} else if (returning->a[k].pExpr->op == TK_ID) {
+					col_name = returning->a[k].pExpr->u.zToken.z;
+				} else {
+					col_name = "column";
+				}
+				__vdbe_add_op(v, OP_ColumnName, k, 0);
+				__vdbe_change_p4(v, -1, col_name, P3_STATIC);
+			}
+
+			/* Evaluate each RETURNING expression and output */
+			for (k = 0; k < returning->nExpr; k++) {
+				expr_t *expr = returning->a[k].pExpr;
+
+				if (expr->op == TK_ALL) {
+					/* RETURNING * - output rowid and all columns */
+					__vdbe_add_op3(v, OP_Copy, recno_will_change_p ?
+						       reg_new_rowid : reg_old_rowid,
+						       regOut + k, 0);
+					for (j = 0; j < table->nCol; j++) {
+						__vdbe_add_op3(v, OP_Copy, reg_new + j,
+							       regOut + k + j + 1, 0);
+					}
+					k += table->nCol;
+				} else if (expr->op == TK_ID) {
+					/* Column reference */
+					const char *col_name = expr->u.zToken.z;
+					if (__is_row_id(col_name)) {
+						__vdbe_add_op3(v, OP_Copy, recno_will_change_p ?
+							       reg_new_rowid : reg_old_rowid,
+							       regOut + k, 0);
+					} else {
+						for (j = 0; j < table->nCol; j++) {
+							if (strcasecmp(table->columns[j].zName, col_name) == 0) {
+								__vdbe_add_op3(v, OP_Copy, reg_new + j,
+									       regOut + k, 0);
+								break;
+							}
+						}
+					}
+				} else {
+					/* Expression - evaluate it */
+					__expr_code(parser, expr);
+					__vdbe_add_op(v, OP_Copy, 0, regOut + k);
+				}
+			}
+
+			/* Output the row */
+			__vdbe_add_op(v, OP_Callback, returning->nExpr, 0);
+		}
 	}
 
 	/*
@@ -631,5 +694,7 @@ void __update(parser, tab_list, changes, where, on_error)
 	__src_list_delete(tab_list);
 	__expr_list_delete(changes);
 	__expr_delete(where);
+	if (returning)
+		__expr_list_delete(returning);
 	return;
 }

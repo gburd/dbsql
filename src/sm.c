@@ -278,13 +278,21 @@ __sm_init(sm_t* sm, int* init)
 	F_SET(sm, SM_HAS_INIT);
 	return DBSQL_SUCCESS;
   err:
-	if (sm->meta)
-		db->close(sm->meta, 0);
-	if (sm->n)
+	/* CRITICAL FIX: Proper cleanup order to prevent leaks */
+	if (sm->meta) {
+		sm->meta->close(sm->meta, 0);
+		sm->meta = NULL;
+	}
+	if (sm->n) {
 		sm->n->close(sm->n, 0);
-	db->close(db, 0);
-	if (txn)
+		sm->n = NULL;
+	}
+	if (db) {
+		db->close(db, 0);
+	}
+	if (txn) {
 		txn->abort(txn);
+	}
 	return DBSQL_CANTOPEN;
 }
 
@@ -322,6 +330,8 @@ __sm_create(dbp, name, is_temp, in_memory, smp)
 
 	if (__dbsql_calloc(dbp, 1, sizeof(sm_t), &sm) == ENOMEM)
 		return ENOMEM;
+
+	sm->savepoints = NULL;
 
 	if (in_memory && is_temp) {
 		sm->name = 0;
@@ -386,6 +396,16 @@ __sm_close_db(sm_t* sm)
 	sm_rec_t *smr;
 
 	DBSQL_ASSERT(sm != 0);
+
+	/* Clean up any active savepoints */
+	while (sm->savepoints != NULL) {
+		sm_savepoint_t *sp = sm->savepoints;
+		sm->savepoints = sp->next;
+		if (sp->txn)
+			sp->txn->abort(sp->txn);
+		__dbsql_free(sm->dbp, sp->name);
+		__dbsql_free(sm->dbp, sp);
+	}
 
 	/* Abort any active transaction before closing databases */
 	if (sm->txn) {
@@ -498,6 +518,142 @@ __sm_abort_txn(sm_t* sm)
 }
 
 /*
+ * __sm_savepoint_create --
+ *	Create a new savepoint with the given name. This starts a nested
+ *	Berkeley DB transaction as a child of the current transaction.
+ *
+ * PUBLIC: int __sm_savepoint_create __P((sm_t *, const char *));
+ */
+int
+__sm_savepoint_create(sm_t* sm, const char *name)
+{
+	int rc;
+	sm_savepoint_t *sp;
+	DB_TXN *parent_txn;
+	DB_TXN *child_txn;
+
+	DBSQL_ASSERT(sm != 0);
+	DBSQL_ASSERT(name != 0);
+
+	if (!sm->txn) {
+		return DBSQL_ERROR;
+	}
+
+	if (__dbsql_calloc(sm->dbp, 1, sizeof(sm_savepoint_t), &sp) == ENOMEM)
+		return ENOMEM;
+
+	if (__dbsql_strdup(sm->dbp, name, &sp->name) == ENOMEM) {
+		__dbsql_free(sm->dbp, sp);
+		return ENOMEM;
+	}
+
+	parent_txn = (sm->savepoints != NULL) ? sm->savepoints->txn : sm->txn;
+
+	rc = sm->dbp->dbenv->txn_begin(sm->dbp->dbenv, parent_txn, &child_txn, 0);
+	if (rc != 0) {
+		__dbsql_free(sm->dbp, sp->name);
+		__dbsql_free(sm->dbp, sp);
+		return DBSQL_INTERNAL;
+	}
+
+	sp->txn = child_txn;
+	sp->next = sm->savepoints;
+	sm->savepoints = sp;
+
+	return DBSQL_SUCCESS;
+}
+
+/*
+ * __sm_savepoint_rollback --
+ *	Rollback to a named savepoint. This aborts the savepoint's nested
+ *	transaction and all savepoints created after it, then removes them
+ *	from the stack.
+ *
+ * PUBLIC: int __sm_savepoint_rollback __P((sm_t *, const char *));
+ */
+int
+__sm_savepoint_rollback(sm_t* sm, const char *name)
+{
+	sm_savepoint_t *sp, *next;
+	int found = 0;
+
+	DBSQL_ASSERT(sm != 0);
+	DBSQL_ASSERT(name != 0);
+
+	if (!sm->savepoints) {
+		return DBSQL_ERROR;
+	}
+
+	while (sm->savepoints != NULL) {
+		sp = sm->savepoints;
+		sm->savepoints = sp->next;
+
+		if (strcmp(sp->name, name) == 0) {
+			sp->txn->abort(sp->txn);
+			__dbsql_free(sm->dbp, sp->name);
+			__dbsql_free(sm->dbp, sp);
+			found = 1;
+			break;
+		}
+
+		sp->txn->abort(sp->txn);
+		__dbsql_free(sm->dbp, sp->name);
+		__dbsql_free(sm->dbp, sp);
+	}
+
+	if (!found) {
+		return DBSQL_ERROR;
+	}
+
+	return DBSQL_SUCCESS;
+}
+
+/*
+ * __sm_savepoint_release --
+ *	Release a named savepoint. This commits the savepoint's nested
+ *	transaction and removes it and all savepoints created after it
+ *	from the stack.
+ *
+ * PUBLIC: int __sm_savepoint_release __P((sm_t *, const char *));
+ */
+int
+__sm_savepoint_release(sm_t* sm, const char *name)
+{
+	sm_savepoint_t *sp;
+	int found = 0;
+
+	DBSQL_ASSERT(sm != 0);
+	DBSQL_ASSERT(name != 0);
+
+	if (!sm->savepoints) {
+		return DBSQL_ERROR;
+	}
+
+	while (sm->savepoints != NULL) {
+		sp = sm->savepoints;
+		sm->savepoints = sp->next;
+
+		if (strcmp(sp->name, name) == 0) {
+			sp->txn->commit(sp->txn, 0);
+			__dbsql_free(sm->dbp, sp->name);
+			__dbsql_free(sm->dbp, sp);
+			found = 1;
+			break;
+		}
+
+		sp->txn->commit(sp->txn, 0);
+		__dbsql_free(sm->dbp, sp->name);
+		__dbsql_free(sm->dbp, sp);
+	}
+
+	if (!found) {
+		return DBSQL_ERROR;
+	}
+
+	return DBSQL_SUCCESS;
+}
+
+/*
  * __sm_cursor --
  *	Create a new cursor for the btree index 'idb'.  If 'write' is set
  *	the then cursor is opened DB_WRITECURSOR.  If 'write' is not set
@@ -592,38 +748,49 @@ __sm_close_cursor(sm_cursor_t* smc)
 	int ret;
 	int commit_rc;
 	int has_child_txn;
+
+	/* Defensive check for null cursor */
+	if (smc == NULL)
+		return DBSQL_SUCCESS;
+
 	DBSQL_ASSERT(smc != 0);
 
 	/*
 	 * Determine if this cursor has a child transaction:
 	 * - Child transaction exists if: write cursor && auto-commit mode
 	 * - Otherwise cursor uses parent transaction directly
+	 * CRITICAL: Added null check for smc->txn to prevent crashes
 	 */
 	has_child_txn = F_ISSET(smc, SMC_RW_CURSOR) &&
 	                !(smc->sm->dbp->flags & DBSQL_InTrans) &&
+	                (smc->txn != NULL) &&
 	                (smc->txn != smc->sm->txn);
 
 	/* Close the Berkeley DB cursor */
-	ret = smc->dbc->c_close(smc->dbc);
-	if (ret == 0) {
-		/*
-		 * Only commit/abort transactions we created (child transactions).
-		 * If cursor uses parent transaction directly, don't touch it.
-		 */
-		if (has_child_txn) {
-			commit_rc = smc->txn->commit(smc->txn, 0);
-			if (commit_rc != 0) {
-				rc = DBSQL_INTERNAL;
+	if (smc->dbc) {
+		ret = smc->dbc->c_close(smc->dbc);
+		if (ret == 0) {
+			/*
+			 * Only commit/abort transactions we created (child transactions).
+			 * If cursor uses parent transaction directly, don't touch it.
+			 * CRITICAL: Added null check for smc->txn
+			 */
+			if (has_child_txn && smc->txn) {
+				commit_rc = smc->txn->commit(smc->txn, 0);
+				if (commit_rc != 0) {
+					rc = DBSQL_INTERNAL;
+				}
 			}
+		} else {
+			/* Cursor close failed */
+			if (has_child_txn && smc->txn) {
+				/* Abort child transaction */
+				smc->txn->abort(smc->txn);
+			}
+			rc = DBSQL_INTERNAL;
 		}
-	} else {
-		/* Cursor close failed */
-		if (has_child_txn) {
-			/* Abort child transaction */
-			smc->txn->abort(smc->txn);
-		}
-		rc = DBSQL_INTERNAL;
 	}
+
 	__dbsql_free(smc->sm->dbp, smc);
 	return rc;
 }
@@ -1278,9 +1445,9 @@ __sm_resource(sm_t* sm, u_int32_t* id, int type, int init)
 	char name[1024];
 	db_seq_t val;
 	u_int32_t n;
-	DB_TXN *txn;
+	DB_TXN *txn = NULL;
 	DB_ENV *dbenv;
-	sm_rec_t *smr;
+	sm_rec_t *smr = NULL;
 
 	dbenv = sm->dbp->dbenv;
 
@@ -1288,13 +1455,22 @@ __sm_resource(sm_t* sm, u_int32_t* id, int type, int init)
 		return DBSQL_CANTOPEN;
 
 	/* Create and initialize database object, open the database. */
-	if ((rc = db_create(&smr->db, dbenv, 0)) != 0)
+	if ((rc = db_create(&smr->db, dbenv, 0)) != 0) {
+		/* CRITICAL FIX: Free smr on db_create failure */
+		__dbsql_free(sm->dbp, smr);
 		return DBSQL_CANTOPEN;
+	}
 
 	smr->db->set_bt_compare(smr->db, __sm_bt_compare);
 
 	/* Start a transaction, get an id, open the database, commit. */
-	dbenv->txn_begin(dbenv, sm->txn, &txn, 0);
+	if ((rc = dbenv->txn_begin(dbenv, sm->txn, &txn, 0)) != 0) {
+		/* CRITICAL FIX: Clean up db and smr on txn_begin failure */
+		smr->db->close(smr->db, 0);
+		__dbsql_free(sm->dbp, smr);
+		return DBSQL_CANTOPEN;
+	}
+
 	if (init) {
 		n = __sm_next_from_seq(sm, txn);
 		*id = n;
@@ -1303,23 +1479,41 @@ __sm_resource(sm_t* sm, u_int32_t* id, int type, int init)
 		n = *id;
 		flags = 0;
 	}
+
 	snprintf(name, sizeof(name), "%s_%s.%.10u",
 		 (F_ISSET(sm, SM_INMEM_DB) ? ":memory:" : sm->name),
 		 (type == SMR_TYPE_TABLE ? "tbl" : "idx"), n);
-	__dbsql_strdup(sm->dbp, name, &smr->file);
+
+	/* CRITICAL FIX: Check strdup return value */
+	if (__dbsql_strdup(sm->dbp, name, &smr->file) != 0) {
+		txn->abort(txn);
+		smr->db->close(smr->db, 0);
+		__dbsql_free(sm->dbp, smr);
+		return DBSQL_CANTOPEN;
+	}
+
 	F_SET(smr, type);
+
 	if ((rc = smr->db->open(smr->db, txn,
 				(F_ISSET(sm, SM_INMEM_DB) ? NULL : name),
 				NULL, DB_BTREE, flags, 0)) != 0)
 		goto err;
+
 	txn->commit(txn, 0);
 	__hash_insert(&sm->dbs, (void *)0, n, smr);
 	return DBSQL_SUCCESS;
+
   err:
-	txn->abort(txn);
-	smr->db->close(smr->db, 0);
-	__dbsql_free(sm->dbp, smr->file);
-	__dbsql_free(sm->dbp, smr);
+	/* CRITICAL FIX: Comprehensive error cleanup */
+	if (txn)
+		txn->abort(txn);
+	if (smr) {
+		if (smr->db)
+			smr->db->close(smr->db, 0);
+		if (smr->file)
+			__dbsql_free(sm->dbp, smr->file);
+		__dbsql_free(sm->dbp, smr);
+	}
 	return DBSQL_CANTOPEN;
 }
 

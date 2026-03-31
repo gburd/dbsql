@@ -187,6 +187,7 @@ static keyword_t sql_tokens_table[] = {
   { "SELECT",            TK_SELECT,       },
   { "SET",               TK_SET,          },
   { "STATEMENT",         TK_STATEMENT,    },
+  { "STORED",            TK_STORED,       },
   { "TABLE",             TK_TABLE,        },
   { "TEMP",              TK_TEMP,         },
   { "TEMPORARY",         TK_TEMP,         },
@@ -712,6 +713,7 @@ __run_sql_parser(parser_t *parser, const char *sql, char **err_msgs)
 		case TK_WINDOW: {
 			int n = parser->sLastToken.n;
 			DBSQL_ASSERT(n == 6);
+			(void)n; /* Used in assertion only */
 			token_type = __analyze_window_keyword(
 				(const unsigned char *)&sql[i]);
 			if (token_type == TK_ID)
@@ -721,6 +723,7 @@ __run_sql_parser(parser_t *parser, const char *sql, char **err_msgs)
 		case TK_OVER: {
 			int n = parser->sLastToken.n;
 			DBSQL_ASSERT(n == 4);
+			(void)n; /* Used in assertion only */
 			token_type = __analyze_over_keyword(
 				(const unsigned char *)&sql[i],
 				last_token_parsed);
@@ -731,6 +734,7 @@ __run_sql_parser(parser_t *parser, const char *sql, char **err_msgs)
 		case TK_FILTER: {
 			int n = parser->sLastToken.n;
 			DBSQL_ASSERT(n == 6);
+			(void)n; /* Used in assertion only */
 			token_type = __analyze_filter_keyword(
 				(const unsigned char *)&sql[i],
 				last_token_parsed);

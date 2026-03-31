@@ -123,11 +123,11 @@ struct VdbeCursor {
 	bool_t useRandomRowid;  /* Generate new record numbers semi-randomly */
 	bool_t isOrdered;       /* True if the table is not unordered */
 	bool_t noReuse;         /* OpenEphemeral may not reuse this cursor */
-	bool_t colCache;        /* pCache pointer is initialized and non-NULL */
+	bool_t colCache;        /* cache pointer is initialized and non-NULL */
 	u16 seekHit;            /* See the OP_SeekHit and OP_IfNoHope opcodes */
 	union {
-		sm_t *pBtx;         /* Separate file holding temporary table */
-		u32 *aAltMap;       /* Mapping from table to index column numbers */
+		sm_t *btree;        /* Separate file holding temporary table */
+		u32 *alt_map;       /* Mapping from table to index column numbers */
 	} ub;
 	i64 seqCount;           /* Sequence counter */
 
@@ -148,29 +148,29 @@ struct VdbeCursor {
 	 * zeroed.  The fields that follow are uninitialized, and must be
 	 * individually initialized prior to first use.
 	 */
-	VdbeCursor *pAltCursor; /* Associated index cursor from which to read */
+	VdbeCursor *alt_cursor; /* Associated index cursor from which to read */
 	union {
-		sm_cursor_t *pCursor;    /* CURTYPE_BTREE or _PSEUDO. SM cursor */
+		sm_cursor_t *sm_cursor;  /* CURTYPE_BTREE or _PSEUDO. SM cursor */
 		/* sqlite3_vtab_cursor *pVCur; CURTYPE_VTAB (future) */
-		vdbe_sorter_t *pSorter;  /* CURTYPE_SORTER. Sorter object */
+		vdbe_sorter_t *sorter;   /* CURTYPE_SORTER. Sorter object */
 	} uc;
-	key_info_t *pKeyInfo;   /* Info about index keys needed by index cursors */
+	key_info_t *key_info;   /* Info about index keys needed by index cursors */
 	u32 iHdrOffset;         /* Offset to next unparsed byte of the header */
 	Pgno pgnoRoot;          /* Root page of the open btree cursor */
 	i16 nField;             /* Number of fields in the header */
 	u16 nHdrParsed;         /* Number of header fields parsed so far */
 	i64 movetoTarget;       /* Argument to the deferred __sm_moveto() */
-	u32 *aOffset;           /* Pointer to aType[nField] */
-	const u8 *aRow;         /* Data for the current row, if all on one page */
+	u32 *offsets;           /* Pointer to type_array[nField] */
+	const u8 *row_data;     /* Data for the current row, if all on one page */
 	u32 payloadSize;        /* Total number of bytes in the record */
-	u32 szRow;              /* Bytes available in aRow */
-	vdbe_txt_blb_cache_t *pCache; /* Cache of large TEXT or BLOB values */
+	u32 szRow;              /* Bytes available in row_data */
+	vdbe_txt_blb_cache_t *cache; /* Cache of large TEXT or BLOB values */
 
 	/*
-	 * Space is allocated for aType to hold at least 2*nField+1 entries:
-	 * nField slots for aType[] and nField+1 array slots for aOffset[].
+	 * Space is allocated for type_array to hold at least 2*nField+1 entries:
+	 * nField slots for type_array[] and nField+1 array slots for offsets[].
 	 */
-	u32 aType[FLEXARRAY];   /* Type values for record decode. MUST BE LAST */
+	u32 type_array[FLEXARRAY]; /* Type values for record decode. MUST BE LAST */
 };
 
 /*
@@ -179,7 +179,7 @@ struct VdbeCursor {
  * of 8.
  */
 #define SZ_VDBECURSOR(N) \
-	(ROUND8(offsetof(VdbeCursor,aType)) + ((N)+1)*sizeof(u64))
+	(ROUND8(offsetof(VdbeCursor,type_array)) + ((N)+1)*sizeof(u64))
 
 /* Return true if P is a null-only cursor */
 #define IsNullCursor(P) \

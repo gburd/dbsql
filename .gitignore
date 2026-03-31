@@ -1,13 +1,119 @@
-build_unix/**
+# Build artifacts
+*.o
+*.lo
+*.a
+*.so
+*.so.*
+*.la
+*.gcno
+*.gcda
+*.gcov
+.libs/
+.deps/
+
+# Build directories
+build_unix.old/
+build_unix/
+!build_unix/.gitkeep
+
+# Test artifacts
+test/scr050/
+test/src/coverage_html/
+test/src/test_api
+test/src/test_api_noasan
+test/src/test_*
+!test/src/test_*.c
+!test/src/test_*.h
+*.log
+*.txt
+
+# Database files
+*.db
+*.db_*
+__db.*
+*.db_tbl.*
+
+# Valgrind
+vgcore.*
+*.valgrind
+
+# Temporary files
+*.swp
+*.swo
 *~
-TAGS
-tags
-.direnv/
+.*.swp
+.*.swo
+
+# Agent documentation (historical cruft)
+agent/
+*FINAL*.md
+*FIX*.md
+*SUMMARY*.md
+*STATUS*.md
+*REPORT*.md
+*ANALYSIS*.md
+*COMPLETE*.md
+*PROGRESS*.md
+*PLAN*.md
+
+# Keep important documentation
+!README.md
+!FEATURES.md
+!CHANGELOG.md
+!MIGRATION_GUIDE.md
+!FINAL_INTEGRATION_REPORT.md
+!INTEGRATION_PLAN.md
+!INTEGRATION_STATUS.md
+!MISSION_COMPLETE.md
+!PRAGMA_QUICK_REFERENCE.md
+!PRAGMA_COMMANDS_SUMMARY.md
+!VTAB_IMPLEMENTATION.md
+!EXECUTION_SUMMARY.md
+!COMPREHENSIVE_WORK_STATUS.md
+
+# IDE
+.vscode/
 .idea/
-dist/autom4te.cache/
-dist/config.hin
-dist/configure
-dist/config.log
-src/py/setup.py
-test/scr050/Makefile
-result-bin
+*.iml
+.project
+.cproject
+.settings/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Coverage
+*.gcov
+htmlcov/
+.coverage
+.coverage.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Libtool
+libtool
+
+# Autotools
+autom4te.cache/
+config.status
+config.log
+configure
+Makefile
+Makefile.in
+
+# Keep dist/Makefile.in (it's source)
+!dist/Makefile.in

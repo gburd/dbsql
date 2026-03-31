@@ -188,7 +188,7 @@ typedef struct vdbe_op_list VdbeOpList;
  * header file that defines a number for each opcode used by the VDBE.
  * Use angle brackets to search include paths instead of relative to this file.
  */
-#include <opcodes.h>
+#include "opcodes.h"
 
 #if defined(__cplusplus)
 }

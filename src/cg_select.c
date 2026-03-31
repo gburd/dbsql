@@ -407,45 +407,50 @@ __aggregate_info_reset(parser_t* parser)
  *	stack into the sorter.
  *
  * STATIC: static void __push_onto_sorter __P((parser_t *, vdbe_t *,
- * STATIC:                                expr_list_t *));
+ * STATIC:                                expr_list_t *, int, int, int));
+ *
+ * parser		The parser context
+ * v			The virtual machine
+ * orderby_clause	The ORDER BY clause
+ * sorter_cursor	The cursor number for the sorter
+ * record_reg		Register containing the full record
+ * num_cols		Number of data columns in the record
  */
 static void
-__push_onto_sorter(parser_t* parser, vdbe_t* v, expr_list_t* orderby_clause)
+__push_onto_sorter(parser_t* parser, vdbe_t* v, expr_list_t* orderby_clause,
+                   int sorter_cursor, int record_reg, int num_cols)
 {
-	int i, order, type, c;
-	char *sort_order;
+	int i;
+	int nOrderBy = orderby_clause->nExpr;
+	(void)num_cols; /* Column count unused - determined by record structure */
+	int regBase = parser->nMem + 1;
+	int regRecord;
 
-	if (__dbsql_calloc(parser->db, 1, orderby_clause->nExpr + 1,
-			&sort_order) == ENOMEM)
-		return;
-	for (i = 0; i < orderby_clause->nExpr; i++) {
-		order = orderby_clause->a[i].sortOrder;
-		if ((order & DBSQL_SO_TYPEMASK) == DBSQL_SO_TEXT) {
-			type = DBSQL_SO_TEXT;
-		} else if ((order & DBSQL_SO_TYPEMASK) == DBSQL_SO_NUM) {
-			type = DBSQL_SO_NUM;
-		} else {
-			type = __expr_type(orderby_clause->a[i].pExpr);
-		}
-		if ((order & DBSQL_SO_DIRMASK) == DBSQL_SO_ASC) {
-			c = (type == DBSQL_SO_TEXT ? 'A' : '+');
-		} else {
-			c = (type == DBSQL_SO_TEXT ? 'D' : '-');
-		}
-		sort_order[i] = c;
-		__expr_code(parser, orderby_clause->a[i].pExpr);
+	/* Allocate registers for ORDER BY keys + data record */
+	parser->nMem += nOrderBy + 1;
+	regRecord = regBase + nOrderBy;
+
+	/* Generate ORDER BY key values into registers */
+	for (i = 0; i < nOrderBy; i++) {
+		__expr_code_target(parser, orderby_clause->a[i].pExpr, regBase + i);
 	}
-	sort_order[orderby_clause->nExpr] = 0;
-	__vdbe_add_op(v, OP_SortMakeKey, orderby_clause->nExpr, 0);
-	__vdbe_change_p4(v, -1, sort_order, strlen(sort_order));
-	__dbsql_free(parser->db, sort_order);
-	__vdbe_add_op(v, OP_SortPut, 0, 0);
+
+	/* Store the full data record in the last register */
+	__vdbe_add_op(v, OP_Copy, record_reg, regRecord);
+
+	/* Generate OP_MakeRecord to create sorter key+data blob
+	 * The blob format: [ORDER BY keys] + [full data record]
+	 */
+	__vdbe_add_op(v, OP_MakeRecord, nOrderBy + 1, regBase);
+
+	/* Insert into sorter */
+	__vdbe_add_op(v, OP_SorterInsert, sorter_cursor, regRecord + 1);
 }
 
 /*
  * __add_key_type --
  *	This routine adds a P3 argument to the last VDBE opcode that was
- *	inserted. The P3 argument added is a string suitable for the 
+ *	inserted. The P3 argument added is a string suitable for the
  *	OP_MakeKey or OP_MakeIdxKey opcodes.  The string consists of
  *	characters 't' or 'n' depending on whether or not the various
  *	fields of the key to be generated should be treated as numeric
@@ -473,6 +478,65 @@ __add_key_type(vdbe_t* v, expr_list_t* elist)
 }
 
 /*
+ * __create_sorter_key_info --
+ *	Create a KeyInfo structure for an ORDER BY clause and open
+ *	a sorter cursor.
+ *
+ * STATIC: static key_info_t *__create_sorter_key_info __P((parser_t *,
+ * STATIC:                                             expr_list_t *));
+ *
+ * parser			The parser context
+ * orderby_clause		The ORDER BY clause
+ *
+ * Returns a KeyInfo structure, or NULL on memory error.
+ */
+static key_info_t *
+__create_sorter_key_info(parser_t *parser, expr_list_t *orderby_clause)
+{
+	key_info_t *key_info;
+	int nField, i;
+	u8 *sort_flags;
+
+	if (orderby_clause == NULL)
+		return NULL;
+
+	nField = orderby_clause->nExpr;
+
+	/* Allocate KeyInfo structure with space for nField collation pointers */
+	if (__dbsql_calloc(parser->db, 1,
+	                   SZ_KEYINFO(nField) + nField, /* +nField for sort_flags */
+	                   &key_info) == ENOMEM)
+		return NULL;
+
+	key_info->nRef = 1;
+	key_info->enc = DBSQL_UTF8_ENCODED;
+	key_info->nKeyField = nField;
+	key_info->nAllField = nField;
+	key_info->db = parser->db;
+
+	/* Sort flags come after the collation pointers */
+	sort_flags = (u8*)&key_info->aColl[nField];
+	key_info->aSortFlags = sort_flags;
+
+	/* Set up sort order for each column */
+	for (i = 0; i < nField; i++) {
+		int order = orderby_clause->a[i].sortOrder;
+
+		/* Initialize collation to NULL (default collation) */
+		key_info->aColl[i] = NULL;
+
+		/* Set sort flags */
+		if ((order & DBSQL_SO_DIRMASK) == DBSQL_SO_DESC) {
+			sort_flags[i] = KEYINFO_ORDER_DESC;
+		} else {
+			sort_flags[i] = 0;  /* ASC */
+		}
+	}
+
+	return key_info;
+}
+
+/*
  * __select_inner_loop --
  *	This routine generates the code for the inside of the inner loop
  *	of a SELECT.
@@ -485,7 +549,7 @@ __add_key_type(vdbe_t* v, expr_list_t* elist)
  * STATIC: static int __select_inner_loop __P((parser_t *, select_t *,
  * STATIC:                                expr_list_t *, int, int,
  * STATIC:                                expr_list_t *, int, int, int, int,
- * STATIC:                                int));
+ * STATIC:                                int, int));
  *
  * parser			The parser context
  * select			The complete select statement being coded
@@ -498,10 +562,11 @@ __add_key_type(vdbe_t* v, expr_list_t* elist)
  * param			An argument to the disposal method
  * cont				Jump here to continue with next row
  * brk				Jump here to break out of the inner loop
+ * sorter_cursor		The sorter cursor number (or -1 if no sorter)
  */
 static int
 __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
-		    distinct, dest, param, cont, brk)
+		    distinct, dest, param, cont, brk, sorter_cursor)
 	parser_t *parser;
 	select_t *select;
 	expr_list_t *elist;
@@ -513,6 +578,7 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 	int param;
 	int cont;
 	int brk;
+	int sorter_cursor;
 {
 	int i, addr, addr1, addr2;
 	vdbe_t *v = parser->vdbe;
@@ -606,13 +672,9 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 	case SRT_Table: /* FALLTHROUGH */
 	case SRT_TempTable:
 		__vdbe_add_op(v, OP_MakeRecord, nResultCol, 0);
-		if (orderby_clause) {
-			__push_onto_sorter(parser, v, orderby_clause);
-		} else {
-			__vdbe_add_op(v, OP_NewRecno, param, 0);
-			__vdbe_add_op(v, OP_Pull, 1, 0);
-			__vdbe_add_op(v, OP_PutIntKey, param, 0);
-		}
+		__vdbe_add_op(v, OP_NewRecno, param, 0);
+		__vdbe_add_op(v, OP_Pull, 1, 0);
+		__vdbe_add_op(v, OP_PutIntKey, param, 0);
 		break;
 
 		/*
@@ -637,12 +699,8 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 		DBSQL_ASSERT(nResultCol == 1);
 		__vdbe_add_op(v, OP_NotNull, regResult, (addr1 + 2));
 		addr2 = __vdbe_add_op(v, OP_Goto, 0, 0);
-		if (orderby_clause) {
-			__push_onto_sorter(parser, v, orderby_clause);
-		} else {
-			__vdbe_add_op(v, OP_String, 0, 0);
-			__vdbe_add_op(v, OP_PutStrKey, param, 0);
-		}
+		__vdbe_add_op(v, OP_String, 0, 0);
+		__vdbe_add_op(v, OP_PutStrKey, param, 0);
 		__vdbe_change_p2(v, addr2, __vdbe_current_addr(v));
 		break;
 
@@ -653,13 +711,9 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 		 */
 	case SRT_Mem:
 		DBSQL_ASSERT(nResultCol == 1);
-		if (orderby_clause) {
-			__push_onto_sorter(parser, v, orderby_clause);
-		} else {
-			/* Store result from register into memory cell */
-			__vdbe_add_op(v, OP_Copy, regResult, param);
-			__vdbe_add_op(v, OP_Goto, 0, brk);
-		}
+		/* Store result from register into memory cell */
+		__vdbe_add_op(v, OP_Copy, regResult, param);
+		__vdbe_add_op(v, OP_Goto, 0, brk);
 		break;
 
 	/*
@@ -669,8 +723,14 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 	case SRT_Callback: /* FALLTHROUGH */
 	case SRT_Sorter:
 		if (orderby_clause) {
-			__vdbe_add_op(v, OP_SortMakeRec, nResultCol, 0);
-			__push_onto_sorter(parser, v, orderby_clause);
+			int regRecord = parser->nMem + 1;
+			parser->nMem++;
+			/* Create a record from the result columns */
+			__vdbe_add_op(v, OP_MakeRecord, nResultCol, regResult);
+			__vdbe_add_op(v, OP_Copy, -1, regRecord);
+			__vdbe_add_op(v, OP_Pop, 1, 0);
+			__push_onto_sorter(parser, v, orderby_clause, sorter_cursor,
+			                   regRecord, nResultCol);
 		} else {
 			DBSQL_ASSERT(dest == SRT_Callback);
 			/* Phase 2: Use OP_ResultRow with register range */
@@ -685,8 +745,13 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
 		 */
 	case SRT_Subroutine:
 		if (orderby_clause) {
-			__vdbe_add_op(v, OP_MakeRecord, nResultCol, 0);
-			__push_onto_sorter(parser, v, orderby_clause);
+			int regRecord = parser->nMem + 1;
+			parser->nMem++;
+			__vdbe_add_op(v, OP_MakeRecord, nResultCol, regResult);
+			__vdbe_add_op(v, OP_Copy, -1, regRecord);
+			__vdbe_add_op(v, OP_Pop, 1, 0);
+			__push_onto_sorter(parser, v, orderby_clause, sorter_cursor,
+			                   regRecord, nResultCol);
 		} else {
 			/* Results already in registers, call subroutine */
 			__vdbe_add_op(v, OP_Gosub, 0, param);
@@ -714,70 +779,117 @@ __select_inner_loop(parser, select, elist, src_table, num_cols, orderby_clause,
  *	loop is terminated we need to run the sorter and output the results.
  *	The following routine generates the code needed to do that.
  *
- * STATIC: static void __generate_sort_tail __P((select_t *, vdbe_t *, int,
- * STATIC:                                  int, int));
+ * STATIC: static void __generate_sort_tail __P((parser_t *, select_t *, vdbe_t *,
+ * STATIC:                                  int, int, int, int));
  *
+ * parser			The parser context
  * select			The SELECT statement
  * v				Generate code into this VDBE
  * num_cols			Number of columns of data
  * dest				Write the sorted results here
  * param			Optional parameter associated with dest
+ * sorter_cursor	The cursor number for the sorter
  */
 static void
-__generate_sort_tail(select_t* select, vdbe_t* v, int num_cols, int dest, int param)
+__generate_sort_tail(parser_t* parser, select_t* select, vdbe_t* v, int num_cols,
+                     int dest, int param, int sorter_cursor)
 {
 	int i, addr;
 	int end = __vdbe_make_label(v);
+	int regData;
+
 	if (dest == SRT_Sorter)
 		return;
-	__vdbe_add_op(v, OP_Sort, 0, 0);
-	addr = __vdbe_add_op(v, OP_SortNext, 0, end);
-	if (select->iOffset >= 0) {
-		__vdbe_add_op(v, OP_MemIncr, select->iOffset, (addr + 4));
-		__vdbe_add_op(v, OP_Pop, 1, 0);
-		__vdbe_add_op(v, OP_Goto, 0, addr);
+
+	/* If no sorter cursor (compound SELECT), use legacy path */
+	if (sorter_cursor < 0) {
+		/* Legacy sort opcodes - these will return DBSQL_INTERNAL */
+		__vdbe_add_op(v, OP_Sort, 0, 0);
+		return;
 	}
+
+	/* Register for sorter data */
+	regData = parser->nMem + 1;
+	parser->nMem++;
+
+	/* Sort the data */
+	__vdbe_add_op(v, OP_SorterSort, sorter_cursor, end);
+
+	/* Loop through sorted results */
+	addr = __vdbe_current_addr(v);
+
+	/* Handle OFFSET */
+	if (select->iOffset >= 0) {
+		int skipAddr = __vdbe_current_addr(v) + 1;
+		__vdbe_add_op(v, OP_MemIncr, select->iOffset, skipAddr + 3);
+		__vdbe_add_op(v, OP_Goto, 0, skipAddr + 1);
+		/* Skip this row - move to next */
+		__vdbe_add_op(v, OP_SorterNext, sorter_cursor, addr);
+	}
+
+	/* Handle LIMIT */
 	if (select->iLimit >= 0) {
 		__vdbe_add_op(v, OP_MemIncr, select->iLimit, end);
 	}
+
+	/* Extract data from sorter into register */
+	__vdbe_add_op(v, OP_SorterData, sorter_cursor, regData);
+
+	/* TODO: Extract individual columns from the record in regData
+	 * For now, we need to decode the record format:
+	 * The sorter record contains: [ORDER BY keys] + [full data record]
+	 * We need to extract just the data record portion and then
+	 * extract individual columns from it.
+	 */
+
 	switch(dest) {
 	case SRT_Callback:
-		/* Phase 2: Use OP_SortCallback which internally uses registers */
-		__vdbe_add_op(v, OP_SortCallback, num_cols, 0);
+		/* Need to extract columns from the record and call callback */
+		/* For now, this is a simplified placeholder */
+		for (i = 0; i < num_cols; i++) {
+			/* Extract column i from the record */
+			__vdbe_add_op(v, OP_Column, sorter_cursor, i);
+		}
+		__vdbe_add_op(v, OP_Callback, num_cols, 0);
 		break;
 	case SRT_Table: /* FALLTHROUGH */
 	case SRT_TempTable:
 		__vdbe_add_op(v, OP_NewRecno, param, 0);
-		__vdbe_add_op(v, OP_Pull, 1, 0);
+		__vdbe_add_op(v, OP_Copy, regData, regData + 1);
 		__vdbe_add_op(v, OP_PutIntKey, param, 0);
 		break;
 	case SRT_Set:
 		DBSQL_ASSERT(num_cols == 1);
-		__vdbe_add_op(v, OP_NotNull, -1, (__vdbe_current_addr(v) + 3));
-		__vdbe_add_op(v, OP_Pop, 1, 0);
-		__vdbe_add_op(v, OP_Goto, 0, (__vdbe_current_addr(v) + 3));
-		__vdbe_add_op(v, OP_String, 0, 0);
-		__vdbe_add_op(v, OP_PutStrKey, param, 0);
+		__vdbe_add_op(v, OP_NotNull, regData, __vdbe_current_addr(v) + 2);
+		__vdbe_add_op(v, OP_Goto, 0, __vdbe_current_addr(v) + 2);
+		__vdbe_add_op(v, OP_String, 0, regData + 1);
+		__vdbe_add_op(v, OP_PutStrKey, param, regData + 1);
 		break;
 	case SRT_Mem:
 		DBSQL_ASSERT(num_cols == 1);
-		__vdbe_add_op(v, OP_MemStore, param, 1);
+		__vdbe_add_op(v, OP_Copy, regData, param);
 		__vdbe_add_op(v, OP_Goto, 0, end);
 		break;
 	case SRT_Subroutine:
+		/* Extract columns and call subroutine */
 		for (i = 0; i < num_cols; i++) {
-			__vdbe_add_op(v, OP_Column, (-1 - i), i);
+			__vdbe_add_op(v, OP_Column, sorter_cursor, i);
 		}
 		__vdbe_add_op(v, OP_Gosub, 0, param);
-		__vdbe_add_op(v, OP_Pop, 1, 0);
 		break;
 	default:
 		/* Do nothing. */
 		break;
 	}
-	__vdbe_add_op(v, OP_Goto, 0, addr);
+
+	/* Move to next sorted record */
+	__vdbe_add_op(v, OP_SorterNext, sorter_cursor, addr);
+
+	/* End of sort loop */
 	__vdbe_resolve_label(v, end);
-	__vdbe_add_op(v, OP_SortReset, 0, 0);
+
+	/* Close the sorter cursor */
+	__vdbe_add_op(v, OP_Close, sorter_cursor, 0);
 }
 
 /*
@@ -866,7 +978,7 @@ static void
 __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist)
 {
 	int i, j, show_full_names, icol, addr;
-	char *type, *name, *col, *tab;
+	char *name, *col, *tab;
 	char namebuf[30]; /* TODO consider eliminating this */
 	expr_t *p;
 	table_t *table;
@@ -878,7 +990,6 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 	/* Set the number of result columns */
 	__vdbe_set_num_cols(v, elist->nExpr);
 	for (i = 0; i < elist->nExpr; i++) {
-		type = 0;
 		p = elist->a[i].pExpr;
 		if (p == 0)
 			continue;
@@ -903,10 +1014,10 @@ __generate_column_names(parser_t* parser, src_list_t* tables, expr_list_t* elist
 			DBSQL_ASSERT(icol == -1 ||(icol >= 0 && icol < table->nCol));
 			if (icol < 0) {
 				col = "_ROWID_";
-				type = "INTEGER";
+				/* type would be "INTEGER" but type info not used */
 			} else {
 				col = table->columns[icol].zName;
-				type = table->columns[icol].zType;
+				/* type from table->columns[icol].zType not used */
 			}
 			if (p->span.z && p->span.z[0] && !show_full_names) {
 				addr = __vdbe_add_op(v,OP_ColumnName, i, 0);
@@ -1699,7 +1810,7 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 						 select->pEList, union_tab,
 						 select->pEList->nExpr,
 						 select->pOrderBy, -1,
-						 dest, param, cont, brk);
+						 dest, param, cont, brk, -1);
 			if (rc)
 				return 1;
 			__vdbe_resolve_label(v, cont);
@@ -1707,9 +1818,9 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 			__vdbe_resolve_label(v, brk);
 			__vdbe_add_op(v, OP_Close, union_tab, 0);
 			if (select->pOrderBy) {
-				__generate_sort_tail(select, v,
+				__generate_sort_tail(parser, select, v,
 						     select->pEList->nExpr,
-						     dest, param);
+						     dest, param, -1);
 			}
 		}
 		break;
@@ -1771,8 +1882,8 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 		__multi_select_sort_order(select, select->pOrderBy);
 		rc = __select_inner_loop(parser, select, select->pEList,
 					 tab1, select->pEList->nExpr,
-					 select->pOrderBy, -1, dest, param, 
-					 cont, brk);
+					 select->pOrderBy, -1, dest, param,
+					 cont, brk, -1);
 		if (rc)
 			return 1;
 		__vdbe_resolve_label(v, cont);
@@ -1781,8 +1892,8 @@ __multi_select(parser_t* parser, select_t* select, int dest, int param)
 		__vdbe_add_op(v, OP_Close, tab2, 0);
 		__vdbe_add_op(v, OP_Close, tab1, 0);
 		if (select->pOrderBy) {
-			__generate_sort_tail(select, v, select->pEList->nExpr,
-					     dest, param);
+			__generate_sort_tail(parser, select, v, select->pEList->nExpr,
+					     dest, param, -1);
 		}
 		break;
 	}
@@ -2321,7 +2432,7 @@ __min_max_query(parser_t* parser, select_t* select, int dest, int param)
 	elist_union.list.nAlloc = 1;
 	elist_union.list.a[0].pExpr = expr;
 	__select_inner_loop(parser, select, &elist_union.list, 0, 0, 0, -1, dest, param,
-			    cont, cont);
+			    cont, cont, -1);
 	__vdbe_resolve_label(v, cont);
 	__vdbe_add_op(v, OP_Close, base, 0);
 	return 1;
@@ -2777,9 +2888,27 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 	}
 
 	/*
+	 * Allocate sorter cursor and open sorter if ORDER BY is present.
+	 * This must be done before the database scan begins.
+	 */
+	int sorter_cursor = -1;
+	key_info_t *sorter_key_info = NULL;
+	if (orderby_clause && !groupby_clause) {
+		sorter_cursor = parser->nTab++;
+		sorter_key_info = __create_sorter_key_info(parser, orderby_clause);
+		if (sorter_key_info == NULL)
+			goto select_end;
+
+		/* Generate OP_SorterOpen */
+		__vdbe_add_op(v, OP_SorterOpen, sorter_cursor, 0);
+		__vdbe_change_p3(v, -1, orderby_clause->nExpr);
+		__vdbe_change_p4(v, -1, (char*)sorter_key_info, P4_KEYINFO);
+	}
+
+	/*
 	 * Begin the database scan.
 	 */
-	where_info = __where_begin(parser, tables, where, 0, 
+	where_info = __where_begin(parser, tables, where, 0,
 				   (groupby_clause ? 0 : &orderby_clause));
 	if (where_info == 0)
 		goto select_end;
@@ -2791,7 +2920,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 		if (__select_inner_loop(parser, select, elist, 0, 0,
 					orderby_clause, distinct, dest,
 					param, where_info->iContinue,
-					where_info->iBreak)) {
+					where_info->iBreak, sorter_cursor)) {
 			goto select_end;
 		}
 	} else {
@@ -2863,7 +2992,7 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 		}
 		if (__select_inner_loop(parser, select, elist, 0, 0,
 					orderby_clause, distinct, dest,
-					param, startagg, endagg)) {
+					param, startagg, endagg, sorter_cursor)) {
 			goto select_end;
 		}
 		__vdbe_add_op(v, OP_Goto, 0, startagg);
@@ -2877,7 +3006,8 @@ int __select(parser, select, dest, param, parent, parent_tab, parent_agg_p)
 	 * and send them to the callback one by one.
 	 */
 	if (orderby_clause) {
-		__generate_sort_tail(select, v, elist->nExpr, dest, param);
+		__generate_sort_tail(parser, select, v, elist->nExpr, dest, param,
+		                     sorter_cursor);
 	}
 
 

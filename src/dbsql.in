@@ -123,7 +123,7 @@ typedef int (*dbsql_callback)(void *, int, char **, char **);
 /*
  * The name of the schema tables.
  */
-#define SCHEMA_TABLE(x)  (x?TEMP_MASTER_NAME:MASTER_NAME)
+#define SCHEMA_TABLE(x)  ((x) ? TEMP_MASTER_NAME : MASTER_NAME)
 
 /*
  * Character Encoding:
@@ -412,7 +412,7 @@ int dbsql_aggregate_count __P((dbsql_func_t *));
 
 /*
  * Values are stored in the database in one of the following fundamental
- * types. TODO
+ * types.
  */
 #define DBSQL_INTEGER  1
 #define DBSQL_FLOAT    2

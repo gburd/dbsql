@@ -103,14 +103,14 @@ local_getline(char* prompt, FILE* in)
 		fflush(stdout);
 	}
 	len = 100;
-	if ((ret = __os_malloc(g.dbenv, len, &line)) != 0)
+	if ((ret = __os_malloc(g.dbenv, len, (void **)&line)) != 0)
 		return 0;
 	n = 0;
 	eol = 0;
 	while(!eol) {
 		if (n + 100 > len) {
 			len = (len * 2) + 100;
-			if ((ret = __os_realloc(g.dbenv, len, &line)) != 0)
+			if ((ret = __os_realloc(g.dbenv, len, (void **)&line)) != 0)
 				return 0;
 		}
 		if (fgets(&line[n], len - n, in) == 0) {
@@ -131,7 +131,7 @@ local_getline(char* prompt, FILE* in)
 			eol = 1;
 		}
 	}
-	if ((ret = __os_realloc(g.dbenv, n + 1, &line)) != 0)
+	if ((ret = __os_realloc(g.dbenv, n + 1, (void **)&line)) != 0)
 		return 0;
 	return line;
 }
@@ -322,7 +322,7 @@ callback(void* arg, int num_args, char* *args, char* *cols)
 		if (p->cnt++ == 0) {
 			for(i = 0; i < num_args; i++) {
 				int w, n;
-				if (i < ARRAY_SIZE(p->col_width)) {
+				if ((size_t)i < ARRAY_SIZE(p->col_width)) {
 					w = p->col_width[i];
 				} else {
 					w = 0;
@@ -337,7 +337,7 @@ callback(void* arg, int num_args, char* *args, char* *cols)
 					if (w < n)
 						w = n;
 				}
-				if (i < ARRAY_SIZE(p->actual_width)) {
+				if ((size_t)i < ARRAY_SIZE(p->actual_width)) {
 					p->actual_width[i] = w;
 				}
 				if (p->show_header) {
@@ -349,7 +349,7 @@ callback(void* arg, int num_args, char* *args, char* *cols)
 			if (p->show_header) {
 				for(i = 0; i < num_args; i++) {
 					int w;
-					if (i < ARRAY_SIZE(p->actual_width)) {
+					if ((size_t)i < ARRAY_SIZE(p->actual_width)) {
 						w = p->actual_width[i];
 					} else {
 						w = 10;
@@ -366,7 +366,7 @@ callback(void* arg, int num_args, char* *args, char* *cols)
 			break;
 		for(i = 0; i < num_args; i++) {
 			int w;
-			if (i < ARRAY_SIZE(p->actual_width)) {
+			if ((size_t)i < ARRAY_SIZE(p->actual_width)) {
 				w = p->actual_width[i];
 			} else {
 				w = 10;
@@ -477,7 +477,7 @@ set_table_name(p, name)
 	}
 	if (needQuote)
 		n += 2;
-	if ((ret = __os_malloc(g.dbenv, n + 1, &z)) != 0) {
+	if ((ret = __os_malloc(g.dbenv, n + 1, (void **)&z)) != 0) {
 		fprintf(stderr,"Out of memory!\n");
 		exit(1);
 	}
@@ -657,7 +657,7 @@ do_meta_command(line, p)
 	/*
 	 * Parse the input line into tokens.
 	 */
-	while(line[i] && num_args < ARRAY_SIZE(args)) {
+	while(line[i] && (size_t)num_args < ARRAY_SIZE(args)) {
 		while(isspace(line[i])) {
 			i++;
 		}
@@ -1044,7 +1044,7 @@ do_meta_command(line, p)
 		p->db->set_timeout(p->db, atoi(args[1]));
 	} else if (c == 'w' && strncmp(args[0], "width", n) == 0) {
 		int j;
-		for(j = 1; j < num_args && j < ARRAY_SIZE(p->col_width); j++) {
+		for(j = 1; j < num_args && (size_t)j < ARRAY_SIZE(p->col_width); j++) {
 			p->col_width[j - 1] = atoi(args[j]);
 		}
 	} else {
@@ -1168,7 +1168,7 @@ process_input(p, in)
 			for(i = 0; line[i] && isspace(line[i]); i++) {}
 			if (line[i] != 0) {
 				line_len = strlen(line);
-				if ((rc = __os_malloc(g.dbenv, line_len + 1, &sql)) != 0) {
+				if ((rc = __os_malloc(g.dbenv, line_len + 1, (void **)&sql)) != 0) {
 					fprintf(stderr,"%s: out of memory!\n",
 						g.progname);
 					exit(1);
@@ -1177,7 +1177,7 @@ process_input(p, in)
 			}
 		} else {
 			int len = strlen(line);
-			if ((rc = __os_realloc(g.dbenv, line_len + len + 2, &sql)) != 0) {
+			if ((rc = __os_realloc(g.dbenv, line_len + len + 2, (void **)&sql)) != 0) {
 				fprintf(stderr,"%s: out of memory!\n",
 					g.progname);
 				exit(1);
@@ -1251,7 +1251,7 @@ find_home_dir(void)
 
 	if (home_dir) {
 		char *z;
-		if ((ret = __os_malloc(g.dbenv, strlen(home_dir) + 1, &z)) == 0) {
+		if ((ret = __os_malloc(g.dbenv, strlen(home_dir) + 1, (void **)&z)) == 0) {
 			strcpy(z, home_dir);
 			home_dir = z;
 		} else {
@@ -1281,7 +1281,7 @@ process_rc(p, path)
 		if (!home_dir) {
 			return;  /* No home directory, skip .dbsqlrc */
 		}
-		if ((ret = __os_malloc(g.dbenv, strlen(home_dir) + 15, &buf)) != 0) {
+		if ((ret = __os_malloc(g.dbenv, strlen(home_dir) + 15, (void **)&buf)) != 0) {
 			fprintf(stderr,"%s: out of memory\n", g.progname);
 			__os_free(g.dbenv, home_dir);
 			exit(1);
@@ -1516,7 +1516,7 @@ main(int argc, char* *argv)
 			       dbsql_version(&major, &minor, &patch));
 			home = find_home_dir();
 			if (home) {
-				if ((rc = __os_malloc(g.dbenv, strlen(home) + 20, &history)) == 0) {
+				if ((rc = __os_malloc(g.dbenv, strlen(home) + 20, (void **)&history)) == 0) {
 					sprintf(history, "%s/.dbsql_history",
 						home);
 				}
