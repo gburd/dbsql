@@ -243,11 +243,10 @@ __sm_init(sm_t* sm, int* init)
 	 * Try to open the database 'name', if its not there, try to create it.
 	 * TODO: when 4.3 supports named in memory files, this will change
 	 */
-	if (dbenv->txn_begin(dbenv, 0, &txn, 0) == ENOMEM)
+	if ((rc = dbenv->txn_begin(dbenv, 0, &txn, 0)) == ENOMEM)
 		goto err;
 
 	/* Try to create a new database called 'name'. */
-
 	if (__sm_is_threaded(sm))
 		flags |= DB_THREAD;
 
@@ -260,12 +259,14 @@ __sm_init(sm_t* sm, int* init)
 		if ((rc = db->open(db, txn,
 				   (F_ISSET(sm, SM_INMEM_DB) ? NULL : sm->name),
 				   (F_ISSET(sm, SM_INMEM_DB) ? NULL : SM_META_NAME),
-				   DB_BTREE, flags, 0)) == 0)
+				   DB_BTREE, flags, 0)) == 0) {
 			*init = 0;
-		else
+		} else {
 			goto err;
-	} else if (rc != 0)
+		}
+	} else if (rc != 0) {
 		goto err;
+	}
 	sm->primary = db;
 	if ((sm->n = __sm_seq_init(sm, db, txn, sm->name, *init)) == 0)
 		goto err;
@@ -341,7 +342,7 @@ __sm_create(dbp, name, is_temp, in_memory, smp)
 	}
 	sm->dbp = dbp;
 	__hash_init(&sm->dbs, DBSQL_HASH_INT, 0);
-	if (__sm_init(sm, &init) != DBSQL_SUCCESS) {
+	if ((rc = __sm_init(sm, &init)) != DBSQL_SUCCESS) {
 		__dbsql_free(dbp, sm->name);
 		__dbsql_free(dbp, sm);
 		return DBSQL_CANTOPEN;
@@ -349,7 +350,7 @@ __sm_create(dbp, name, is_temp, in_memory, smp)
 
 	/* Create a binary tree for the DBSQL_MASTER table at location 2. */
 	if (init) {
-		if (__sm_create_table(sm, &id) != DBSQL_SUCCESS) {
+		if ((rc = __sm_create_table(sm, &id)) != DBSQL_SUCCESS) {
 			if (sm->name)
 				__dbsql_free(NULL, sm->name);
 			__dbsql_free(dbp, sm);
@@ -357,7 +358,7 @@ __sm_create(dbp, name, is_temp, in_memory, smp)
 		}
 	} else {
 		id = 2;
-		if (__sm_open_table(sm, &id) != DBSQL_SUCCESS) {
+		if ((rc = __sm_open_table(sm, &id)) != DBSQL_SUCCESS) {
 			if (sm->name)
 				__dbsql_free(NULL, sm->name);
 			__dbsql_free(dbp, sm);
@@ -448,8 +449,10 @@ __sm_get_database_name(sm_t* sm)
 int
 __sm_begin_txn(sm_t* sm)
 {
+	int rc;
 	DBSQL_ASSERT(sm);
-	return (sm->dbp->dbenv->txn_begin(sm->dbp->dbenv, 0, &sm->txn, 0));
+	rc = sm->dbp->dbenv->txn_begin(sm->dbp->dbenv, 0, &sm->txn, 0);
+	return rc;
 }
 
 /*
@@ -464,11 +467,15 @@ __sm_begin_txn(sm_t* sm)
 int
 __sm_commit_txn(sm_t* sm)
 {
+	int rc = DBSQL_SUCCESS;
 	DBSQL_ASSERT(sm);
-	if (sm->txn)
-		sm->txn->commit(sm->txn, 0);
+	if (sm->txn) {
+		rc = sm->txn->commit(sm->txn, 0);
+		if (rc != 0)
+			rc = DBSQL_INTERNAL;
+	}
 	sm->txn = 0;
-	return DBSQL_SUCCESS;
+	return rc;
 }
 
 /*
@@ -526,29 +533,32 @@ __sm_cursor(sm_t* sm, int id, int write, sm_cursor_t* *smcp)
 	smc->sm = sm;
 	smc->db = smr->db;
 	smc->id = id;
-	fprintf(stderr, "__sm_cursor: sm->txn=%p, creating cursor for db %d, write=%d\n", (void*)sm->txn, id, write);
 	smc->eState = SMC_STATE_INVALID;
 	smc->cachedRowidValid = 0;
 
 	/*
-	 * For write cursors, create a child transaction for isolation.
-	 * For read-only cursors, use the parent transaction directly to see
-	 * committed data from sibling transactions.
-	 * This matches Berkeley DB's transactional isolation model where
-	 * child transactions are isolated from each other.
+	 * Transaction strategy:
+	 * 1. Read-only cursors: Always use parent transaction directly
+	 * 2. Write cursors in explicit transaction: Use parent transaction directly
+	 *    to avoid Berkeley DB child transaction visibility issues
+	 * 3. Write cursors in auto-commit mode: Create child transaction for
+	 *    statement-level isolation
 	 */
-	if (write) {
+	if (write && !(sm->dbp->flags & DBSQL_InTrans)) {
+		/* Auto-commit mode: create child transaction for statement isolation */
 		int txn_result = dbenv->txn_begin(dbenv, sm->txn, &smc->txn, 0);
-		fprintf(stderr, "  txn_begin result=%d, smc->txn=%p (parent was %p)\n", txn_result, (void*)smc->txn, (void*)sm->txn);
 		if (txn_result != 0) {
 			__dbsql_free(sm->dbp, smc);
 			return DBSQL_INTERNAL;
 		}
 		F_SET(smc, SMC_RW_CURSOR);
+	} else if (write) {
+		/* Explicit transaction: use parent transaction directly */
+		smc->txn = sm->txn;
+		F_SET(smc, SMC_RW_CURSOR);
 	} else {
 		/* Read-only cursor: use parent transaction directly */
 		smc->txn = sm->txn;
-		fprintf(stderr, "  using parent txn directly: smc->txn=%p\n", (void*)smc->txn);
 		F_SET(smc, SMC_RO_CURSOR);
 	}
 
@@ -580,28 +590,38 @@ __sm_close_cursor(sm_cursor_t* smc)
 {
 	int rc = DBSQL_SUCCESS;
 	int ret;
+	int commit_rc;
+	int has_child_txn;
 	DBSQL_ASSERT(smc != 0);
+
+	/*
+	 * Determine if this cursor has a child transaction:
+	 * - Child transaction exists if: write cursor && auto-commit mode
+	 * - Otherwise cursor uses parent transaction directly
+	 */
+	has_child_txn = F_ISSET(smc, SMC_RW_CURSOR) &&
+	                !(smc->sm->dbp->flags & DBSQL_InTrans) &&
+	                (smc->txn != smc->sm->txn);
 
 	/* Close the Berkeley DB cursor */
 	ret = smc->dbc->c_close(smc->dbc);
 	if (ret == 0) {
 		/*
-		 * For write cursors, commit the child transaction.
-		 * For read-only cursors, transaction is owned by parent - don't commit.
+		 * Only commit/abort transactions we created (child transactions).
+		 * If cursor uses parent transaction directly, don't touch it.
 		 */
-		if (F_ISSET(smc, SMC_RW_CURSOR)) {
-			if (smc->txn->commit(smc->txn, 0) != 0) {
+		if (has_child_txn) {
+			commit_rc = smc->txn->commit(smc->txn, 0);
+			if (commit_rc != 0) {
 				rc = DBSQL_INTERNAL;
 			}
 		}
-		/* Read-only cursor: parent owns txn, don't commit here */
 	} else {
 		/* Cursor close failed */
-		if (F_ISSET(smc, SMC_RW_CURSOR)) {
-			/* Abort child transaction for write cursor */
+		if (has_child_txn) {
+			/* Abort child transaction */
 			smc->txn->abort(smc->txn);
 		}
-		/* Read-only cursor: parent owns txn, don't abort here */
 		rc = DBSQL_INTERNAL;
 	}
 	__dbsql_free(smc->sm->dbp, smc);
@@ -1035,6 +1055,7 @@ int
 __sm_first(sm_cursor_t* smc, int* result)
 {
 	int rc = DBSQL_SUCCESS;
+	int get_rc;
 	DBT key, data;
 
 	DBSQL_ASSERT(smc);
@@ -1045,7 +1066,9 @@ __sm_first(sm_cursor_t* smc, int* result)
 	key.flags = DB_DBT_MALLOC;
 	data.flags = DB_DBT_MALLOC;
 
-	switch(smc->dbc->c_get(smc->dbc, &key, &data, DB_FIRST)) {
+	get_rc = smc->dbc->c_get(smc->dbc, &key, &data, DB_FIRST);
+
+	switch(get_rc) {
 	case 0:
 		*result = 0;
 		smc->eState = SMC_STATE_VALID;
@@ -1126,6 +1149,7 @@ __sm_insert(smc, k, k_len, v, v_len)
 	int v_len;
 {
 	int rc = DBSQL_SUCCESS;
+	int put_rc;
 	DBT key, data;
 
 	DBSQL_ASSERT(smc);
@@ -1142,7 +1166,9 @@ __sm_insert(smc, k, k_len, v, v_len)
 	data.size = v_len;
 	data.data = (void *)v;
 
-	if (smc->db->put(smc->db, smc->txn, &key, &data, 0) != 0)
+	put_rc = smc->db->put(smc->db, smc->txn, &key, &data, 0);
+
+	if (put_rc != 0)
 		rc = DBSQL_INTERNAL;
 	else {
 		/* Position the cursor to the new entry. */
@@ -1285,7 +1311,7 @@ __sm_resource(sm_t* sm, u_int32_t* id, int type, int init)
 	if ((rc = smr->db->open(smr->db, txn,
 				(F_ISSET(sm, SM_INMEM_DB) ? NULL : name),
 				NULL, DB_BTREE, flags, 0)) != 0)
-			goto err;
+		goto err;
 	txn->commit(txn, 0);
 	__hash_insert(&sm->dbs, (void *)0, n, smr);
 	return DBSQL_SUCCESS;

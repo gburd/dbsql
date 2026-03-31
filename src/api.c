@@ -76,6 +76,8 @@ __init_callback(void* init, int argc, char **argv, char **col_name)
 	int nerr = 0;
 
 	DBSQL_ASSERT(argc == 5);
+	(void)argc;     /* Used in assertion only */
+	(void)col_name; /* Column names not needed for schema initialization */
 
 	/* Might happen if EMPTY_RESULT_CALLBACKS are on */
 	if (argv == 0)
@@ -375,11 +377,12 @@ int
 __api_open(dbp, filename, mode, err_msgs)
 	DBSQL *dbp;
 	const char *filename;
-	int mode; /*TODO: argument not used*/
+	int mode;
 	char **err_msgs;
 {
 	int rc, i, mem;
 
+	(void)mode; /* File mode not used - defaults applied */
 	DBSQL_ASSERT(dbp);
 	DBSQL_ASSERT(err_msgs);
 
@@ -401,8 +404,16 @@ __api_open(dbp, filename, mode, err_msgs)
 		mem = 1;
 
 	for (i = 0; i < dbp->nDb; i++) {
-		rc = __sqldb_init(&dbp->aDb[i], dbp, filename, 0, mem,
-				  (i ? 0 : 1));
+		/*
+		 * Database 0 (main): uses provided filename and mem flag
+		 * Database 1 (temp): always NULL filename, always temp=1, always in-memory
+		 */
+		const char *db_name = (i == 0) ? filename : NULL;
+		int is_temp = (i == 1) ? 1 : 0;
+		int is_mem = (i == 1) ? 1 : mem;
+		int init_sm = (i == 0) ? 1 : 0;
+
+		rc = __sqldb_init(&dbp->aDb[i], dbp, db_name, is_temp, is_mem, init_sm);
 		if (rc != DBSQL_SUCCESS) {
 			__str_append(err_msgs, "unable to open database: ",
 				     filename, (char*)0);
@@ -749,6 +760,8 @@ __api_reset(dbsql_stmt_t* stmt, char **err_msgs)
 static int
 __default_busy_callback(DBSQL *dbp, void *arg, const char *not_used, int count)
 {
+	(void)dbp;      /* Database handle unused in busy handler */
+	(void)not_used; /* Table name unused in default handler */
 #if defined(__LP64) || defined(__LP64__)
 	u_int64_t timeout = (u_int64_t)arg;
 #else
@@ -917,11 +930,12 @@ __api_get_encoding()
  * finalize	    When finished with an aggregate function
  */
 int
-__api_create_function(DBSQL *dbp, const char *name, int encoding, int num_arg, void *user_data, /*TODO: not yet used*/ void (*func)(dbsql_func_t*, int, const char**), void (*step)(dbsql_func_t*, int, const char**), void (*finalize)(dbsql_func_t*))
+__api_create_function(DBSQL *dbp, const char *name, int encoding, int num_arg, void *user_data, void (*func)(dbsql_func_t*, int, const char**), void (*step)(dbsql_func_t*, int, const char**), void (*finalize)(dbsql_func_t*))
 {
 	func_def_t *p;
 	int name_len;
 
+	(void)encoding; /* Text encoding not yet implemented */
 	if (dbp == NULL || __safety_check(dbp))
 		return DBSQL_ERROR;
 
@@ -1216,7 +1230,6 @@ dbsql_create_env(DBSQL **dbpp, const char *dir, const char *crypt, int mode, u_i
 	int rc;
 	DB_ENV *dbenv;
 	int dir_p = 0;
-	int file_p = 0;
 	int env_open_flags = DB_INIT_LOCK | DB_INIT_LOG | DB_INIT_MPOOL |
 		DB_INIT_TXN | DB_CREATE;
 
