@@ -1,71 +1,40 @@
-# DBSQL - A SQL Database Engine
+# dbsql
 
-DBSQL is a small SQL92 relational database layer built on top of BerkeleyDB. It provides a SQLite-compatible interface while leveraging BerkeleyDB's robust storage engine.
+dbsql is the SQL language of [SQLite](https://sqlite.org) running on
+[Berkeley DB (libdb)](https://github.com/berkeleydb/libdb) storage, written
+in Berkeley DB's coding style.
 
-## Dependencies
+It began in 2007 as a fork of SQLite 2.8 with the b-tree and pager replaced
+by Berkeley DB. It is being rebuilt on **SQLite 3.53.4** and **libdb
+v2026.10.1**, with these goals:
 
-DBSQL uses BerkeleyDB 5.3.21 as its storage backend. The source is included as a git submodule.
+- Every SQL feature of SQLite 3.53.4, plus the FTS5 and ICU extensions and
+  the full interactive shell (as `dbsql`).
+- libdb for storage, transactions, logging and crash recovery. Each SQL
+  database is one libdb file, with tables and indexes as sub-databases.
+- A Berkeley DB-style C API (`DBSQL` handles with method tables, `dbsql_*`
+  functions, `DBSQL_*` constants). There is no `sqlite3_*` API.
 
-### Initial Setup
+## Status
 
-After cloning the repository, initialize and build BerkeleyDB:
+**Under reconstruction. Not yet usable.** The previous code (the SQLite 2.8
+derivative, and a 2026-03 hybrid that does not build) is preserved at the
+git tags `archive/sqlite28-2024` and `archive/hybrid-2026-03`. Progress is
+tracked in `.agent/STEERING.md`.
 
-```bash
-# Initialize the submodule
-git submodule update --init --recursive
+## Building
 
-# Build BerkeleyDB
-./deps/build_libdb.sh
-```
-
-The build script will configure and compile BerkeleyDB in `deps/libdb/build_unix/`.
-
-### Building DBSQL
-
-```bash
-# Create build directory and configure
-mkdir -p build_unix
+```sh
+git submodule update --init deps/libdb
 cd build_unix
-../dist/s_config
+../dist/s_config            # regenerate dist/configure (needs autoconf)
 ../dist/configure
-
-# Build
-make -j$(nproc)
-
-# Optional: Run tests
-make test
+gmake -j
+gmake check
 ```
-
-The configure script will automatically detect and use the BerkeleyDB submodule. If you have BerkeleyDB installed elsewhere, you can specify its location:
-
-```bash
-../dist/configure --with-berkeleydb=/path/to/berkeleydb
-```
-
-### Build Requirements
-
-- C compiler (gcc or clang)
-- Make
-- Autoconf/automake (for regenerating configure script)
-- BerkeleyDB 5.3.21 (included as submodule)
-
-## Project History
-
-This work started from the SQLite project by Dr. Richard Hipp. DBSQL extends that foundation by integrating BerkeleyDB as the storage engine, providing features like:
-
-- Multi-version concurrency control (MVCC)
-- ACID transactions with fine-grained locking
-- Proven reliability from BerkeleyDB's 25+ year history
 
 ## License
 
-dbsql is distributed under the ISC license; see `LICENSE`.  See LICENSE for details.
-
-BerkeleyDB is licensed under the Sleepycat Public License (compatible with GPL for open source use). Review both licenses before redistributing.
-
-
-## Resources
-
-- Website: http://dbsql.org
-- Documentation: See `docs/index.html` in this distribution
-- BerkeleyDB Documentation: https://docs.oracle.com/cd/E17276_01/html/index.html
+dbsql is distributed under the ISC license; see `LICENSE`.  SQLite is in the public domain.
+libdb is distributed under the Sleepycat license. Review the libdb licence
+terms before redistributing.
