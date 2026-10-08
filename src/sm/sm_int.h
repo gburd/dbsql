@@ -44,6 +44,9 @@
 /* Savepoint depth (SQLite allows unbounded; libdb nests child txns). */
 #define	SM_TXN_INITIAL		16
 
+/* Most payload __sm_payload_fetch exposes directly (upstream's page). */
+#define	SM_PAYLOAD_LOCAL_MAX	65536
+
 /*
  * sm_env_t --
  *	One libdb environment, shared process-wide by every connection that
@@ -65,6 +68,12 @@ typedef struct sm_env {
 #define	SM_ENV_CACHE		(32 * 1024 * 1024)
 #define	SM_PRIVATE_CACHE	(8 * 1024 * 1024)
 #define	SM_MEMLOG_SIZE		(4 * 1024 * 1024)
+
+/* Lock and log region sizing (see __sm_env_size_regions). */
+#define	SM_LOCKS_INIT		10000
+#define	SM_LOCKS_MAX		1000000
+#define	SM_LOG_REGIONMAX	(4 * 1024 * 1024)
+#define	SM_ENV_REGION_MAX	(512 * 1024 * 1024)
 
 /*
  * sm_dbh_t --

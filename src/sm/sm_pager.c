@@ -40,11 +40,96 @@ __sm_pager(sm_t *p)
 	return ((struct pager_t *)(void *)p->bt);
 }
 
+/*
+ * There is no VFS file under a libdb database, but the API (and the
+ * tests) can ask for one through DBSQL_FCNTL_FILE_POINTER and call its
+ * methods.  This one answers the questions and refuses I/O.
+ */
+static int
+__sm_nofile_ok(dbsql_file_t *f)
+{
+	(void)f;
+	return (DBSQL_OK);
+}
+static int
+__sm_nofile_read(dbsql_file_t *f, void *b, int n, int64_t o)
+{
+	(void)f; (void)b; (void)n; (void)o;
+	return (DBSQL_IOERR_READ);
+}
+static int
+__sm_nofile_write(dbsql_file_t *f, const void *b, int n, int64_t o)
+{
+	(void)f; (void)b; (void)n; (void)o;
+	return (DBSQL_IOERR_WRITE);
+}
+static int
+__sm_nofile_trunc(dbsql_file_t *f, int64_t sz)
+{
+	(void)f; (void)sz;
+	return (DBSQL_IOERR_TRUNCATE);
+}
+static int
+__sm_nofile_int(dbsql_file_t *f, int i)
+{
+	(void)f; (void)i;
+	return (DBSQL_OK);
+}
+static int
+__sm_nofile_size(dbsql_file_t *f, int64_t *sz)
+{
+	(void)f;
+	*sz = 0;
+	return (DBSQL_OK);
+}
+static int
+__sm_nofile_reserved(dbsql_file_t *f, int *res)
+{
+	(void)f;
+	*res = 0;
+	return (DBSQL_OK);
+}
+static int
+__sm_nofile_fcntl(dbsql_file_t *f, int op, void *arg)
+{
+	(void)f; (void)op; (void)arg;
+	return (DBSQL_NOTFOUND);
+}
+static int
+__sm_nofile_sector(dbsql_file_t *f)
+{
+	(void)f;
+	return (4096);
+}
+static int
+__sm_nofile_devchar(dbsql_file_t *f)
+{
+	(void)f;
+	return (0);
+}
+
+static const dbsql_io_methods_t __sm_nofile_methods = {
+	1,			/* i_version: no shm, no mmap */
+	__sm_nofile_ok,		/* x_close */
+	__sm_nofile_read,
+	__sm_nofile_write,
+	__sm_nofile_trunc,
+	__sm_nofile_int,	/* x_sync */
+	__sm_nofile_size,
+	__sm_nofile_int,	/* lock */
+	__sm_nofile_int,	/* unlock */
+	__sm_nofile_reserved,
+	__sm_nofile_fcntl,
+	__sm_nofile_sector,
+	__sm_nofile_devchar,
+	NULL, NULL, NULL, NULL, NULL, NULL
+};
+
 /* PUBLIC: dbsql_file_t *__sm_pager_file __P((pager_t *)); */
 dbsql_file_t *
 __sm_pager_file(pager_t *pager)
 {
-	static dbsql_file_t none;	/* p_methods == NULL: no file ops */
+	static dbsql_file_t none = { &__sm_nofile_methods };
 
 	(void)pager;
 	return (&none);

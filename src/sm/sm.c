@@ -86,6 +86,36 @@ __sm_txn_push(sm_txn_t *t, u_int32_t flags)
 }
 
 /*
+ * __sm_dbh_free --
+ *	Close and free a cached handle.  Cursors still pointing at it drop
+ *	the pointer (and their DBC, which libdb requires closed first) and
+ *	fetch a fresh handle when next used.
+ */
+static void
+__sm_dbh_free(sm_shared_t *bt, sm_dbh_t *h)
+{
+	sm_cursor_t *cur;
+
+	for (cur = bt->cursors; cur != NULL; cur = cur->next)
+		if (cur->dbh == h) {
+			if (cur->dbc != NULL) {
+				(void)cur->dbc->close(cur->dbc);
+				cur->dbc = NULL;
+				cur->dbc_txn = NULL;
+				if (cur->state == CURSOR_VALID) {
+					cur->state = CURSOR_REQUIRESEEK;
+					cur->saved = 1;
+				}
+			}
+			cur->dbh = NULL;
+		}
+	(void)h->dbp->close(h->dbp, DB_NOSYNC);
+	if (h->key_info != NULL)
+		__key_info_unref(h->key_info);
+	dbsql_free(h);
+}
+
+/*
  * __sm_dbh_discard_level --
  *	A txn at stack level 'level' (or deeper) is about to end; libdb
  *	invalidates a DB handle opened inside an aborted txn, so handles
@@ -101,10 +131,7 @@ __sm_dbh_discard_level(sm_shared_t *bt, int level, int aborting)
 		if (h->level >= level) {
 			if (aborting) {
 				*pp = h->next;
-				(void)h->dbp->close(h->dbp, DB_NOSYNC);
-				if (h->key_info != NULL)
-					__key_info_unref(h->key_info);
-				dbsql_free(h);
+				__sm_dbh_free(bt, h);
 				continue;
 			}
 			h->level = level > 0 ? level - 1 : 0;
@@ -494,10 +521,7 @@ __sm_close(sm_t *p)
 		(void)__sm_rollback(p, DBSQL_OK, 0);
 	while ((h = bt->handles) != NULL) {
 		bt->handles = h->next;
-		(void)h->dbp->close(h->dbp, DB_NOSYNC);
-		if (h->key_info != NULL)
-			__key_info_unref(h->key_info);
-		dbsql_free(h);
+		__sm_dbh_free(bt, h);
 	}
 	if (bt->meta != NULL)
 		(void)bt->meta->close(bt->meta, DB_NOSYNC);
@@ -1020,10 +1044,7 @@ __sm_dbh_close_table(sm_shared_t *bt, u_int32_t pgno)
 	for (pp = &bt->handles; (h = *pp) != NULL; pp = &h->next)
 		if (h->pgno == pgno) {
 			*pp = h->next;
-			(void)h->dbp->close(h->dbp, DB_NOSYNC);
-			if (h->key_info != NULL)
-				__key_info_unref(h->key_info);
-			dbsql_free(h);
+			__sm_dbh_free(bt, h);
 			return;
 		}
 }
@@ -1340,6 +1361,8 @@ __sm_last_page(sm_t *p)
 int
 __sm_secure_delete(sm_t *p, int on)
 {
+	if (p == NULL)
+		return (0);
 	if (on >= 0)
 		p->bt->secure_delete = on;
 	return (p->bt->secure_delete);
@@ -1386,12 +1409,19 @@ __sm_get_filename(sm_t *p)
 	return (p->bt->filename);
 }
 
-/* PUBLIC: const char *__sm_get_journalname __P((sm_t *)); */
+/*
+ * __sm_get_journalname --
+ *	There is no rollback journal file (libdb's log replaces it); NULL
+ *	makes the multi-database commit leave this database out of the
+ *	super-journal.
+ *
+ * PUBLIC: const char *__sm_get_journalname __P((sm_t *));
+ */
 const char *
 __sm_get_journalname(sm_t *p)
 {
 	(void)p;
-	return ("");
+	return (NULL);
 }
 
 /* PUBLIC: int __sm_is_readonly __P((sm_t *)); */

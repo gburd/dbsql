@@ -129,6 +129,29 @@ __sm_env_configure(sm_env_t *env)
 }
 
 /*
+ * __sm_env_size_regions --
+ *	A transaction holds a lock on every page it touches until it ends,
+ *	and SQL transactions can touch many pages (one statement can write
+ *	a whole table).  libdb's defaults (1000 locks, small log region)
+ *	are sized for short txns; raise them.  The regions grow on demand
+ *	up to SM_ENV_REGION_MAX.
+ */
+static void
+__sm_env_size_regions(sm_env_t *env)
+{
+	DB_ENV *dbenv;
+
+	dbenv = env->dbenv;
+	(void)dbenv->set_memory_init(dbenv, DB_MEM_LOCK, SM_LOCKS_INIT);
+	(void)dbenv->set_memory_init(dbenv, DB_MEM_LOCKOBJECT, SM_LOCKS_INIT);
+	(void)dbenv->set_lk_max_locks(dbenv, SM_LOCKS_MAX);
+	(void)dbenv->set_lk_max_objects(dbenv, SM_LOCKS_MAX);
+	(void)dbenv->set_lk_tablesize(dbenv, SM_LOCKS_INIT);
+	(void)dbenv->set_lg_regionmax(dbenv, SM_LOG_REGIONMAX);
+	(void)dbenv->set_memory_max(dbenv, 0, SM_ENV_REGION_MAX);
+}
+
+/*
  * __sm_env_open_persistent --
  *	Return (creating if needed) the shared environment for 'dir', a
  *	canonical absolute directory path.  The caller holds a reference
@@ -176,6 +199,7 @@ __sm_env_open_persistent(const char *dir, sm_env_t **envp, char **errp)
 	(void)env->dbenv->set_lk_detect(env->dbenv, DB_LOCK_DEFAULT);
 	(void)env->dbenv->log_set_config(env->dbenv, DB_LOG_AUTO_REMOVE, 1);
 	(void)env->dbenv->set_cachesize(env->dbenv, 0, SM_ENV_CACHE, 1);
+	__sm_env_size_regions(env);
 	flags = DB_CREATE | DB_INIT_LOCK | DB_INIT_LOG | DB_INIT_MPOOL |
 	    DB_INIT_TXN | DB_THREAD | DB_REGISTER | DB_RECOVER;
 	if ((ret = env->dbenv->open(env->dbenv, dir, flags, 0644)) != 0) {
@@ -240,6 +264,8 @@ __sm_env_open_private(int txn, sm_env_t **envp)
 	} else
 		env->flags |= SM_ENV_NOTXN;
 	(void)env->dbenv->set_cachesize(env->dbenv, 0, SM_PRIVATE_CACHE, 1);
+	if (txn)
+		__sm_env_size_regions(env);
 	if (dbsql_temp_directory != NULL)
 		(void)env->dbenv->set_tmp_dir(env->dbenv,
 		    dbsql_temp_directory);

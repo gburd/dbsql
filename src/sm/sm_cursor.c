@@ -258,6 +258,14 @@ __sm_cursor(sm_t *p, pgno_t i_table, int wr_flag, key_info_t *ki,
 	}
 	if (rc != DBSQL_OK)
 		return (rc);
+	/*
+	 * An index cursor (key_info) on a rowid table or the reverse: the
+	 * schema's rootpage is wrong (upstream sees the wrong page type).
+	 */
+	if (cur->dbh != NULL && (ki == NULL) != (cur->dbh->is_intkey != 0)) {
+		cur->bt = NULL;
+		return (DBSQL_CORRUPT_BKPT);
+	}
 	cur->next = bt->cursors;
 	bt->cursors = cur;
 	return (DBSQL_OK);
@@ -682,19 +690,31 @@ __sm_max_record_size(sm_cursor_t *cur)
 
 /*
  * __sm_payload_fetch --
- *	A pointer to the whole payload of the current entry.
+ *	A pointer to the start of the current entry's payload.  Upstream
+ *	returns only the part on the b-tree page, never more than 64 KiB,
+ *	and the VDBE reads anything beyond *amt through __sm_payload; the
+ *	same limit is kept here.
  *
  * PUBLIC: const void *__sm_payload_fetch __P((sm_cursor_t *, u_int32_t *));
  */
+static const void *
+__sm_payload_all(sm_cursor_t *cur, u_int32_t *amt)
+{
+	const DBT *d;
+
+	d = cur->dbh->is_intkey ? &cur->data : &cur->key;
+	*amt = d->size;
+	return (d->data);
+}
+
 const void *
 __sm_payload_fetch(sm_cursor_t *cur, u_int32_t *amt)
 {
-	if (cur->dbh->is_intkey) {
-		*amt = cur->data.size;
-		return (cur->data.data);
-	}
-	*amt = cur->key.size;
-	return (cur->key.data);
+	const DBT *d;
+
+	d = cur->dbh->is_intkey ? &cur->data : &cur->key;
+	*amt = d->size > SM_PAYLOAD_LOCAL_MAX ? SM_PAYLOAD_LOCAL_MAX : d->size;
+	return (d->data);
 }
 
 /*
@@ -710,7 +730,7 @@ __sm_payload(sm_cursor_t *cur, u_int32_t offset, u_int32_t amt, void *buf)
 	const u_int8_t *p;
 	u_int32_t n;
 
-	p = __sm_payload_fetch(cur, &n);
+	p = __sm_payload_all(cur, &n);
 	if ((u_int64_t)offset + amt > n)
 		return (DBSQL_CORRUPT_BKPT);
 	memcpy(buf, p + offset, amt);
@@ -884,10 +904,10 @@ __sm_transfer_row(sm_cursor_t *dest, sm_cursor_t *src, int64_t i_key)
 	memset(&x, 0, sizeof(x));
 	if (dest->dbh->is_intkey) {
 		x.n_key = i_key;
-		x.data = __sm_payload_fetch(src, &n);
+		x.data = __sm_payload_all(src, &n);
 		x.n_data = (int)n;
 	} else {
-		x.key = __sm_payload_fetch(src, &n);
+		x.key = __sm_payload_all(src, &n);
 		x.n_key = n;
 	}
 	return (__sm_insert(dest, &x, 0, 0));
@@ -1078,7 +1098,7 @@ __sm_integrity_check(DBSQL *db, sm_t *p, pgno_t *roots, dbsql_value_t *cnts,
 		for (rc = __sm_first(&cur, &res); rc == DBSQL_OK && !res;
 		    rc = __sm_next(&cur, 0)) {
 			n++;
-			rec = __sm_payload_fetch(&cur, &sz);
+			rec = __sm_payload_all(&cur, &sz);
 			if (sz > 0 && !__sm_rec_valid(rec, sz, NULL) &&
 			    nerr < mx_err)
 				dbsql_str_appendf(&acc,
