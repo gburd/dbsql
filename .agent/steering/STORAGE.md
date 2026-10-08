@@ -161,3 +161,39 @@ directories is not atomic across them. This is listed in DIVERGENCES.md.
   txn abort.
 - An unnamed temporary database in an mpool-only private env spills to its
   temp directory when the cache fills (10 MB into a 256 KB cache).
+
+## Measured libdb constraints that shape the implementation (2026-10-08)
+
+1. **Handle lifetime vs. txns.** A `DB` handle opened inside a txn that later
+   **aborts** becomes unusable (`EINVAL`). A sub-database created inside an
+   aborted txn does not exist afterwards (`ENOENT`). If the txn commits, the
+   handle stays valid.
+   → Cached sub-database handles are tagged with the txn level that opened
+   them. When that level aborts, every handle it opened is discarded
+   (closed without use) and reopened lazily on next use.
+2. **Parent locked while a child is active.** While a child txn is active,
+   `DB->open` and `put` on the parent return `EPERM`; `get` on the parent
+   still works.
+   → All opens and writes use the innermost txn (`stack[depth-1]`).
+   Together with (1), this is why handles track their opening level.
+3. **Opening a sub-database another txn is creating.** With `DB_TXN_NOWAIT`,
+   an auto-commit `DB->open` of an existing sub-database fails with
+   `DB_LOCK_DEADLOCK` when another txn holds an uncommitted `DB_CREATE` in
+   the same file.
+   → Opens always run inside the connection's current txn, never
+   auto-commit. A `DB_LOCK_DEADLOCK` or `DB_LOCK_NOTGRANTED` from open maps
+   to `DBSQL_BUSY`.
+4. **Dropping a sub-database.** `dbremove` returns `DB_LOCK_NOTGRANTED`
+   while any other handle on that sub-database is open (persistent and
+   private envs alike).
+   → `__sm_drop_table` closes every cached handle on that table (all cursors
+   must already be closed, as upstream also requires) before `dbremove` in
+   the current txn. `__sm_clear_table` uses `DB->truncate`, which works with
+   other handles open and returns the old count.
+5. **Page size and statistics.**
+   - New btrees default to a 16 KB page. dbsql applies `PRAGMA page_size`
+     (stored in meta) with `set_pagesize` before `DB->open` creates each
+     sub-database.
+   - `DB_FAST_STAT` returns 0 for `bt_nkeys` on a new btree, so counts use a
+     cursor walk.
+   - `DB_SET_RANGE` with an empty key positions on the first key.

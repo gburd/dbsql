@@ -1,0 +1,7 @@
+lemon.c and lempar.c are the LALR(1) parser generator and its parser
+template from SQLite 3.53.4 (tool/lemon.c, tool/lempar.c), unchanged.
+They are public domain.  lemon is a build-host tool: it turns
+src/sql_parser.y and src/ext/fts5/fts5_parser.y into C at build time.
+
+  lemon.c   sha256 4d754e12d4693a12c2ca2e02dd132dd251e6329ff2d8ae5874bf0d0fa58face6
+  lempar.c  sha256 4d82ab5091eda68963791599ab8635ad82e5bbb2de33f1ee5217b72c9659915a
