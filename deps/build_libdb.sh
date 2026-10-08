@@ -23,7 +23,11 @@ for p in "$here"/patches/*.patch; do
 	fi
 done
 cd "$db/build_unix"
-[ -f Makefile ] || ../dist/configure --enable-shared "$@"
+# Reconfigure when the pinned release changed since the last configure.
+if [ ! -f Makefile ] || [ ../dist/RELEASE -nt Makefile ] || [ $# -gt 0 ]; then
+	[ -f Makefile ] && $MAKE -s distclean >/dev/null 2>&1 || true
+	../dist/configure --enable-shared "$@"
+fi
 $MAKE -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
 ls .libs/libdb-*.so* >/dev/null 2>&1 || ls libdb-*.a >/dev/null
 echo "libdb built in $db/build_unix: $(grep 'define	DB_VERSION_STRING' db.h)"
