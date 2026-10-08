@@ -6,7 +6,7 @@ in Berkeley DB's coding style.
 
 It began in 2007 as a fork of SQLite 2.8 with the b-tree and pager replaced
 by Berkeley DB. It is being rebuilt on **SQLite 3.53.4** and **libdb
-v2026.10.1**, with these goals:
+v2026.10.2**, with these goals:
 
 - Every SQL feature of SQLite 3.53.4, plus the FTS5 and ICU extensions and
   the full interactive shell (as `dbsql`).

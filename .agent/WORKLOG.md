@@ -24,7 +24,7 @@ things are and how to run them**. Append to it, and keep it accurate.
 - **libdb:** built from `deps/libdb/build_unix` with `--enable-debug
   --enable-diagnostic --enable-test --with-tcl`, and installed to
   `~/w/inst/libdb` (`libdb-2026.0.so`, `db.h`). It needs
-  `deps/patches/libdb-v2026.10.1-freebsd15.patch` applied to build shared
+  `deps/patches/libdb-v2026.10.2-freebsd.patch` applied to build shared
   libraries on FreeBSD 10+.
 - **Python:** `python3.11`. libclang bindings are in `~/w/venv` (not
   currently used).

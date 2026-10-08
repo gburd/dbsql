@@ -57,10 +57,10 @@ index d8125842..74617339 100644
        _LT_TAGVAR(hardcode_direct, $1)=yes
        _LT_TAGVAR(hardcode_minus_L, $1)=yes
 diff --git a/dist/configure b/dist/configure
-index e4b933e9..4408eeee 100755
+index a2be9f68..ac513cf1 100755
 --- a/dist/configure
 +++ b/dist/configure
-@@ -14664,7 +14664,7 @@ fi
+@@ -14706,7 +14706,7 @@ fi
        hardcode_shlibpath_var=no
        ;;
  
@@ -69,7 +69,7 @@ index e4b933e9..4408eeee 100755
        ld_shlibs=no
        ;;
  
-@@ -14672,7 +14672,7 @@ fi
+@@ -14714,7 +14714,7 @@ fi
      # support.  Future versions do this automatically, but an explicit c++rt0.o
      # does not break anything, and helps significantly (at the cost of a little
      # extra space).
@@ -78,7 +78,7 @@ index e4b933e9..4408eeee 100755
        archive_cmds='$LD -Bshareable -o $lib $libobjs $deplibs $linker_flags /usr/lib/c++rt0.o'
        hardcode_libdir_flag_spec='-R$libdir'
        hardcode_direct=yes
-@@ -14680,7 +14680,7 @@ fi
+@@ -14722,7 +14722,7 @@ fi
        ;;
  
      # Unfortunately, older versions of FreeBSD 2 do not have this feature.
@@ -87,7 +87,7 @@ index e4b933e9..4408eeee 100755
        archive_cmds='$LD -Bshareable -o $lib $libobjs $deplibs $linker_flags'
        hardcode_direct=yes
        hardcode_minus_L=yes
-@@ -15666,7 +15666,7 @@ dgux*)
+@@ -15708,7 +15708,7 @@ dgux*)
    shlibpath_var=LD_LIBRARY_PATH
    ;;
  
@@ -96,7 +96,7 @@ index e4b933e9..4408eeee 100755
    dynamic_linker=no
    ;;
  
-@@ -15677,7 +15677,7 @@ freebsd* | dragonfly*)
+@@ -15719,7 +15719,7 @@ freebsd* | dragonfly*)
      objformat=`/usr/bin/objformat`
    else
      case $host_os in
@@ -105,7 +105,7 @@ index e4b933e9..4408eeee 100755
      *) objformat=elf ;;
      esac
    fi
-@@ -15695,7 +15695,7 @@ freebsd* | dragonfly*)
+@@ -15737,7 +15737,7 @@ freebsd* | dragonfly*)
    esac
    shlibpath_var=LD_LIBRARY_PATH
    case $host_os in
@@ -114,7 +114,7 @@ index e4b933e9..4408eeee 100755
      shlibpath_overrides_runpath=yes
      ;;
    freebsd3.[01]* | freebsdelf3.[01]*)
-@@ -19580,7 +19580,7 @@ dgux*)
+@@ -19622,7 +19622,7 @@ dgux*)
    shlibpath_var=LD_LIBRARY_PATH
    ;;
  
@@ -123,7 +123,7 @@ index e4b933e9..4408eeee 100755
    dynamic_linker=no
    ;;
  
-@@ -19591,7 +19591,7 @@ freebsd* | dragonfly*)
+@@ -19633,7 +19633,7 @@ freebsd* | dragonfly*)
      objformat=`/usr/bin/objformat`
    else
      case $host_os in
@@ -132,7 +132,7 @@ index e4b933e9..4408eeee 100755
      *) objformat=elf ;;
      esac
    fi
-@@ -19609,7 +19609,7 @@ freebsd* | dragonfly*)
+@@ -19651,7 +19651,7 @@ freebsd* | dragonfly*)
    esac
    shlibpath_var=LD_LIBRARY_PATH
    case $host_os in
@@ -141,20 +141,3 @@ index e4b933e9..4408eeee 100755
      shlibpath_overrides_runpath=yes
      ;;
    freebsd3.[01]* | freebsdelf3.[01]*)
-diff --git a/src/os/os_aio_kqueue.c b/src/os/os_aio_kqueue.c
-index cda35574..f9829e37 100644
---- a/src/os/os_aio_kqueue.c
-+++ b/src/os/os_aio_kqueue.c
-@@ -26,6 +26,12 @@
- 
- #ifdef HAVE_AIO_KQUEUE
- 
-+/*
-+ * libdb's dbinc/queue.h defines QUEUE_MACRO_DEBUG (to 0); FreeBSD's
-+ * <sys/queue.h>, pulled in by <sys/event.h>, tests it with #ifdef and then
-+ * hits a #warn directive that clang rejects.  Hide libdb's definition.
-+ */
-+#undef	QUEUE_MACRO_DEBUG
- #include <sys/event.h>
- #include <sys/types.h>
- #include <aio.h>
