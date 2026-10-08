@@ -215,6 +215,8 @@ class Renamer:
 	def _map(self, t):
 		if t in self.keep or t in C_KEYWORDS:
 			return t
+		if re.match(r'^(yy|YY|fts5yy|fts5YY)', t):
+			return t	# lemon-generated parser identifiers
 		if t in self.overrides:
 			return self.overrides[t]
 		if t in self.global_overrides:

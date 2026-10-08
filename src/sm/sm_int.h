@@ -1,0 +1,179 @@
+/*-
+ * DBSQL - A SQL database engine.
+ *
+ * Copyright (C) 2007-2026  The DBSQL Group, Inc.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+/*
+ * sm_int.h --
+ *	Private definitions of the libdb storage manager.  The public seam
+ *	is src/inc/sm.h (SQLite's btree.h, transformed); this header gives
+ *	the concrete layout of the types sm.h only forward-declares.  See
+ *	.agent/steering/STORAGE.md for the design.
+ */
+
+#ifndef	_SM_INT_H_
+#define	_SM_INT_H_
+
+#include <db.h>
+
+/* Name of the per-file metadata sub-database and its format record. */
+#define	SM_META_DB		"__dbsql_meta"
+#define	SM_FORMAT_KEY		"format"
+#define	SM_FORMAT_MAGIC		"dbsql 1"
+
+/* Sub-database name for SQL table/index number N: "t<N>". */
+#define	SM_SUBDB_FMT		"t%u"
+#define	SM_SUBDB_MAX		24
+
+/* Bytes in an encoded rowid key (big-endian, sign bit flipped). */
+#define	SM_ROWID_KEYLEN		8
+
+/* Savepoint depth (SQLite allows unbounded; libdb nests child txns). */
+#define	SM_TXN_INITIAL		16
+
+/*
+ * sm_env_t --
+ *	One libdb environment, shared process-wide by every connection that
+ *	opens a database file in the same directory (persistent), or owned
+ *	by one connection (private: :memory:, temp, ephemeral).
+ */
+typedef struct sm_env {
+	DB_ENV *dbenv;
+	char *home;			/* Directory (NULL for private envs). */
+	int refs;			/* Connections/handles using it. */
+	u_int32_t flags;
+#define	SM_ENV_PRIVATE	0x01		/* DB_PRIVATE, connection-owned. */
+#define	SM_ENV_NOTXN	0x02		/* mpool only (ephemeral tables). */
+	struct sm_env *next;		/* Registry list (persistent only). */
+} sm_env_t;
+
+/*
+ * sm_dbh_t --
+ *	A cached, open libdb DB handle for one sub-database (one SQL table
+ *	or index) of one sm_shared_t.  DB->app_private points back here so
+ *	the comparator can find key_info.
+ */
+typedef struct sm_dbh {
+	DB *dbp;
+	u_int32_t pgno;			/* SQL root page number. */
+	int is_intkey;			/* Rowid table (BTREE_INTKEY). */
+	key_info_t *key_info;		/* Private copy; NULL for rowid tables. */
+	struct sm_dbh *next;
+} sm_dbh_t;
+
+/*
+ * sm_txn_t --
+ *	The transaction state of one connection in one environment.  All
+ *	sm_t handles of a connection that live in the same environment share
+ *	one sm_txn_t, so a transaction spanning main and same-directory
+ *	attachments commits atomically.
+ *
+ *	stack[0] is the top-level txn (DB_TXN_SNAPSHOT for persistent envs).
+ *	stack[1] is the level-0 content child; every SQL write goes to
+ *	stack[depth - 1].  Savepoint k (SQLite numbering, 0-based) is the
+ *	child at stack[k + 2].
+ */
+typedef struct sm_txn {
+	sm_env_t *env;
+	DBSQL *db;			/* Owning connection. */
+	DB_TXN **stack;
+	int depth;			/* Entries used in stack[]. */
+	int alloc;			/* Entries allocated. */
+	int state;			/* DBSQL_TXN_NONE / _READ / _WRITE. */
+	int refs;			/* sm_t handles sharing this txn. */
+	int committing;			/* Phase two already done this txn. */
+	u_int32_t commit_flags;		/* DB_TXN_NOSYNC etc. (synchronous). */
+	struct sm_txn *next;		/* Per-connection list. */
+} sm_txn_t;
+
+/*
+ * sm_shared_t --
+ *	One open database file (or private in-memory database) as seen by
+ *	one connection.  dbsql is built with DBSQL_OMIT_SHARED_CACHE, so
+ *	there is exactly one sm_t per sm_shared_t.
+ */
+struct sm_shared_t {
+	sm_env_t *env;
+	sm_txn_t *txn;			/* NULL for ephemeral (non-txn) dbs. */
+	char *filename;			/* As given to __sm_open; "" if none. */
+	char *path;			/* libdb file name, NULL if in-memory. */
+	char lock_obj[512];		/* Write-lock object: path + "\0wr". */
+	u_int32_t lock_obj_len;
+	DB *meta;			/* __dbsql_meta sub-database. */
+	sm_dbh_t *handles;		/* Open sub-database handles. */
+	u_int32_t page_size;		/* For newly created sub-databases. */
+	int cache_size;			/* PRAGMA cache_size (stored). */
+	int auto_vacuum;		/* PRAGMA auto_vacuum (stored). */
+	u_int32_t pager_flags;		/* PRAGMA synchronous etc. */
+	void *schema;			/* __sm_schema blob. */
+	void (*free_schema)(void *);
+	int in_trans;			/* DBSQL_TXN_* for this database. */
+	u_int32_t data_version;		/* For BTREE_DATA_VERSION. */
+	int read_only;
+	u_int32_t flags;
+#define	SM_EPHEMERAL	0x01		/* BTREE_SINGLE|BTREE_OMIT_JOURNAL. */
+#define	SM_MEMORY	0x02		/* :memory: or temp database. */
+#define	SM_WRLOCKED	0x04		/* Holds the database write lock. */
+	struct sm_cursor_t *cursors;	/* Open cursors (linked by next). */
+};
+
+/*
+ * sm_t --
+ *	A connection's handle on one database (DBSQL.dbs[i].bt).
+ */
+struct sm_t {
+	DBSQL *db;
+	sm_shared_t *bt;
+	u_int8_t in_trans;		/* DBSQL_TXN_* (mirrors bt->in_trans). */
+	int wants_write;
+};
+
+/*
+ * sm_cursor_t --
+ *	A cursor on one sub-database.  key/data hold the current entry in
+ *	buffers owned by the cursor (DB_DBT_REALLOC); payload pointers
+ *	returned to the VDBE stay valid until the cursor moves.
+ */
+struct sm_cursor_t {
+	sm_t *btree;
+	sm_shared_t *bt;
+	sm_dbh_t *dbh;
+	DBC *dbc;			/* NULL when closed (saved position). */
+	DB_TXN *dbc_txn;		/* Txn the DBC was opened in. */
+	key_info_t *key_info;		/* As passed to __sm_cursor. */
+	u_int32_t pgno;
+	int wr_flag;
+	u_int8_t state;			/* CURSOR_* (as upstream btree). */
+	u_int8_t cur_flags;
+	u_int8_t hints;
+	int skip_next;			/* After delete: +1/-1, see upstream. */
+	int fault;			/* Error code when state==CURSOR_FAULT. */
+	DBT key;			/* Current key (rowid key or record). */
+	DBT data;			/* Current data (row record or empty). */
+	int64_t rowid;			/* Decoded key of a rowid cursor. */
+	struct sm_cursor_t *next;	/* sm_shared_t.cursors list. */
+};
+
+/* Cursor states, as upstream btreeInt.h. */
+#define	CURSOR_VALID		0
+#define	CURSOR_INVALID		1
+#define	CURSOR_SKIPNEXT		2
+#define	CURSOR_REQUIRESEEK	3
+#define	CURSOR_FAULT		4
+
+#include "sm_ext.h"
+
+#endif /* !_SM_INT_H_ */

@@ -69,3 +69,5 @@ Sqlite_SafeInit		Dbsql_legacy_SafeInit
 Sqlite_SafeUnload	Dbsql_legacy_SafeUnload
 sqlite3_Init		dbsql_Init
 sqlite_Init		dbsql_legacy_Init
+# fields whose array name is already plural
+aSortFlags	sort_flags

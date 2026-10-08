@@ -95,11 +95,6 @@ FIXUPS = [
 	(r'(^|/)test_osinst\.c$',
 	 r'"dbsql_ostrace1\.\.\.\.\.", 20\)', '"dbsql_ostrace1......", 20)',
 	 'reserved prefix: test harness keeps the 20-byte osinst log magic'),
-	# --- lemon action variables -------------------------------------------
-	# yyLookaheadToken is a parameter of the lemon-generated yy_reduce().
-	(r'(^|/)sql_parser\.y$',
-	 r'\byy_lookahead_token\b', 'yyLookaheadToken',
-	 'lemon-generated identifiers keep their spelling'),
 ]
 
 
