@@ -300,11 +300,27 @@ def rename_tokens(toks, res, renamer, path, report):
 	return out
 
 
+COMMENT_KEEP = set('''
+SQLite SQL ACID API UTF UTF8 UTF16 BLOB NULL ASCII EBCDIC IEEE ISO POSIX
+JSON JSONB TCL Tcl ICU VFS WAL OS
+'''.split())
+
+
 def rename_comment(text, renamer):
+	"""Identifiers in comments follow the code: every word that names an
+	identifier the renamer changes (sqlite3Foo, pTab, zName, Table, xStep,
+	SQLITE_OK ...) is rewritten the same way, so comments keep describing
+	the code.  Prose words are left alone because the rules only fire on
+	Hungarian/camelCase/typedef shapes."""
 	def sub(m):
 		w = m.group(0)
-		if re.match(r'^sqlite3[A-Z_]|^SQLITE_|^sqlite3$', w) or \
-		    w in renamer.typedefs or w in renamer.overrides:
+		if w in COMMENT_KEEP or w in renamer.keep:
+			return w
+		if re.match(r'^sqlite3[A-Z_]|^SQLITE_|^sqlite3$|^sqlite_', w) or \
+		    w in renamer.typedefs or w in renamer.overrides or \
+		    w in renamer.global_overrides or w in renamer.macros:
+			return renamer.map(w)
+		if re.search(r'[a-z][A-Z]', w):	# camelCase: pTab, zErrMsg
 			return renamer.map(w)
 		return w
 	text = re.sub(r'\b[A-Za-z_][A-Za-z0-9_]*\b', sub, text)
@@ -520,6 +536,13 @@ def main():
 	external = set(l.strip() for l in
 	    open(os.path.join(HERE, 'external.txt')) if l.strip())
 	external -= renamer.filescope	# a dbsql name that happens to match
+	# Only names that are genuinely an external API's spelling: Tcl_*,
+	# TCL_*, ClientData..., ICU (U*/u_*/UErrorCode...), zlib (deflate*,
+	# inflate*, z_stream, Bytef...), libc/POSIX CamelCase-free names are
+	# never touched anyway.  Hungarian-looking names that merely occur in
+	# some system header (pData, zError) are NOT protected.
+	hung = re.compile(r'^(p|z|n|a|i|x|b|e|pp|pz|az|ap|aa|ai)[A-Z]')
+	external = set(e for e in external if not hung.match(e))
 	renamer.keep |= external
 	renamer.cache.clear()
 	global_names = set(renamer.filescope)
