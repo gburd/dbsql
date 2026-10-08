@@ -21,8 +21,16 @@ trap 'rm -f $tmp' 0 1 2 3 13 15
 	echo "extern \"C\" {"
 	echo "#endif"
 	echo ""
+	# "PUBLIC:" lines, in block comments (" * PUBLIC: ...") or one-line
+	# comments ("/* PUBLIC: ... */"); a prototype continues on following
+	# PUBLIC: lines until its ';'.
 	for f in ../src/sm/*.c; do
-		sed -n -e 's/^ \* PUBLIC: \(.*\)$/\1/p' "$f" |
+		sed -n -e 's|^/\* PUBLIC: \(.*\) \*/$|\1|p' \
+		    -e 's|^/\* PUBLIC: \(.*\)$|\1|p' \
+		    -e 's|^ \* PUBLIC: \(.*\) \*/$|\1|p' \
+		    -e 's|^ \* PUBLIC: \(.*\)$|\1|p' "$f" |
+		    awk '{ line = line (line == "" ? "" : " ") $0 }
+			/;[ \t]*$/ { gsub(/[ \t]+/, " ", line); print line; line = "" }' |
 		    sed -e 's/ __P((\(.*\)));/(\1);/'
 	done
 	echo ""

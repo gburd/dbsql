@@ -95,6 +95,30 @@ FIXUPS = [
 	(r'(^|/)test_osinst\.c$',
 	 r'"dbsql_ostrace1\.\.\.\.\.", 20\)', '"dbsql_ostrace1......", 20)',
 	 'reserved prefix: test harness keeps the 20-byte osinst log magic'),
+	# --- storage manager hooks -------------------------------------------
+	# The connection keeps the list of its libdb transaction states, one
+	# per environment (src/sm/sm.c: __sm_txn_for).  The native validation
+	# build never touches it.
+	(r'(^|/)inc/dbsql_int\.h$',
+	 r'^(  busy_handler_t busy_handler;      /\* Busy callback \*/)$',
+	 r'\1\n  struct sm_txn *sm_txns;          /* libdb txn state per env (sm/) */',
+	 'DBSQL.sm_txns for the libdb storage manager'),
+	# Upstream bug: with DBSQL_OMIT_WAL the shm object (and the debug-only
+	# __unix_describe_shm, defined in the WAL section) does not exist, but
+	# the file-stat JSON writer still calls it.  Guard the call.
+	(r'(^|/)os/os_unix\.c$',
+	 r'(\n)(      if\( file->shm \)\{\n        dbsql_str_appendall\(str, ",\\"shm\\":"\);\n        __unix_describe_shm\(str, file->shm\);\n      \})',
+	 r'\1#ifndef DBSQL_OMIT_WAL\n\2\n#endif',
+	 'os_unix.c: describe the shm object only when WAL is compiled in'),
+	# --- the shell -------------------------------------------------------
+	# The shell sniffs a file's first 16 bytes for the SQLite header to
+	# decide how to open it.  A dbsql database is a libdb file, which
+	# __is_database_file() recognises through the storage manager; the
+	# SQLite magic test can never match a dbsql database.
+	(r'(^|/)shell/dbsql\.c$',
+	 r'n==1 && memcmp\(buf, "SQLite format 3", 16\)==0',
+	 '0 /* dbsql: libdb files are recognised by __is_database_file() */',
+	 'shell: no SQLite-format header sniffing'),
 ]
 
 

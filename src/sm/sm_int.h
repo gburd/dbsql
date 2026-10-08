@@ -57,8 +57,14 @@ typedef struct sm_env {
 	u_int32_t flags;
 #define	SM_ENV_PRIVATE	0x01		/* DB_PRIVATE, connection-owned. */
 #define	SM_ENV_NOTXN	0x02		/* mpool only (ephemeral tables). */
+	char errmsg[256];		/* Last libdb error message. */
 	struct sm_env *next;		/* Registry list (persistent only). */
 } sm_env_t;
+
+/* Cache sizes: shared per directory; private per connection. */
+#define	SM_ENV_CACHE		(32 * 1024 * 1024)
+#define	SM_PRIVATE_CACHE	(8 * 1024 * 1024)
+#define	SM_MEMLOG_SIZE		(4 * 1024 * 1024)
 
 /*
  * sm_dbh_t --
@@ -70,7 +76,8 @@ typedef struct sm_dbh {
 	DB *dbp;
 	u_int32_t pgno;			/* SQL root page number. */
 	int is_intkey;			/* Rowid table (BTREE_INTKEY). */
-	key_info_t *key_info;		/* Private copy; NULL for rowid tables. */
+	key_info_t *key_info;		/* Referenced; NULL for rowid tables. */
+	int level;			/* Txn stack level that opened it. */
 	struct sm_dbh *next;
 } sm_dbh_t;
 
@@ -106,6 +113,7 @@ typedef struct sm_txn {
  *	there is exactly one sm_t per sm_shared_t.
  */
 struct sm_shared_t {
+	DBSQL *db;			/* Owning connection. */
 	sm_env_t *env;
 	sm_txn_t *txn;			/* NULL for ephemeral (non-txn) dbs. */
 	char *filename;			/* As given to __sm_open; "" if none. */
@@ -113,8 +121,15 @@ struct sm_shared_t {
 	char lock_obj[512];		/* Write-lock object: path + "\0wr". */
 	u_int32_t lock_obj_len;
 	DB *meta;			/* __dbsql_meta sub-database. */
+	int meta_level;			/* Txn level that opened meta. */
 	sm_dbh_t *handles;		/* Open sub-database handles. */
 	u_int32_t page_size;		/* For newly created sub-databases. */
+	int page_size_fixed;
+	pgno_t max_page_count;
+	int secure_delete;
+	int n_backup;			/* Backups in progress reading this. */
+	int snapshot_stale;		/* Read snapshot older than a commit. */
+	int eph_kind[2];		/* Ephemeral: table kinds by pgno&1. */
 	int cache_size;			/* PRAGMA cache_size (stored). */
 	int auto_vacuum;		/* PRAGMA auto_vacuum (stored). */
 	u_int32_t pager_flags;		/* PRAGMA synchronous etc. */
@@ -138,7 +153,7 @@ struct sm_t {
 	DBSQL *db;
 	sm_shared_t *bt;
 	u_int8_t in_trans;		/* DBSQL_TXN_* (mirrors bt->in_trans). */
-	int wants_write;
+	u_int32_t data_version_base;
 };
 
 /*
@@ -148,6 +163,7 @@ struct sm_t {
  *	returned to the VDBE stay valid until the cursor moves.
  */
 struct sm_cursor_t {
+	u_int8_t state;			/* CURSOR_*; MUST be first (has_moved). */
 	sm_t *btree;
 	sm_shared_t *bt;
 	sm_dbh_t *dbh;
@@ -156,11 +172,14 @@ struct sm_cursor_t {
 	key_info_t *key_info;		/* As passed to __sm_cursor. */
 	u_int32_t pgno;
 	int wr_flag;
-	u_int8_t state;			/* CURSOR_* (as upstream btree). */
 	u_int8_t cur_flags;
 	u_int8_t hints;
-	int skip_next;			/* After delete: +1/-1, see upstream. */
+	int skip_next;			/* CURSOR_SKIPNEXT: next/prev no-op. */
 	int fault;			/* Error code when state==CURSOR_FAULT. */
+	int saved;			/* key/data hold a position to restore. */
+	int at_eof;			/* Positioned past the last entry. */
+	int empty;			/* Table of a not yet created db. */
+	u_int8_t rowid_key[SM_ROWID_KEYLEN];
 	DBT key;			/* Current key (rowid key or record). */
 	DBT data;			/* Current data (row record or empty). */
 	int64_t rowid;			/* Decoded key of a rowid cursor. */

@@ -55,7 +55,7 @@ LTLINK=		$(LIBTOOL) --mode=link --tag=CC $(CC) $(CFLAGS) $(LDFLAGS)
 # Sources.
 ##################################################
 SQL_SRCS=	$(wildcard $(srcdir)/*.c) $(wildcard $(srcdir)/vdbe/*.c) \
-		$(filter-out %/backup.c %/dbstat.c, $(wildcard $(srcdir)/api/*.c)) \
+		$(filter-out %/backup.c %/dbstat.c %/notify.c, $(wildcard $(srcdir)/api/*.c)) \
 		$(filter-out %/mem0.c %/mem2.c %/mem3.c %/mem5.c, \
 		    $(wildcard $(srcdir)/common/*.c)) \
 		$(wildcard $(srcdir)/os/*.c)
