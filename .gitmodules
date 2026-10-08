@@ -1,3 +1,4 @@
 [submodule "deps/libdb"]
 	path = deps/libdb
 	url = https://github.com/berkeleydb/libdb.git
+	ignore = dirty
