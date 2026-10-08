@@ -19,6 +19,8 @@ See .agent/steering/TRANSFORM.md for the rules in prose.
 
 import keyword, re
 
+KEEP_SQL_NAMES = False	# set by run --keep-sql-names (validation build)
+
 C_KEYWORDS = set('''
 auto break case char const continue default do double else enum extern float
 for goto if inline int long register restrict return short signed sizeof static
@@ -132,7 +134,20 @@ def snake(s):
 	return s.lower().strip('_') or s.lower()
 
 
+# Words that are already plural or mass nouns: 'aSortFlags' is an array
+# of flags, not of 'flagses'.  (aStatus -> statuses is still right.)
+ALREADY_PLURAL = set('''flags args bytes cols ops fields entries terms
+values names vars regs pages cells keys items rows idxs data info
+stats counts lens sizes ptrs offsets results colls deps hints bits
+parts digits chars aliases bufs mems refs nodes ids codes points
+funcs idx key_info'''.split())
+
+
 def plural(w):
+	if w in ALREADY_PLURAL:
+		return w
+	if w.endswith('s') and len(w) > 3 and w[-2] != 's':
+		return w		# already plural: windowFuncs, aStats
 	if w.endswith(('s', 'x', 'z', 'ch', 'sh')):
 		return w + 'es'
 	if w.endswith('y') and len(w) > 1 and w[-2] not in 'aeiou':
@@ -210,6 +225,9 @@ class Renamer:
 			return TYPE_OVERRIDES[t]
 		if t.startswith('sqlite3_'):
 			return 'dbsql_' + t[len('sqlite3_'):]
+		if t.startswith('sqlite_') and KEEP_SQL_NAMES and \
+		    t not in ('sqlite_int64', 'sqlite_uint64'):
+			return t
 		if t.startswith('sqlite_'):
 			# SQL function names stringized by DFUNCTION(#name), test
 			# hooks (sqlite_search_count), schema names...

@@ -19,7 +19,7 @@ d=$(mktemp -d /tmp/tf.XXXXXX)
 cp -R "$TD" "$d/test" || exit 1
 [ -d "$TD/../ext" ] && ln -s "$TD/../ext" "$d/ext"
 cd "$d/test" || exit 1
-out=$(timeout 900 "$TF" --testdir="$d/t" "$t" 2>&1)
+out=$(timeout 900 "$TF" "$t" --testdir="$d/t" 2>&1)
 rc=$?
 cd / && "$HOME/bin/trash" "$d"
 line=$(printf '%s\n' "$out" | grep -E '^[0-9]+ errors out of [0-9]+ tests' | tail -1)

@@ -16,6 +16,7 @@ import argparse, collections, os, re, shutil, subprocess, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from ctok import tokenize, untokenize
+import names
 from names import Renamer, snake, resolve_globals
 import fixups
 
@@ -144,11 +145,28 @@ STRING_RULES = [
 PREFIX_LEN_RE = re.compile(r'("dbsql_",\s*)7\b')
 
 
+SQL_NAME_PATTERNS = set(rx.pattern for rx, _ in STRING_RULES
+    if 'sqlite_' in rx.pattern or 'sqliteX' in rx.pattern or
+    'sqlite(' in rx.pattern)
+
+
+# --keep-sql-names (validation): SQL-visible names (sqlite_schema,
+# sqlite_version(), sqlite_autoindex_*, the 'sqlite_' reserved prefix...)
+# keep upstream spelling so SQLite's tests are an exact oracle for the C
+# transform.  The default build renames them to dbsql_*.
+KEEP_SQL_NAMES = False
+SQL_NAME_RX = re.compile(r'sqlite_|sqliteX_|sqlite\\\\_')
+
+
 def rewrite_string(s):
 	if s == '"SQLite format 3"':
 		return s
 	for rx, rep in STRING_RULES:
+		if KEEP_SQL_NAMES and rx.pattern in SQL_NAME_PATTERNS:
+			continue
 		s = rx.sub(rep, s)
+	if KEEP_SQL_NAMES:
+		return s
 	# whatever is left (sqlite in a word: "sqlitesched", "SQLiteDatabase")
 	s = re.sub(r'SQLITE', 'DBSQL', s)
 	s = re.sub(r'[Ss][Qq][Ll]ite', 'dbsql', s)
@@ -440,7 +458,15 @@ def main():
 	ap.add_argument('--out', required=True)
 	ap.add_argument('--native', action='store_true')
 	ap.add_argument('--report', default=None)
+	ap.add_argument('--keep-sql-names', action='store_true')
 	args = ap.parse_args()
+	global KEEP_SQL_NAMES
+	KEEP_SQL_NAMES = args.keep_sql_names
+	names.KEEP_SQL_NAMES = KEEP_SQL_NAMES
+	if KEEP_SQL_NAMES:
+		fixups.FIXUPS[:] = [f for f in fixups.FIXUPS
+		    if not f[3].startswith(('reserved prefix', 'RENAME TABLE: dbsql',
+		    'dbsql_autoindex'))]
 
 	manifest = load_manifest(os.path.join(HERE, 'manifest'))
 	glob, func, keep = load_overrides(os.path.join(HERE, 'names.map'))

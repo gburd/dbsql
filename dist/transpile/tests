@@ -27,15 +27,24 @@ RULES = [
 	(re.compile(r'\bsqliteX_'), 'dbsqlX_'),
 	(re.compile(r'sqlite\\\\_'), r'dbsql\\\\_'),
 	(re.compile(r'\bsqlite3\b'), 'dbsql'),
-	(re.compile(r'\bsqlite\b'), 'dbsql_legacy'),
+	# the legacy Tcl command name, only where it is used as a command
+	(re.compile(r'(^|[\[;{]\s*|\n\s*)sqlite(\s+(?:db|complete|\$|-))', re.M),
+	    r'\1dbsql_legacy\2'),
 	(re.compile(r'\bSqlite3?\b'), 'Dbsql'),
 ]
 
 SKIP_DIRS = ('fuzzdata',)
 
 
+KEEP_SQL_NAMES = False
+
+
 def rewrite(text):
 	for rx, rep in RULES:
+		if KEEP_SQL_NAMES and rx.pattern in ('\\bsqlite_temp_schema\\b',
+		    '\\bsqlite_temp_master\\b', 'sqlite_', '\\bsqliteX_',
+		    'sqlite\\\\\\\\_'):
+			continue
 		text = rx.sub(rep, text)
 	return text
 
@@ -70,4 +79,6 @@ def main(src, out):
 
 
 if __name__ == '__main__':
-	main(sys.argv[1], sys.argv[2])
+	args = [a for a in sys.argv[1:] if a != '--keep-sql-names']
+	KEEP_SQL_NAMES = len(args) != len(sys.argv) - 1
+	main(args[0], args[1])
