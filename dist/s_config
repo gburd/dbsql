@@ -1,48 +1,37 @@
-#!/bin/sh -x
+#!/bin/sh -
 # DBSQL - A SQL database engine.
 #
-# Copyright (C) 2007-2008  The DBSQL Group, Inc.
+# Copyright (C) 2007-2026  The DBSQL Group, Inc.
 #
-# Permission to use, copy, modify, and/or distribute this software for any
-# purpose with or without fee is hereby granted, provided that the above
-# copyright notice and this permission notice appear in all copies.
-#
-# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-# MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-#
-# Build the autoconfiguration files.
+# s_config -- build dist/configure and dist/config.hin from configure.ac.
+# Run from the dist directory.
 
-trap 'rm -f aclocal.m4 ; exit 0' 0 1 2 3 13 15
-
+set -e
 . ./RELEASE
 
 echo "autoconf: building aclocal.m4..."
-cat aclocal/*.m4 > aclocal.m4
+cat aclocal/libtool.m4 aclocal/ltoptions.m4 aclocal/ltsugar.m4 \
+    aclocal/ltversion.m4 aclocal/lt~obsolete.m4 > aclocal.m4
 
 echo "autoconf: running autoheader to build config.hin..."
 rm -f config.hin
-autoheader --warnings=all
-chmod 444 config.hin
-
-echo "autoconf: running autoconf to build configure"
+autoheader
+echo "autoconf: running autoconf to build configure..."
 rm -f configure
 autoconf
 
-# Edit version information we couldn't pre-compute.
-(echo "1,\$s/__EDIT_DBSQL_VERSION_MAJOR__/$DBSQL_VERSION_MAJOR/g" &&
- echo "1,\$s/__EDIT_DBSQL_VERSION_MINOR__/$DBSQL_VERSION_MINOR/g" &&
- echo "1,\$s/__EDIT_DBSQL_VERSION_PATCH__/$DBSQL_VERSION_PATCH/g" &&
- echo "1,\$s/__EDIT_DBSQL_VERSION_STRING__/$DBSQL_VERSION_STRING/g" &&
- echo "1,\$s/__EDIT_DBSQL_VERSION__/$DBSQL_VERSION/g" &&
- echo "w" &&
- echo "q") | ed -s configure
-
-rm -rf autom4te.cache
+ed -s configure <<EOF
+1,\$s/__EDIT_DBSQL_VERSION_MAJOR__/$DBSQL_VERSION_MAJOR/g
+1,\$s/__EDIT_DBSQL_VERSION_MINOR__/$DBSQL_VERSION_MINOR/g
+1,\$s/__EDIT_DBSQL_VERSION_PATCH__/$DBSQL_VERSION_PATCH/g
+1,\$s/__EDIT_DBSQL_VERSION_NUMBER__/$DBSQL_VERSION_NUMBER/g
+1,\$s/__EDIT_DBSQL_VERSION_STRING__/$DBSQL_VERSION_STRING/g
+1,\$s/__EDIT_DBSQL_SQLITE_VERSION__/$DBSQL_SQLITE_VERSION/g
+1,\$s/__EDIT_DBSQL_LIBDB_VERSION__/$DBSQL_LIBDB_VERSION/g
+1,\$s/__EDIT_DBSQL_VERSION__/$DBSQL_VERSION/g
+w
+q
+EOF
+rm -rf autom4te.cache aclocal.m4
 chmod 555 configure
-
-chmod 555 config.guess config.sub install-sh
+echo "s_config: done (dbsql $DBSQL_VERSION)"

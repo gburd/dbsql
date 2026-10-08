@@ -1,27 +1,20 @@
 #!/bin/sh -
 # DBSQL - A SQL database engine.
 #
-# Copyright (C) 2007-2008  The DBSQL Group, Inc.
+# Copyright (C) 2007-2026  The DBSQL Group, Inc.
 #
-# Permission to use, copy, modify, and/or distribute this software for any
-# purpose with or without fee is hereby granted, provided that the above
-# copyright notice and this permission notice appear in all copies.
+# s_all -- regenerate everything that is generated in the source tree.
+# Run from the dist directory.
 #
-# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-# MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+#   1. src/, test/tcl/ from upstream SQLite (needs a fossil checkout of the
+#      pinned tag; see .agent/steering/TRANSFORM.md):
+#        SQLITE=/path/to/sqlite-3.53.4 sh s_all
+#   2. src/sm/sm_ext.h prototypes from the PUBLIC: lines in src/sm/*.c
+#   3. dist/configure
 
-sh s_perm		# permissions.
-sh s_symlink		# symbolic links.
-sh s_readme		# distribution README file.
-
-#
-# The following order is important, s_include must run last.
-#
-sh s_config		# autoconf.
-sh s_include		# standard include files.
-sh s_tags		# Tags files.
+set -e
+if [ -n "$SQLITE" ]; then
+	python3 transpile/run --sqlite "$SQLITE" --out ..
+fi
+sh s_include
+sh s_config

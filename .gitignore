@@ -54,3 +54,6 @@ result-*
 # Transform scratch
 dist/transpile/work/
 __pycache__/
+
+# Validation-only transform of SQLite storage (dist/transpile/run --native)
+/native/
