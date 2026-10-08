@@ -1,9 +1,27 @@
 # Storage manager (src/sm/): SQL on libdb
 
-The VDBE talks to storage only through `src/inc/sm.h`. That header has the
-shape of SQLite's btree.h (96 functions; the VDBE and code generator call 95
-of them) and is implemented entirely on libdb's public API. This file is the
-design of record. Change it when the design changes.
+The VDBE talks to storage only through `src/inc/sm.h`. That header is
+SQLite's btree.h interface (96 functions; the VDBE and code generator call 95
+of them), renamed by the transform (`sqlite3BtreeFoo` becomes `__sm_foo`, `Btree` becomes `sm_t`, `BtCursor` becomes `sm_cursor_t`), with
+**identical semantics**. It is implemented entirely on libdb's public API in
+`src/sm/`. This file is the design of record. Change it when the design
+changes.
+
+**Why keep the btree.h seam.** It is the interface every layer above storage
+was written against: the VDBE, code generation, and pager-adjacent calls in
+main.c, pragma.c, vacuum.c and backup.c. Keeping it means the transformed
+upstream code needs no storage edits, and every later SQLite release merges
+mechanically. The pager-level calls those files make (`sqlite3Pager*`, about
+25 functions) get a thin shim in `src/sm/sm_pager.c` that answers from libdb
+or reports fixed values (see DIVERGENCES.md).
+
+**Bring-up order.**
+1. A transformed build that still uses SQLite's own btree, pager and os
+   layers (`--with-storage=native`, build-only, never shipped). SQLite's test
+   suite must pass on it. This proves the transform preserves semantics.
+2. Swap in `src/sm/` (`--with-storage=libdb`, the default and the only
+   shipped configuration). Failures from this point on are in sm/ or are
+   listed divergences.
 
 ## Layout
 

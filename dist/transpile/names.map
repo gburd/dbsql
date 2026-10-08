@@ -1,0 +1,53 @@
+# dist/transpile/names.map -- overrides to the rule-based renaming.
+#   old new          global (every file, every scope)
+#   func:old new     only inside function (or struct) 'func'
+#   !keep a b c      never rename these
+pParse		parser
+ppParse		parser_p
+pzErrMsg	errmsg_p
+zErrMsg		errmsg
+pzErr		err_p
+zErr		err
+# lemon appends Alloc/Free/Init/... to %name, and %name must start with a
+# letter.  The generated parser therefore exports dbsql_parser*; keep those
+# spellings everywhere (they are internal, not exported from libdbsql).
+sqlite3Parser			dbsql_parser
+sqlite3ParserAlloc		dbsql_parserAlloc
+sqlite3ParserFree		dbsql_parserFree
+sqlite3ParserInit		dbsql_parserInit
+sqlite3ParserFinalize		dbsql_parserFinalize
+sqlite3ParserFallback		dbsql_parserFallback
+sqlite3ParserTrace		dbsql_parserTrace
+sqlite3ParserStackPeak		dbsql_parserStackPeak
+sqlite3ParserCoverage		dbsql_parserCoverage
+sqlite3Parser_ENGINEALWAYSONSTACK	dbsql_parser_ENGINEALWAYSONSTACK
+sqlite3ParserAddCleanup		__parser_add_cleanup
+sqlite3Fts5Parser		fts5_parser
+sqlite3Fts5ParserAlloc		fts5_parserAlloc
+sqlite3Fts5ParserFree		fts5_parserFree
+sqlite3Fts5ParserTrace		fts5_parserTrace
+sqlite3Fts5ParserFallback	fts5_parserFallback
+# lemon %realloc/%free/%stack_size_limit arguments: plain C identifiers
+parserStackRealloc		parser_stack_realloc
+parserStackFree			parser_stack_free
+parserStackSizeLimit		parser_stack_size_limit
+# window.c builds <fn>Name / <fn>StepFunc ... with ## pasting; the pasted
+# results map to __<fn>_name / __<fn>_step_func (fixups.py rewrites the
+# paste to match).
+row_numberName		__row_number_name
+dense_rankName		__dense_rank_name
+rankName		__rank_name
+percent_rankName	__percent_rank_name
+cume_distName		__cume_dist_name
+ntileName		__ntile_name
+last_valueName		__last_value_name
+nth_valueName		__nth_value_name
+first_valueName		__first_value_name
+leadName		__lead_name
+lagName			__lag_name
+row_valueName		__row_value_name
+# readable spellings of string helpers
+sqlite3StrICmp		__str_icmp
+sqlite3StrNICmp		__str_nicmp
+sqlite3_stricmp		dbsql_stricmp
+sqlite3_strnicmp	dbsql_strnicmp

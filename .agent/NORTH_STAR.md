@@ -18,7 +18,9 @@ something else.
 
 1. **libdb is the storage engine, accessed only through its public API**
    (`db.h`). No libdb-internal symbols, headers, or struct layouts. SQLite's
-   btree, pager, WAL, page cache and VFS layers are not shipped.
+   btree, pager, WAL and page cache are not shipped. SQLite's Unix VFS is kept
+   only for OS services: sorter temp files, time, randomness, sleep and
+   dynamic loading. No database file is ever read or written through it.
 2. **ACID and crash recovery come from libdb.** A committed transaction
    survives `kill -9` and power loss. Opening an environment that needs
    recovery runs recovery. An uncommitted transaction is never visible after a
@@ -40,10 +42,10 @@ something else.
    It must never read outside its two DBTs, allocate, lock, or fault on
    arbitrary input.
 7. **Berkeley DB style throughout.** `lower_snake_case` identifiers, `_t`
-   typedefs, `__module_verb()` internal functions, `DBSQL_*` constants, tabs, a
-   `__func --` comment block with `PUBLIC:` prototype lines on every
-   non-static function, and readable local and field names. Public handles are
-   method tables (`dbp->prepare(...)`), as in libdb.
+   typedefs, `__module_verb()` internal functions, `DBSQL_*` constants, KNF
+   with tabs, a `name --` comment block on every function, and readable local
+   and field names. Public handles are method tables (`dbp->prepare(...)`), as
+   in libdb.
 8. **Upstream remains mergeable.** SQLite-derived code is produced by a
    repeatable transform (`dist/transpile`) from a pinned SQLite tag. Moving to
    a later SQLite release is a re-run plus a merge, not a port.
@@ -63,6 +65,6 @@ something else.
 - No SQLite on-disk file format compatibility. dbsql files are libdb files.
 - No `sqlite3_*` API and no `sqlite3.h` compatibility shim.
 - WAL, journal modes, mmap, shared cache, `sqlite_dbpage`, the RBU and recover
-  extensions, and the VFS layer are out of scope. libdb provides logging,
-  caching and recovery instead.
+  extensions, and custom VFSes for database files are out of scope. libdb
+  provides logging, caching and recovery instead.
 - FTS3/4, R-Tree/Geopoly and Session are out of scope for this release.

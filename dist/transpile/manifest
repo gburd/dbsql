@@ -1,0 +1,132 @@
+# dist/transpile/manifest -- upstream SQLite file -> dbsql file [tag]
+#
+# tag: core    shipped dbsql source
+#      native  SQLite's own storage layers; transformed only for the
+#              --native validation build (never committed or shipped)
+#      test    testfixture-only sources (build-only, not installed)
+#
+# Parser front end
+src/parse.y		src/sql_parser.y
+src/tokenize.c		src/sql_tokenize.c
+src/complete.c		src/sql_complete.c
+src/prepare.c		src/sql_prepare.c
+# Code generators
+src/alter.c		src/cg_alter.c
+src/analyze.c		src/cg_analyze.c
+src/attach.c		src/cg_attach.c
+src/auth.c		src/cg_auth.c
+src/build.c		src/cg_build.c
+src/callback.c		src/cg_callback.c
+src/delete.c		src/cg_delete.c
+src/expr.c		src/cg_expr.c
+src/fkey.c		src/cg_fkey.c
+src/insert.c		src/cg_insert.c
+src/pragma.c		src/cg_pragma.c
+src/resolve.c		src/cg_resolve.c
+src/select.c		src/cg_select.c
+src/trigger.c		src/cg_trigger.c
+src/update.c		src/cg_update.c
+src/upsert.c		src/cg_upsert.c
+src/vacuum.c		src/cg_vacuum.c
+src/walker.c		src/cg_walker.c
+src/where.c		src/cg_where.c
+src/wherecode.c		src/cg_where_code.c
+src/whereexpr.c		src/cg_where_expr.c
+src/whereInt.h		src/inc/where_int.h
+src/window.c		src/cg_window.c
+src/treeview.c		src/cg_treeview.c
+# Built-in SQL functions and virtual tables
+src/func.c		src/sql_fns.c
+src/date.c		src/sql_date.c
+src/json.c		src/sql_json.c
+src/carray.c		src/sql_carray.c
+src/vtab.c		src/vtab.c
+src/vdbevtab.c		src/vdbe/vdbe_vtab.c
+# Virtual machine
+src/vdbe.c		src/vdbe/vdbe.c
+src/vdbe.h		src/inc/vdbe.h
+src/vdbeInt.h		src/inc/vdbe_int.h
+src/vdbeapi.c		src/vdbe/vdbe_api.c
+src/vdbeaux.c		src/vdbe/vdbe_aux.c
+src/vdbeblob.c		src/vdbe/vdbe_blob.c
+src/vdbemem.c		src/vdbe/vdbe_mem.c
+src/vdbesort.c		src/vdbe/vdbe_sort.c
+src/vdbetrace.c		src/vdbe/vdbe_trace.c
+src/rowset.c		src/vdbe/rowset.c
+# Library API
+src/main.c		src/api/api.c
+src/legacy.c		src/api/api_exec.c
+src/table.c		src/api/api_table.c
+src/loadext.c		src/api/api_loadext.c
+src/global.c		src/api/global.c
+src/status.c		src/api/status.c
+src/notify.c		src/api/notify.c
+src/backup.c		src/api/backup.c
+src/dbstat.c		src/api/dbstat.c
+# Utilities
+src/fault.c		src/common/fault.c
+src/hash.c		src/common/hash.c
+src/hash.h		src/inc/hash.h
+src/malloc.c		src/common/malloc.c
+src/mem0.c		src/common/mem0.c
+src/mem1.c		src/common/mem1.c
+src/mem2.c		src/common/mem2.c
+src/mem3.c		src/common/mem3.c
+src/mem5.c		src/common/mem5.c
+src/mutex.c		src/common/mutex.c
+src/mutex.h		src/inc/mutex.h
+src/mutex_noop.c	src/common/mutex_noop.c
+src/mutex_unix.c	src/common/mutex_unix.c
+src/printf.c		src/common/printf.c
+src/random.c		src/common/random.c
+src/threads.c		src/common/threads.c
+src/utf.c		src/common/utf.c
+src/util.c		src/common/util.c
+src/memjournal.c	src/common/memjournal.c
+src/bitvec.c		src/common/bitvec.c
+# OS services (temp files, time, randomness, sleep, dlopen)
+src/os.c		src/os/os.c
+src/os.h		src/inc/os.h
+src/os_common.h		src/inc/os_common.h
+src/os_setup.h		src/inc/os_setup.h
+src/os_unix.c		src/os/os_unix.c
+# Headers
+src/sqliteInt.h		src/inc/dbsql_int.h
+src/sqliteLimit.h	src/inc/dbsql_limit.h
+src/sqlite.h.in		src/dbsql.in
+src/sqlite3ext.h	src/dbsql_ext.h
+src/msvc.h		src/inc/msvc.h
+src/hwtime.h		src/inc/hwtime.h
+src/vxworks.h		src/inc/vxworks.h
+src/btree.h		src/inc/sm.h
+src/pager.h		src/inc/pager.h
+src/pcache.h		src/inc/pcache.h
+src/wal.h		src/inc/wal.h
+# SQLite's own storage layers: validation build only
+src/btree.c		native/btree.c		native
+src/btreeInt.h		native/btree_int.h	native
+src/btmutex.c		native/btmutex.c	native
+src/pager.c		native/pager.c		native
+src/pcache.c		native/pcache.c		native
+src/pcache1.c		native/pcache1.c	native
+src/wal.c		native/wal.c		native
+src/memdb.c		native/memdb.c		native
+src/dbpage.c		native/dbpage.c		native
+# FTS5 and ICU
+ext/fts5/fts5.h		src/ext/fts5/fts5.h
+ext/fts5/fts5Int.h	src/ext/fts5/fts5_int.h
+ext/fts5/fts5parse.y	src/ext/fts5/fts5_parser.y
+ext/fts5/fts5_aux.c	src/ext/fts5/fts5_aux.c
+ext/fts5/fts5_buffer.c	src/ext/fts5/fts5_buffer.c
+ext/fts5/fts5_config.c	src/ext/fts5/fts5_config.c
+ext/fts5/fts5_expr.c	src/ext/fts5/fts5_expr.c
+ext/fts5/fts5_hash.c	src/ext/fts5/fts5_hash.c
+ext/fts5/fts5_index.c	src/ext/fts5/fts5_index.c
+ext/fts5/fts5_main.c	src/ext/fts5/fts5_main.c
+ext/fts5/fts5_storage.c	src/ext/fts5/fts5_storage.c
+ext/fts5/fts5_tokenize.c	src/ext/fts5/fts5_tokenize.c
+ext/fts5/fts5_unicode2.c	src/ext/fts5/fts5_unicode2.c
+ext/fts5/fts5_varint.c	src/ext/fts5/fts5_varint.c
+ext/fts5/fts5_vocab.c	src/ext/fts5/fts5_vocab.c
+ext/icu/icu.c		src/ext/icu/icu.c
+ext/icu/sqliteicu.h	src/ext/icu/dbsql_icu.h

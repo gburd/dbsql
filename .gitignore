@@ -1,3 +1,6 @@
+# The global gitignore excludes dist/; here dist/ is the build system.
+!dist/
+
 # Build output
 build_unix/*
 !build_unix/.gitkeep
@@ -50,3 +53,4 @@ result-*
 
 # Transform scratch
 dist/transpile/work/
+__pycache__/

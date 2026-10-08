@@ -1,0 +1,509 @@
+#!/usr/bin/env python3
+"""
+run -- transform a SQLite source tree into dbsql sources.
+
+usage: run --sqlite DIR --out DIR [--native] [--check]
+
+  --sqlite DIR   an upstream SQLite checkout (fossil open ... version-3.53.4)
+                 that has also been configured and built once in DIR/../sq-build
+                 is NOT required: generated inputs are produced here.
+  --out DIR      where to write the transformed tree (normally the repo root)
+  --native       also transform the storage/OS layers (validation build only)
+  --check        transform into a scratch dir and diff against --out
+"""
+
+import argparse, collections, os, re, shutil, subprocess, sys, tempfile
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from ctok import tokenize, untokenize
+from names import Renamer, snake, resolve_globals
+import fixups
+
+# ---------------------------------------------------------------------------
+# Manifest: upstream path -> dbsql path.  'native' entries are only emitted
+# with --native (the validation build).
+# ---------------------------------------------------------------------------
+def load_manifest(path):
+	entries = []
+	for line in open(path):
+		line = line.split('#', 1)[0].strip()
+		if not line:
+			continue
+		parts = line.split()
+		tag = parts[2] if len(parts) > 2 else 'core'
+		entries.append((parts[0], parts[1], tag))
+	return entries
+
+
+def load_overrides(path):
+	glob, func, keep = {}, {}, set()
+	if not os.path.exists(path):
+		return glob, func, keep
+	for line in open(path):
+		line = line.split('#', 1)[0].strip()
+		if not line:
+			continue
+		parts = line.split()
+		if parts[0] == '!keep':
+			keep.update(parts[1:])
+			continue
+		old, new = parts[0], parts[1]
+		if ':' in old:
+			func[old] = new
+		else:
+			glob[old] = new
+	return glob, func, keep
+
+# ---------------------------------------------------------------------------
+# Upstream symbol discovery.
+# ---------------------------------------------------------------------------
+TYPEDEF_RE = re.compile(
+    r'typedef\s+(?:const\s+)?(?:struct|union|enum)\s+(\w+)\s+(\w+)\s*;')
+TYPEDEF2_RE = re.compile(r'typedef\s+[\w\s\*]+?\b(\w+)\s*;')
+DEFINE_RE = re.compile(r'^\s*#\s*define\s+([A-Za-z_][A-Za-z0-9_]*)', re.M)
+FMACRO_RE = re.compile(r'^\s*#\s*define\s+([A-Z][A-Za-z0-9]*[a-z][A-Za-z0-9]*)\(',
+    re.M)
+
+
+STRUCT_TAG_RE = re.compile(r'\b(?:struct|union)\s+([A-Z][A-Za-z0-9_]*)\b')
+
+
+def is_camel_name(t):
+	return re.search(r'[a-z][A-Z]', t) is not None
+
+
+def discover(texts):
+	typedefs, macros = set(), set()
+	tags = {}
+	for src in texts:
+		for m in TYPEDEF_RE.finditer(src):
+			tag, name = m.groups()
+			if re.search(r'[a-z]', name) and name[0].isupper():
+				typedefs.add(name)
+				if tag != name:
+					tags[tag] = name
+			if re.search(r'[a-z]', tag) and tag[0].isupper() and \
+			    tag == name:
+				typedefs.add(tag)
+		for m in FMACRO_RE.finditer(src):
+			macros.add(m.group(1))
+		for m in DEFINE_RE.finditer(src):
+			macros.add(m.group(1))
+	# Struct tags never typedef'd: still CamelCase types (struct Foo used
+	# directly).  Map them like typedefs.
+	for src in texts:
+		for m in STRUCT_TAG_RE.finditer(src):
+			t = m.group(1)
+			if t not in typedefs and t not in tags and \
+			    re.search(r'[a-z]', t):
+				tags[t] = t
+	return typedefs, macros, tags
+
+# ---------------------------------------------------------------------------
+# String-literal rewriting (SQL-visible names and messages).
+# ---------------------------------------------------------------------------
+STRING_RULES = [
+	# reserved schema/table names
+	(re.compile(r'sqlite_temp_schema'), 'dbsql_temp_schema'),
+	(re.compile(r'sqlite_temp_master'), 'dbsql_temp_master'),
+	(re.compile(r'sqlite_schema'), 'dbsql_schema'),
+	(re.compile(r'sqlite_master'), 'dbsql_master'),
+	(re.compile(r'sqlite_sequence'), 'dbsql_sequence'),
+	(re.compile(r'sqlite_stat'), 'dbsql_stat'),
+	(re.compile(r'sqlite_autoindex_'), 'dbsql_autoindex_'),
+	(re.compile(r'sqlite_(version|source_id|compileoption_used|'
+		    r'compileoption_get|offset|log|rename_column|rename_table|'
+		    r'rename_test|drop_column|rename_quotefix|drop_constraint|'
+		    r'add_constraint|fail|find_constraint)\b'), r'dbsql_\1'),
+	(re.compile(r'"sqlite_"'), '"dbsql_"'),
+	# sqlite3FooBar() in debugging/trace messages
+	(re.compile(r'\bsqlite3([A-Z]\w*)'),
+	    lambda m: '__' + snake(m.group(1))),
+	# 'sqliteX_%' LIKE patterns (X escapes the '_') and similar
+	(re.compile(r'sqliteX_'), 'dbsqlX_'),
+	(re.compile(r'sqlite\\\\_'), 'dbsql\\\\_'),
+	(re.compile(r'sqlite_'), 'dbsql_'),
+	(re.compile(r'\bSQLITE_'), 'DBSQL_'),
+	(re.compile(r'\bsqlite3_'), 'dbsql_'),
+	(re.compile(r'\bSQLite\b'), 'dbsql'),
+	(re.compile(r'\bsqlite3\b'), 'dbsql'),
+	(re.compile(r'Sqlite_Heap'), 'Dbsql_Heap'),
+	(re.compile(r'-DSQLITE_'), '-DDBSQL_'),
+	(re.compile(r'/sqlite-shm-'), '/dbsql-shm-'),
+	(re.compile(r'sqliteplocks'), 'dbsqlplocks'),
+]
+# Prefix-length literals that accompany "sqlite_" checks keep length 7 ==
+# len("dbsql_")+1, so "sqlite_" (7) becomes "dbsql_" (6): fix the counts.
+PREFIX_LEN_RE = re.compile(r'("dbsql_",\s*)7\b')
+
+
+def rewrite_string(s):
+	for rx, rep in STRING_RULES:
+		s = rx.sub(rep, s)
+	return s
+
+# ---------------------------------------------------------------------------
+# Scope-aware renaming.
+# ---------------------------------------------------------------------------
+from scan import scan, nested_aggs
+
+
+class Collision(Exception):
+	pass
+
+
+def resolve_scope(renamer, label, olds_iter, report, path, reserved):
+	"""Make the mapping one-to-one over the identifiers of one scope.
+	'reserved' holds names already taken in this scope's namespace
+	(file-scope functions, variables and macros of this file)."""
+	olds = set(olds_iter)
+	seen = collections.defaultdict(set)
+	for o in olds:
+		seen[renamer.map(o, label)].add(o)
+	# A local whose new name equals a file-scope name it does not own is a
+	# collision too (it would shadow a function or global).
+	taken = set(seen.keys())
+	for new in list(seen):
+		if new in reserved:
+			for o in sorted(seen[new]):
+				if o not in reserved[new] and \
+				    not renamer.is_global(o):
+					seen[new + '\0shadow'].add(o)
+	for new, group in list(seen.items()):
+		shadow = new.endswith('\0shadow')
+		if not shadow and (len(group) < 2 or
+		    all(renamer.is_global(o) for o in group)):
+			continue
+		if shadow:
+			losers = sorted(group)
+		else:
+			owners = [o for o in group if renamer.map(o, label) == o]
+			if not owners:
+				owners = [o for o in group if renamer.is_global(o)]
+			if not owners:
+				owners = [sorted(group, key=lambda x: (len(x), x))[0]]
+			losers = [o for o in sorted(group) if o != owners[0]]
+		for o in losers:
+			if renamer.is_global(o):
+				continue
+			fb = renamer.fallback(o) or (renamer.map(o, label) + '_')
+			base, n = fb, 2
+			while fb in taken or fb in reserved:
+				fb = '%s%d' % (base, n)
+				n += 1
+			renamer.func_overrides[(label or '') + ':' + o] = fb
+			taken.add(fb)
+			report.append('%s: %s: %s -> %s (collision on %s)' %
+			    (path, label, o, fb, new.split('\0')[0]))
+	# verify
+	seen = collections.defaultdict(set)
+	for o in olds:
+		seen[renamer.map(o, label)].add(o)
+	for new, group in seen.items():
+		if len(group) > 1 and not all(renamer.is_global(o)
+		    for o in group):
+			raise Collision('%s: in %s: %s all map to %s' %
+			    (path, label, sorted(group), new))
+
+
+def check_members(renamer, names, path, report):
+	"""Members of one aggregate must stay distinct.  On a clash the
+	non-owner takes its prefixed fallback form, globally (members are
+	resolved by name, not by type)."""
+	seen = collections.defaultdict(set)
+	for o in set(names):
+		seen[renamer.map_member(o)].add(o)
+	for new, group in seen.items():
+		if len(group) < 2:
+			continue
+		owners = [o for o in group if renamer.map_member(o) == o] or \
+		    [sorted(group, key=lambda x: (len(x), x))[0]]
+		for o in sorted(group):
+			if o == owners[0]:
+				continue
+			fb = renamer.fallback(o) or (new + '_')
+			renamer.member_overrides[o] = fb
+			report.append('%s: member %s -> %s (collision on %s)' %
+			    (path, o, fb, new))
+
+
+def analyse(toks, renamer, path, report, yacc=False):
+	"""Pass 1: structure + member collisions (global)."""
+	res = scan(toks, yacc)
+	members = nested_aggs(toks)
+	for ids in members:
+		check_members(renamer, [toks[i][1] for i in ids], path, report)
+	res[4].update(i for ids in members for i in ids)
+	return res
+
+
+def rename_tokens(toks, res, renamer, path, report):
+	"""Pass 2: per-scope injective renaming, then emit."""
+	out = list(toks)
+	scopes, filescope, macros, macro_ids, member_idx = res
+	reserved = {}
+	for x in filescope | macros:
+		reserved.setdefault(renamer.map(x), set()).add(x)
+	label_of = {}
+	agg_member_idx = set()
+	n_scope = 0
+	for sc in scopes:
+		n_scope += 1
+		if sc.kind == 'agg':
+			agg_member_idx.update(sc.members)
+		base = sc.label if sc.kind == 'func' and sc.label else \
+		    '%s@%d' % (sc.kind, n_scope)
+		label = path + '::' + base
+		names = [toks[i][1] for i in sc.ordinary]
+		resolve_scope(renamer, label, names, report, path, reserved)
+		for i in sc.ordinary:
+			label_of[i] = label
+	for i, (k, t) in enumerate(toks):
+		if k != 'id':
+			continue
+		if i in member_idx or i in agg_member_idx:
+			out[i] = ('id', renamer.map_member(t))
+		elif i in label_of:
+			out[i] = ('id', renamer.map(t, label_of[i]))
+		else:
+			out[i] = ('id', renamer.map(t))
+	return out
+
+
+def rename_comment(text, renamer):
+	def sub(m):
+		w = m.group(0)
+		if re.match(r'^sqlite3[A-Z_]|^SQLITE_|^sqlite3$', w) or \
+		    w in renamer.typedefs or w in renamer.overrides:
+			return renamer.map(w)
+		return w
+	text = re.sub(r'\b[A-Za-z_][A-Za-z0-9_]*\b', sub, text)
+	text = re.sub(r'\bSQLite\b', 'dbsql', text)
+	return text
+
+
+def transform_text(toks, res, renamer, path, report):
+	toks = rename_tokens(toks, res, renamer, path, report)
+	out = []
+	for k, t in toks:
+		if k == 'str':
+			t = rewrite_string(t)
+		elif k == 'cmt':
+			t = rename_comment(t, renamer)
+		elif k == 'hdr':
+			t = rewrite_include(t)
+		out.append((k, t))
+	return untokenize(out)
+
+
+INCLUDE_MAP = {}
+
+
+def rewrite_include(h):
+	return h
+
+
+def rewrite_quoted_includes(text, incmap):
+	# The renamer already rewrote the sqlite in header names inside string
+	# tokens ("sqlite_cfg.h" -> "dbsql_cfg.h"); map both spellings.
+	def sub(m):
+		name = m.group(2)
+		return m.group(1) + '"' + incmap.get(name, name) + '"'
+	return re.sub(r'^(\s*#\s*include\s+)"([^"]+)"', sub, text, flags=re.M)
+
+# ---------------------------------------------------------------------------
+# Driver.
+# ---------------------------------------------------------------------------
+# Generated inputs: produced by upstream SQLite's own generators, run on the
+# upstream sources in a scratch build dir, then transformed like any other
+# file.  (upstream generated name, dbsql name)
+GENERATED = [
+	('opcodes.h', 'src/inc/opcodes.h'),
+	('opcodes.c', 'src/vdbe/opcodes.c'),
+	('keywordhash.h', 'src/inc/keywordhash.h'),
+	('pragma.h', 'src/inc/pragma.h'),
+	('ctime.c', 'src/api/ctime.c'),
+	('sqlite3.h', 'src/inc/dbsql_api_ref.h'),
+]
+# Header renames applied to quoted #include lines (in addition to the
+# basename map derived from the manifest).
+EXTRA_INCLUDES = {
+	'sqlite3.h': 'dbsql.h',
+	'sqlite_cfg.h': 'dbsql_config.h',
+	'dbsql_cfg.h': 'dbsql_config.h',
+	'dbsql.h': 'dbsql.h',
+	'dbsqlicu.h': 'dbsql_icu.h',
+	'dbsqlInt.h': 'dbsql_int.h',
+	'dbsql_int.h': 'dbsql_int.h',
+	'dbsql3ext.h': 'dbsql_ext.h',
+	'dbsqlLimit.h': 'dbsql_limit.h',
+	'parse.h': 'sql_parser.h',
+	'fts5parse.h': 'fts5_parser.h',
+	'sqliteicu.h': 'dbsql_icu.h',
+}
+
+
+def generate(sqlite, work):
+	"""Configure the pristine upstream tree in 'work' and run its
+	generators.  Returns {generated name: text}."""
+	os.makedirs(work, exist_ok=True)
+	if not os.path.exists(os.path.join(work, 'Makefile')):
+		subprocess.check_call([os.path.join(sqlite, 'configure'),
+		    '--enable-fts5', '--disable-tcl', '--disable-readline'],
+		    cwd=work, stdout=subprocess.DEVNULL)
+	targets = [g for g, _ in GENERATED] + ['parse.h']
+	subprocess.check_call(['gmake', '-s'] + targets, cwd=work,
+	    stdout=subprocess.DEVNULL)
+	out = {}
+	for g, _ in GENERATED:
+		out[g] = open(os.path.join(work, g), encoding='utf-8',
+		    errors='surrogateescape').read()
+	return out
+
+
+# FTS5 is built as one translation unit, exactly as upstream's
+# ext/fts5/tool/mkfts5c.tcl does it: the parts are concatenated in this
+# order, their own fts5 #includes commented out, and every internal
+# __fts5_*() definition made static.  The parser part is the lemon output
+# of fts5_parser.y, produced at build time, so it is #included rather than
+# concatenated.
+FTS5_PARTS = ['fts5.h', 'fts5_int.h', '@fts5_parser', 'fts5_aux.c',
+    'fts5_buffer.c', 'fts5_config.c', 'fts5_expr.c', 'fts5_hash.c',
+    'fts5_index.c', 'fts5_main.c', 'fts5_storage.c', 'fts5_tokenize.c',
+    'fts5_unicode2.c', 'fts5_varint.c', 'fts5_vocab.c']
+
+
+def fts5_source_id(sqlite):
+	uuid = open(os.path.join(sqlite, 'manifest.uuid')).read().strip()
+	toks = open(os.path.join(sqlite, 'manifest')).read().split()
+	date = toks[toks.index('D') + 1]
+	date = date[:date.rindex('.')].replace('T', ' ')
+	return 'fts5: %s %s' % (date, uuid)
+
+
+def write_fts5_amalgamation(sqlite, out):
+	d = os.path.join(out, 'src', 'ext', 'fts5')
+	if not os.path.isdir(d):
+		return
+	sid = fts5_source_id(sqlite)
+	lines = ['/* DO NOT EDIT: generated by dist/transpile/run from the',
+	    '** FTS5 parts in this directory (see FTS5_PARTS). */',
+	    '#if !defined(DBSQL_CORE) || defined(DBSQL_ENABLE_FTS5)',
+	    '#if !defined(NDEBUG) && !defined(DBSQL_DEBUG)',
+	    '# define NDEBUG 1', '#endif',
+	    '#if defined(NDEBUG) && defined(DBSQL_DEBUG)',
+	    '# undef NDEBUG', '#endif',
+	    '#ifdef HAVE_STDINT_H', '#include <stdint.h>', '#endif',
+	    '#ifdef HAVE_INTTYPES_H', '#include <inttypes.h>', '#endif']
+	static_rx = re.compile(r'^(const )?[a-zA-Z][a-zA-Z0-9_]* [*]?__fts5_')
+	for part in FTS5_PARTS:
+		if part == '@fts5_parser':
+			lines.append('#include "fts5_parser.c"')
+			continue
+		text = open(os.path.join(d, part), encoding='utf-8',
+		    errors='surrogateescape').read()
+		lines.append('#line 1 "%s"' % part)
+		for line in text.split('\n'):
+			if re.match(r'^#include.*fts5', line):
+				line = '/* %s */' % line
+			elif static_rx.match(line) and \
+			    not re.search(r' __fts5_init\(', line):
+				line = 'static ' + line
+			lines.append(line.replace('--FTS5-SOURCE-ID--', sid))
+	lines.append('#endif /* !defined(DBSQL_CORE) || '
+	    'defined(DBSQL_ENABLE_FTS5) */')
+	with open(os.path.join(d, 'fts5.c'), 'w', encoding='utf-8',
+	    errors='surrogateescape') as f:
+		f.write('\n'.join(lines) + '\n')
+
+
+def main():
+	ap = argparse.ArgumentParser()
+	ap.add_argument('--sqlite', required=True)
+	ap.add_argument('--out', required=True)
+	ap.add_argument('--native', action='store_true')
+	ap.add_argument('--report', default=None)
+	args = ap.parse_args()
+
+	manifest = load_manifest(os.path.join(HERE, 'manifest'))
+	glob, func, keep = load_overrides(os.path.join(HERE, 'names.map'))
+	selected = [(u, d, tag) for (u, d, tag) in manifest
+		    if tag != 'native' or args.native]
+
+	texts = {}
+	for u, d, tag in selected:
+		p = os.path.join(args.sqlite, u)
+		texts[u] = open(p, encoding='utf-8',
+		    errors='surrogateescape').read()
+	gen = generate(args.sqlite, os.path.join(HERE, 'work', 'gen'))
+	for g, d in GENERATED:
+		texts['gen/' + g] = gen[g]
+		selected.append(('gen/' + g, d, 'core'))
+		manifest.append(('gen/' + g, d, 'core'))
+	typedefs, macros, tags = discover(texts.values())
+	renamer = Renamer(glob, func, typedefs, macros, keep)
+	renamer.struct_tags = tags
+	# Object-like macros whose body is a single identifier that is a
+	# file-scope function (decided after the scan below).
+	alias_defs = {}
+	for src in texts.values():
+		for m in re.finditer(r'^\s*#\s*define\s+([A-Za-z_]\w*)[ \t]+'
+		    r'([A-Za-z_]\w*)[ \t]*$', src, re.M):
+			alias_defs[m.group(1)] = m.group(2)
+	upper = collections.Counter(m.upper() for m in macros)
+	renamer.macro_upper_clash = set(u for u, c in upper.items() if c > 1)
+	incmap = {os.path.basename(u): os.path.basename(d)
+		  for u, d, _ in manifest}
+	incmap.update(EXTRA_INCLUDES)
+
+	report = []
+	fixups_used = set()
+	analysed = {}
+	for u, d, tag in selected:
+		toks = tokenize(texts[u])
+		analysed[u] = (toks, analyse(toks, renamer, u, report,
+		    yacc=u.endswith('.y')))
+	# File-scope functions/variables are known only after every file is
+	# scanned; they map by the '__snake' rule from then on.
+	for u in analysed:
+		renamer.filescope |= analysed[u][1][1]
+	renamer.filescope -= renamer.macros
+	for a, target in alias_defs.items():
+		if target in renamer.filescope and is_camel_name(a):
+			renamer.func_alias_macros.add(a)
+	renamer.reserved = set(l.strip() for l in
+	    open(os.path.join(HERE, 'reserved.txt')) if l.strip())
+	renamer.cache.clear()
+	global_names = set(renamer.filescope)
+	for u in analysed:
+		toks = analysed[u][0]
+		global_names.update(t for k, t in toks if k == 'id' and
+		    t.startswith('sqlite3'))
+	resolve_globals(renamer, global_names, report)
+	for u, d, tag in selected:
+		toks, res = analysed[u]
+		text = transform_text(toks, res, renamer, u, report)
+		text = rewrite_quoted_includes(text, incmap)
+		text, used = fixups.apply(d, text)
+		fixups_used.update(used)
+		dst = os.path.join(args.out, d)
+		os.makedirs(os.path.dirname(dst), exist_ok=True)
+		with open(dst, 'w', encoding='utf-8',
+		    errors='surrogateescape') as f:
+			f.write(text)
+	write_fts5_amalgamation(args.sqlite, args.out)
+	unused = set(range(len(fixups.FIXUPS))) - fixups_used
+	if unused:
+		sys.exit('fixups never applied: %s' % sorted(unused))
+	if args.report:
+		with open(args.report, 'w') as f:
+			f.write('\n'.join(report) + '\n')
+			for t in sorted(renamer.cache):
+				if renamer.cache[t] != t:
+					f.write('MAP %s %s\n' % (t, renamer.cache[t]))
+	print('transformed %d files, %d collision fallbacks' %
+	    (len(selected), len(report)))
+
+
+if __name__ == '__main__':
+	main()
