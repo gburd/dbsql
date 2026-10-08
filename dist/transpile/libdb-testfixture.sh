@@ -15,6 +15,7 @@ mkdir -p "$B/tf"
 cd "$B"
 CC=${CC:-cc}
 CFLAGS=${CFLAGS:--O1 -g}
+LDFLAGS=${LDFLAGS:-}
 TCLINC=${TCLINC:--I/usr/local/include/tcl8.6}
 TCLLIB=${TCLLIB:--L/usr/local/lib -ltcl86}
 DEFS="-DDBSQL_TEST=1 -DTCLSH_INIT_PROC=__test_init \
@@ -25,7 +26,7 @@ DEFS="-DDBSQL_TEST=1 -DTCLSH_INIT_PROC=__test_init \
  -DDBSQL_STRICT_SUBTYPE=1 -DDBSQL_NO_SYNC=1 -DDBSQL_ENABLE_FTS5 \
  -DDBSQL_ENABLE_MATH_FUNCTIONS -DDBSQL_THREADSAFE=1 -D_HAVE_DBSQL_CONFIG_H \
  -DDBSQL_DEBUG=1 -DDBSQL_ENABLE_EXPLAIN_COMMENTS -DDBSQL_CKSUMVFS_STATIC \
- -DDBSQL_OMIT_SHARED_CACHE -DDBSQL_OMIT_WAL -DDBSQL_OMIT_DESERIALIZE"
+ -DDBSQL_OMIT_SHARED_CACHE -DDBSQL_OMIT_WAL -DDBSQL_OMIT_DESERIALIZE -DDBSQL_SM_LIBDB"
 INC="-I. -I$SM -I$OUT/test/tcl/ext -I$OUT/src -I$OUT/src/inc \
  -I$OUT/src/ext/fts5 -I$OUT/test/tcl -I$DBINC $TCLINC"
 
@@ -43,20 +44,19 @@ sed -e 's/yy/fts5yy/g' -e 's/YY/fts5YY/g' -e 's/TOKEN/FTS5TOKEN/g' \
     fts5_parser.c > fts5_parser.c.tmp && mv fts5_parser.c.tmp fts5_parser.c
 
 cat > tf_stubs.c <<'STUB'
-/* Test modules dbsql does not ship (RBU, recover, intck; the pager and
-** b-tree internals tests test2/test3/test_btree): no-op Tcl inits. */
+/* Test modules dbsql does not ship (RBU, recover, intck, and the b-tree
+** internals tests test3/test_btree): no-op Tcl inits. */
 #include <tcl.h>
 int Dbsqltestintck_Init(Tcl_Interp *i){ (void)i; return TCL_OK; }
 int DbsqlRbu_Init(Tcl_Interp *i){ (void)i; return TCL_OK; }
 int __test_recover_init(Tcl_Interp *i){ (void)i; return TCL_OK; }
-int Dbsqltest2_Init(Tcl_Interp *i){ (void)i; return TCL_OK; }
 int Dbsqltest3_Init(Tcl_Interp *i){ (void)i; return TCL_OK; }
 STUB
 
 SRCS=$(cd "$OUT" && ls src/*.c src/vdbe/*.c src/api/*.c src/common/*.c \
     src/os/*.c src/ext/fts5/fts5.c test/tcl/*.c test/tcl/ext/*.c \
-    | grep -vE '/mem[0235]\.c$|/base[68][45]\.c$|/api/(backup|dbstat)\.c$' \
-    | grep -vE '^test/tcl/(test2|test3|test_btree)\.c$|/api/notify\.c$')
+    | grep -vE '/mem[035]\.c$|/base[68][45]\.c$|/api/(backup|dbstat)\.c$' \
+    | grep -vE '^test/tcl/(test3|test_btree)\.c$|/api/notify\.c$')
 fail=0
 : > tf/errors.log
 OBJS=
@@ -76,7 +76,7 @@ do
 done
 echo "testfixture compile failures: $fail"
 [ $fail -eq 0 ] || exit 1
-$CC -o testfixture $OBJS -L"$DBLIB" -ldb-2026.0 -Wl,-rpath,"$DBLIB" \
+$CC $LDFLAGS -o testfixture $OBJS -L"$DBLIB" -ldb-2026.0 -Wl,-rpath,"$DBLIB" \
     $TCLLIB -lm -lpthread -lz 2>tf/link.log ||
     { echo link failed; grep -E "undefined|error" tf/link.log | sort -u | head -40; exit 1; }
 echo "built $B/testfixture"

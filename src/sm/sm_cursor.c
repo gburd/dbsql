@@ -177,7 +177,10 @@ __sm_cursors_save(sm_shared_t *bt, DB_TXN *txn)
 
 /*
  * __sm_cursors_invalidate_table --
- *	A table is being cleared: its cursors no longer point anywhere.
+ *	A table is being cleared or written through another cursor: its
+ *	positioned cursors are saved (CURSOR_REQUIRESEEK, key kept), as
+ *	upstream's saveAllCursors does, so the VDBE re-seeks them; after a
+ *	clear the re-seek finds nothing and they become invalid.
  *
  * PUBLIC: void __sm_cursors_invalidate_table __P((sm_shared_t *,
  * PUBLIC:     u_int32_t));
@@ -192,10 +195,37 @@ __sm_cursors_invalidate_table(sm_shared_t *bt, u_int32_t pgno)
 			if (cur->dbc != NULL) {
 				(void)cur->dbc->close(cur->dbc);
 				cur->dbc = NULL;
+				cur->dbc_txn = NULL;
 			}
-			cur->state = CURSOR_INVALID;
-			cur->saved = 0;
+			if (cur->state == CURSOR_VALID ||
+			    cur->state == CURSOR_SKIPNEXT) {
+				cur->state = CURSOR_REQUIRESEEK;
+				cur->saved = 1;
+			}
 		}
+}
+
+/*
+ * __sm_cursors_save_others --
+ *	A row is about to be deleted through 'cur': every other positioned
+ *	cursor on the table is saved, so it reports "moved" and re-seeks
+ *	(upstream's saveAllCursors).
+ */
+static void
+__sm_cursors_save_others(sm_cursor_t *cur)
+{
+	sm_cursor_t *c;
+
+	for (c = cur->bt->cursors; c != NULL; c = c->next) {
+		if (c == cur || c->pgno != cur->pgno || c->dbc == NULL ||
+		    c->state != CURSOR_VALID)
+			continue;
+		(void)c->dbc->close(c->dbc);
+		c->dbc = NULL;
+		c->dbc_txn = NULL;
+		c->state = CURSOR_REQUIRESEEK;
+		c->saved = 1;
+	}
 }
 
 /*
@@ -241,6 +271,7 @@ int
 __sm_close_cursor(sm_cursor_t *cur)
 {
 	sm_cursor_t **pp;
+	sm_t *p;
 
 	if (cur->bt == NULL)
 		return (DBSQL_OK);
@@ -251,9 +282,14 @@ __sm_close_cursor(sm_cursor_t *cur)
 			*pp = cur->next;
 			break;
 		}
+	/* An ephemeral btree goes away with its last cursor (upstream). */
+	p = (cur->bt->flags & SM_EPHEMERAL) && cur->bt->cursors == NULL ?
+	    cur->btree : NULL;
 	free(cur->key.data);
 	free(cur->data.data);
 	memset(cur, 0, sizeof(*cur));
+	if (p != NULL)
+		(void)__sm_close(p);
 	return (DBSQL_OK);
 }
 
@@ -280,6 +316,8 @@ __sm_closes_with_cursor(sm_t *p, sm_cursor_t *cur)
 static int
 __sm_cursor_restore_position(sm_cursor_t *cur, int *different)
 {
+	u_int8_t *saved;
+	u_int32_t n;
 	int rc, found;
 
 	*different = 0;
@@ -289,13 +327,33 @@ __sm_cursor_restore_position(sm_cursor_t *cur, int *different)
 		return (DBSQL_OK);
 	if ((rc = __sm_dbc_open(cur)) != DBSQL_OK)
 		return (rc);
-	if ((rc = __sm_dbc_get(cur, DB_SET_RANGE, &found)) != DBSQL_OK)
-		return (rc);
-	if (!found) {
-		cur->state = CURSOR_INVALID;
+	/*
+	 * Re-seek to the saved key (still in cur->key).  As upstream: on
+	 * the same entry the cursor is valid; on the next larger one it is
+	 * CURSOR_SKIPNEXT with skip_next 1 (the next __sm_next stays put);
+	 * past the end it is on the last entry with skip_next -1.
+	 */
+	n = cur->key.size;
+	if ((saved = malloc(n == 0 ? 1 : n)) == NULL)
+		return (DBSQL_NOMEM);
+	memcpy(saved, cur->key.data, n);
+	rc = __sm_dbc_get(cur, DB_SET_RANGE, &found);
+	if (rc == DBSQL_OK && found) {
+		if (cur->key.size != n || memcmp(cur->key.data, saved, n) != 0) {
+			cur->state = CURSOR_SKIPNEXT;
+			cur->skip_next = 1;
+			*different = 1;
+		}
+	} else if (rc == DBSQL_OK) {
 		*different = 1;
+		if ((rc = __sm_dbc_get(cur, DB_LAST, &found)) == DBSQL_OK &&
+		    found) {
+			cur->state = CURSOR_SKIPNEXT;
+			cur->skip_next = -1;
+		}
 	}
-	return (DBSQL_OK);
+	free(saved);
+	return (rc);
 }
 
 /*
@@ -400,8 +458,12 @@ __sm_step(sm_cursor_t *cur, u_int32_t op)
 {
 	int rc, found;
 
+	if (cur->state == CURSOR_INVALID)
+		return (DBSQL_DONE);
+	if ((rc = __sm_ensure(cur)) != DBSQL_OK)
+		return (rc);
 	if (cur->state == CURSOR_SKIPNEXT) {
-		/* A delete left the cursor on the entry to return next. */
+		/* Already on the entry to return next (see restore). */
 		cur->state = CURSOR_VALID;
 		if (cur->skip_next == (op == DB_NEXT ? 1 : -1)) {
 			cur->skip_next = 0;
@@ -409,10 +471,6 @@ __sm_step(sm_cursor_t *cur, u_int32_t op)
 		}
 		cur->skip_next = 0;
 	}
-	if (cur->state == CURSOR_INVALID)
-		return (DBSQL_DONE);
-	if ((rc = __sm_ensure(cur)) != DBSQL_OK)
-		return (rc);
 	if (cur->state == CURSOR_INVALID)
 		return (DBSQL_DONE);
 	if ((rc = __sm_dbc_get(cur, op, &found)) != DBSQL_OK)
@@ -803,6 +861,7 @@ __sm_delete(sm_cursor_t *cur, u_int8_t flags)
 		return (cur->state == CURSOR_FAULT ? cur->fault : DBSQL_OK);
 	if ((rc = __sm_dbc_open(cur)) != DBSQL_OK)
 		return (rc);
+	__sm_cursors_save_others(cur);
 	if ((ret = cur->dbc->del(cur->dbc, 0)) != 0)
 		return (__sm_errmap(ret));
 	return (DBSQL_OK);

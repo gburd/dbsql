@@ -110,6 +110,22 @@ FIXUPS = [
 	 r'(\n)(      if\( file->shm \)\{\n        dbsql_str_appendall\(str, ",\\"shm\\":"\);\n        __unix_describe_shm\(str, file->shm\);\n      \})',
 	 r'\1#ifndef DBSQL_OMIT_WAL\n\2\n#endif',
 	 'os_unix.c: describe the shm object only when WAL is compiled in'),
+	# test2.c tests the native pager; the libdb build keeps only its
+	# storage-independent commands (pending byte, fault simulator, I/O
+	# error variables, bitvec, fake_big_file).  DBSQL_SM_LIBDB is defined
+	# by the libdb build.
+	(r'(^|/)test/tcl/test2\.c$',
+	 r'(\n/\*\n\*\* Usage:   pager_open FILENAME N-PAGE\n)',
+	 r'\n#ifndef DBSQL_SM_LIBDB\1',
+	 'test2.c: compile the pager commands out of the libdb build (begin)'),
+	(r'(^|/)test/tcl/test2\.c$',
+	 r'(\n)(#ifndef DBSQL_OMIT_DISKIO\n/\*\n\*\* Usage:   fake_big_file)',
+	 r'\1#endif /* !DBSQL_SM_LIBDB */\n\n\2',
+	 'test2.c: compile the pager commands out of the libdb build (end)'),
+	(r'(^|/)test/tcl/test2\.c$',
+	 r'(  \} cmds\[\] = \{\n)(    \{ "pager_open",[\s\S]*?\n    \{ "pager_truncate", [^\n]*\n)',
+	 r'\1#ifndef DBSQL_SM_LIBDB\n\2#endif\n',
+	 'test2.c: drop the pager commands from the command table'),
 	# --- the shell -------------------------------------------------------
 	# The shell sniffs a file's first 16 bytes for the SQLite header to
 	# decide how to open it.  A dbsql database is a libdb file, which

@@ -125,7 +125,6 @@ int __header_size_pcache(void);
 int __header_size_pcache1(void);
 dbsql_mutex_t *__pcache1_mutex(void);
 int __dbstat_register(DBSQL *);
-u_int64_t __sm_seek_count(sm_t *);
 
 #if defined(__cplusplus)
 }

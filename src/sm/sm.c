@@ -28,6 +28,8 @@
 #include "dbsql_int.h"
 #include "sm_int.h"
 
+#include <unistd.h>
+
 #include <errno.h>
 #include <stdlib.h>
 
@@ -230,9 +232,12 @@ __sm_db_open(sm_shared_t *bt, DB *dbp, const char *name, u_int32_t flags)
 	if (bt->flags & SM_MEMORY)
 		ret = dbp->open(dbp, __sm_cur_txn(bt), NULL, name, DB_BTREE,
 		    flags, 0);
-	else
+	else {
+		if (bt->read_only)
+			flags = (flags & ~DB_CREATE) | DB_RDONLY;
 		ret = dbp->open(dbp, __sm_cur_txn(bt), bt->path, name,
 		    DB_BTREE, flags | DB_MULTIVERSION, 0644);
+	}
 	return (__sm_errmap(ret));
 }
 
@@ -448,11 +453,13 @@ __sm_open(dbsql_vfs_t *vfs, const char *filename, DBSQL *db, sm_t **btp,
 		memcpy(bt->lock_obj, full, bt->lock_obj_len);
 		memcpy(bt->lock_obj + bt->lock_obj_len, "\0wr", 3);
 		bt->lock_obj_len += 3;
+		/* Read-only when asked, or when the file is not writable. */
+		if ((vfs_flags & DBSQL_OPEN_READONLY) ||
+		    (access(full, F_OK) == 0 && access(full, W_OK) != 0))
+			bt->read_only = 1;
 		dbsql_free(full);
 		if ((rc = __sm_txn_for(db, bt->env, &bt->txn)) != DBSQL_OK)
 			goto err;
-		if (vfs_flags & DBSQL_OPEN_READONLY)
-			bt->read_only = 1;
 	}
 	*btp = p;
 	return (DBSQL_OK);

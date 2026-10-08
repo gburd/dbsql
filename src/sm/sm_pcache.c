@@ -131,9 +131,13 @@ enable_simulated_io_errors(void)
 {
 }
 
-/* PUBLIC: u_int64_t __sm_seek_count __P((sm_t *)); */
+/*
+ * sm.h defines __sm_seek_count as 0 outside DBSQL_DEBUG builds, so this
+ * has no PUBLIC: line.
+ */
+u_int64_t (__sm_seek_count)(sm_t *);
 u_int64_t
-__sm_seek_count(sm_t *p)
+(__sm_seek_count)(sm_t *p)
 {
 	(void)p;
 	return (0);

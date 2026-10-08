@@ -77,3 +77,7 @@ Errno		errno_info_t
 Mode		shell_mode_t
 Module		module_def_t
 Thread		dbsql_thread_t
+
+# mem2.c: the field xBacktrace would become "backtrace", which mem2.c
+# also defines as a function-like macro on non-glibc systems.
+xBacktrace backtrace_fn
