@@ -50,6 +50,21 @@ things are and how to run them**. Append to it, and keep it accurate.
   - `reserved.txt` holds libc, libdb and system-header `__` names, which
     renamed globals must avoid.
 
+## Validation status (2026-10-08)
+
+- `run --native --keep-sql-names` + `native-testfixture.sh` +
+  `tests --keep-sql-names` + `suite.sh` (all in dist/transpile, copied to
+  `~/w/tp` on the host):
+  - The transformed tree on SQLite's own storage passes **1147/1181** test
+    files.
+  - Stock 3.53.4 passes 1173. Every file that passes on stock also passes on
+    the transform except qrf06 (the shell's QRF formatter is not linked into
+    the testfixture yet).
+  - Results are in `~/w/tp/native.txt` and `~/w/tp/stock.txt`.
+- `check-names.sh` reports 0 occurrences of sqlite outside comments in
+  out/src and out/test (default mode).
+- `check-lengths.py` reports 0 unhandled prefix-length sites.
+
 ## Next steps (in order)
 
 1. **Native validation testfixture.** Transform `src/tclsqlite.c`,
