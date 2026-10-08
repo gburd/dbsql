@@ -121,13 +121,20 @@ STRING_RULES = [
 	    lambda m: '__' + snake(m.group(1))),
 	# 'sqliteX_%' LIKE patterns (X escapes the '_') and similar
 	(re.compile(r'sqliteX_'), 'dbsqlX_'),
-	(re.compile(r'sqlite\\\\_'), 'dbsql\\\\_'),
+	# C string "sqlite\\_%" (an SQL LIKE escape): keep both backslashes
+	(re.compile(r'sqlite(\\\\_)'), lambda m: 'dbsql' + m.group(1)),
+	# The SQLite file format magic is 16 bytes and identifies the on-disk
+	# format of the (validation-only) native b-tree; leave it alone.
+	(re.compile(r'^"SQLite format 3"$'), '"SQLite format 3"'),
 	(re.compile(r'sqlite_'), 'dbsql_'),
 	(re.compile(r'\bSQLITE_'), 'DBSQL_'),
 	(re.compile(r'\bsqlite3_'), 'dbsql_'),
 	(re.compile(r'\bSQLite\b'), 'dbsql'),
 	(re.compile(r'\bsqlite3\b'), 'dbsql'),
 	(re.compile(r'Sqlite_Heap'), 'Dbsql_Heap'),
+	# Tcl command and package names: "sqlite3" -> "dbsql" (handled by the
+	# \bsqlite3\b rule); "sqlite" (legacy command) -> "dbsql_legacy".
+	(re.compile(r'^"sqlite"$'), '"dbsql_legacy"'),
 	(re.compile(r'-DSQLITE_'), '-DDBSQL_'),
 	(re.compile(r'/sqlite-shm-'), '/dbsql-shm-'),
 	(re.compile(r'sqliteplocks'), 'dbsqlplocks'),
@@ -138,8 +145,13 @@ PREFIX_LEN_RE = re.compile(r'("dbsql_",\s*)7\b')
 
 
 def rewrite_string(s):
+	if s == '"SQLite format 3"':
+		return s
 	for rx, rep in STRING_RULES:
 		s = rx.sub(rep, s)
+	# whatever is left (sqlite in a word: "sqlitesched", "SQLiteDatabase")
+	s = re.sub(r'SQLITE', 'DBSQL', s)
+	s = re.sub(r'[Ss][Qq][Ll]ite', 'dbsql', s)
 	return s
 
 # ---------------------------------------------------------------------------
@@ -296,11 +308,12 @@ def transform_text(toks, res, renamer, path, report):
 	return untokenize(out)
 
 
-INCLUDE_MAP = {}
+ANGLE_INCLUDES = {'<sqlite3.h>': '"dbsql.h"', '<sqlite3ext.h>': '"dbsql_ext.h"',
+    '<sqliteInt.h>': '"dbsql_int.h"'}
 
 
 def rewrite_include(h):
-	return h
+	return ANGLE_INCLUDES.get(h, h)
 
 
 def rewrite_quoted_includes(text, incmap):
@@ -340,6 +353,10 @@ EXTRA_INCLUDES = {
 	'parse.h': 'sql_parser.h',
 	'fts5parse.h': 'fts5_parser.h',
 	'sqliteicu.h': 'dbsql_icu.h',
+	'tclsqlite.h': 'tcl_dbsql.h',
+	'tcldbsql.h': 'tcl_dbsql.h',
+	'sqlite3expert.h': 'dbsql_expert.h',
+	'dbsql3expert.h': 'dbsql_expert.h',
 }
 
 
@@ -473,6 +490,11 @@ def main():
 			renamer.func_alias_macros.add(a)
 	renamer.reserved = set(l.strip() for l in
 	    open(os.path.join(HERE, 'reserved.txt')) if l.strip())
+	# External APIs (Tcl, ICU) keep their spelling everywhere.
+	external = set(l.strip() for l in
+	    open(os.path.join(HERE, 'external.txt')) if l.strip())
+	external -= renamer.filescope	# a dbsql name that happens to match
+	renamer.keep |= external
 	renamer.cache.clear()
 	global_names = set(renamer.filescope)
 	for u in analysed:

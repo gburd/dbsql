@@ -226,6 +226,11 @@ class Renamer:
 			return '__' + snake(t[len('sqlite3'):])
 		if t.startswith('sqlite3'):	# sqlite3Config etc. lower-case tail
 			return '__dbsql' + t[len('sqlite3'):]
+		m = re.match(r'^(Sqlite|Tclsqlite)(\w*)_(Init|SafeInit|Unload|SafeUnload)$', t)
+		if m:
+			# Tcl package entry points keep Tcl's Pkg_Init shape.
+			pre = 'Dbsql' if m.group(1) == 'Sqlite' else 'Tcldbsql'
+			return pre + m.group(2) + '_' + m.group(3)
 		if re.search(r'sqlite', t, re.I):
 			# Anything else spelled with sqlite: header guards
 			# (SQLITE3_H, SQLITEINT_H), SQLITE3_TEXT, sqliteHashFirst,

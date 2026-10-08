@@ -1,108 +1,163 @@
 # Storage manager (src/sm/): SQL on libdb
 
-The VDBE talks to storage only through `src/inc/sm.h`. That header is
-SQLite's btree.h interface (96 functions; the VDBE and code generator call 95
-of them), renamed by the transform (`sqlite3BtreeFoo` becomes `__sm_foo`, `Btree` becomes `sm_t`, `BtCursor` becomes `sm_cursor_t`), with
-**identical semantics**. It is implemented entirely on libdb's public API in
-`src/sm/`. This file is the design of record. Change it when the design
-changes.
+This is the design of record. Change this file when the design changes.
 
-**Why keep the btree.h seam.** It is the interface every layer above storage
-was written against: the VDBE, code generation, and pager-adjacent calls in
-main.c, pragma.c, vacuum.c and backup.c. Keeping it means the transformed
-upstream code needs no storage edits, and every later SQLite release merges
-mechanically. The pager-level calls those files make (`sqlite3Pager*`, about
-25 functions) get a thin shim in `src/sm/sm_pager.c` that answers from libdb
-or reports fixed values (see DIVERGENCES.md).
+## The seam
 
-**Bring-up order.**
-1. A transformed build that still uses SQLite's own btree, pager and os
-   layers (`--with-storage=native`, build-only, never shipped). SQLite's test
-   suite must pass on it. This proves the transform preserves semantics.
-2. Swap in `src/sm/` (`--with-storage=libdb`, the default and the only
-   shipped configuration). Failures from this point on are in sm/ or are
-   listed divergences.
+The VDBE and code generator reach storage only through `src/inc/sm.h`. That
+header is SQLite's `btree.h`, renamed by the transform:
+`sqlite3BtreeFoo` → `__sm_foo`, `Btree` → `sm_t`, `BtCursor` → `sm_cursor_t`.
+The semantics are identical. Code outside storage calls 95 of its 96
+functions, so keeping the seam means the transformed upstream code needs
+no storage edits, and later SQLite releases merge mechanically.
 
-## Layout
+The pager-level calls made by main.c, pragma.c, vacuum.c and the API files
+(about 35 `__sm_pager_*` functions) are answered by a small shim in
+`src/sm/sm_pager.c`. It reports fixed values for WAL, journal and mmap
+(see DIVERGENCES.md).
 
-- **Environment.** A `DBSQL` handle owns, or joins, a `DB_ENV`. Its home
-  directory comes from `dbsql_create_env(&dbp, dir, ...)`, or by default is the
-  directory of the first opened file. Flags are `DB_CREATE | DB_INIT_LOCK |
-  DB_INIT_LOG | DB_INIT_MPOOL | DB_INIT_TXN | DB_THREAD`, plus
-  `DB_REGISTER | DB_RECOVER` so that the first opener after a crash runs
-  recovery automatically. `DB_PRIVATE`, an in-memory log and in-memory
-  databases are used for `:memory:` and temp.
-- **One SQL database is one libdb file.** Each table and index is a
-  sub-database of that file, named `t<N>` (or `i<N>`), where N is the
-  "root page" number the schema stores. N comes from a per-file
-  `DB_SEQUENCE` held in the `__dbsql_meta` sub-database.
-- **Meta.** The 16 SQLite meta integers (schema cookie, file format, user
-  version, application id, …) are records in `__dbsql_meta`, keyed by a
-  4-byte big-endian index.
-- **Rowid tables** are `DB_BTREE` databases. The key is the rowid encoded as
-  8 bytes big-endian with the sign bit flipped, so memcmp order equals integer
-  order. The data is the SQLite record payload. They use the default (memcmp)
-  comparator, which is fast and pure.
-- **Indexes and WITHOUT ROWID tables** are `DB_BTREE` databases whose key is
-  the SQLite record, with empty data. A custom comparator (`__sm_rec_compare`)
-  decodes both records against the index's `key_info_t` (collations, DESC,
-  number of fields) and compares them field by field.
-  - The comparator is **pure and bounds-checked** (NORTH_STAR invariant 6):
-    every varint and serial-type read is checked against `dbt->size`, a
-    malformed record compares as greater than any well-formed one, and the
-    comparator never allocates.
-  - Collation callbacks run inside it, so user collations must be pure too.
-    This is documented.
-  - `key_info_t` is attached to the `DB` handle via `DB->app_private` before
-    `DB->open` and is immutable for the lifetime of the handle.
-- **Ephemeral tables and sorter.** These use in-memory, unnamed libdb
-  databases in the connection's private temp environment. The sorter may
-  keep using SQLite's vdbesort in-memory merge, spilling to a temp libdb
-  database instead of a temp file.
+`src/sm/` replaces SQLite's btree.c, btmutex.c, pager.c, pcache.c,
+pcache1.c, wal.c, memdb.c, backup.c, dbstat.c and dbpage.c. Those files
+are built only for the `--native` validation testfixture.
 
-## Transactions
+Compile-time options for the shipped build:
 
-| SQLite operation | libdb |
+- `DBSQL_OMIT_SHARED_CACHE` (the `__sm_enter`/`__sm_leave` calls become
+  macros)
+- `DBSQL_OMIT_WAL`
+- `DBSQL_OMIT_DESERIALIZE`
+- dbstat and dbpage are not compiled
+
+## Files, environments, layout
+
+- **One environment per directory.** A process-wide registry maps a
+  directory to one `DB_ENV`, refcounted and mutex-protected. Every database
+  file is opened in the environment of its own directory. This is the only
+  way two processes opening the same file are guaranteed to share regions,
+  locks and the log.
+  - Open flags: `DB_CREATE | DB_INIT_LOCK | DB_INIT_LOG | DB_INIT_MPOOL |
+    DB_INIT_TXN | DB_THREAD | DB_REGISTER | DB_RECOVER`, plus
+    `set_flags(DB_MULTIVERSION | DB_TXN_NOWAIT)` and
+    `set_lk_detect(DB_LOCK_DEFAULT)`. `DB_REGISTER` makes libdb run recovery
+    only when a previous user of the environment died.
+  - `DB_LOG_AUTO_REMOVE` is set, and a checkpoint runs after any commit that
+    has grown the log by more than 1 MB.
+  - An environment created by an incompatible libdb (`DB_VERSION_MISMATCH`)
+    yields `DBSQL_CANTOPEN` with a clear message. It must never crash.
+- **One SQL database is one libdb file.** It contains:
+  - `__dbsql_meta`, a btree holding:
+    - the 16 SQLite meta integers, keyed by 4-byte big-endian index;
+    - a format record (`"dbsql" 1`) that identifies a dbsql file. A file
+      without it is `DBSQL_NOTADB`.
+  - `t<N>`, one btree per table or index. N is the SQLite "root page"
+    number stored in `dbsql_schema.rootpage`. N=1 is the schema table.
+    New numbers come from meta `LARGEST_ROOT_PAGE` + 1. Numbers are never
+    reused or moved, so `__sm_drop_table` always reports `*moved = 0`.
+- **Per-connection private environment.** This is `DB_PRIVATE`, with an
+  in-memory log, `DB_INIT_TXN`, `DB_INIT_LOCK` and `DB_INIT_MPOOL`. It holds:
+  - `:memory:` main databases and the temp database (temp tables, triggers
+    and views), as named in-memory databases, which are transactional;
+  - ephemeral tables and sorter spill (`OP_OpenEphemeral`, `BTREE_SINGLE`),
+    as unnamed, non-transactional databases. libdb pages them to its temp
+    directory when the cache fills.
+
+## Keys and records
+
+- **Rowid tables** (`BTREE_INTKEY`): the key is 8 bytes, big-endian, with
+  the sign bit flipped, so memcmp order equals integer order. The data is the
+  SQLite record. These tables use libdb's default comparator.
+- **Indexes and WITHOUT ROWID tables** (`BTREE_BLOBKEY`): the key is the
+  whole SQLite record (all key columns plus the rowid or PK suffix) and the
+  data is empty. Entries are unique as full records, so `DB_DUP` is not used.
+  UNIQUE constraints are enforced by the VDBE (`OP_NoConflict`), exactly as
+  upstream.
+- **Comparator `__sm_rec_cmp(DB*, DBT*, DBT*)`** (NORTH_STAR invariant 6):
+  - **Bounded pre-validation.** Before any decode, it parses the page-side
+    record's header with explicit bounds and checks that every serial-type
+    length fits inside `dbt->size`. A malformed record compares greater than
+    everything and reads nothing past its DBT. This keeps libdb's lock-free
+    descent safe on torn pages.
+  - **Semantics are delegated to upstream.** When one DBT carries the probe's
+    `unpacked_record_t` in `app_data` (every VDBE seek and insert does this),
+    the result is upstream's `__vdbe_record_compare` against it. Otherwise
+    (libdb-internal paths such as split, delete and compaction) the two
+    packed records are compared field by field with upstream's
+    `__mem_compare` plus KeyInfo collations and sort flags. Either way the
+    order is exactly SQLite's.
+  - The comparator never calls libdb, never takes a libdb lock, and does not
+    allocate. The one exception is a user collation registered for a
+    different text encoding, which upstream also converts.
+  - The index's `key_info_t` is copied into the `DB` handle's
+    `app_private` before `DB->open` and is immutable for the handle's
+    lifetime.
+
+## Transactions: WAL-like semantics on MVCC
+
+| SQLite | libdb |
 |---|---|
-| read transaction | none needed for autocommit reads with `DB_READ_COMMITTED` cursors; inside BEGIN, the connection txn |
-| `BEGIN` / first write | `txn_begin(env, NULL, &txn, 0)`. With `PRAGMA isolation=snapshot` the env is opened with `DB_MULTIVERSION` and reads use `DB_TXN_SNAPSHOT`; with `serializable`, `DB_TXN_SERIALIZABLE` (SSI) |
-| statement journal (OP_Transaction with a statement id) | child txn of the connection txn, committed or aborted at statement end |
-| `SAVEPOINT name` | child txn pushed on the savepoint stack |
-| `RELEASE name` | commit the child txns up to and including name |
-| `ROLLBACK TO name` | abort the child txns down to name, then begin a fresh child named name |
-| `COMMIT` | `txn->commit(txn, 0)` (`DB_TXN_NOSYNC` when `PRAGMA synchronous=OFF`) |
-| `DB_LOCK_DEADLOCK`, `DB_LOCK_NOTGRANTED`, `DB_SNAPSHOT_CONFLICT`, `DB_SNAPSHOT_UNSAFE` | `DBSQL_BUSY`. The statement rolls back to its start, and the busy handler or timeout decides whether to retry |
-| `DB_RUNRECOVERY` | `DBSQL_RUNRECOVERY`. The connection becomes unusable |
+| read transaction (`__sm_begin_trans(p, 0)`) | `txn_begin(DB_TXN_SNAPSHOT)`. Readers take no locks and see a snapshot from their start |
+| write transaction (`__sm_begin_trans(p, 1)`) | the same txn, plus a **database write lock**: `lock_get(DB_LOCK_WRITE)` on the object `"<file>\0wr"`, taken with `DB_LOCK_NOWAIT` under the txn's locker and released at commit or abort. Only one writer per database at a time. A conflict returns `DBSQL_BUSY` from `__sm_begin_trans`, so upstream's busy-handler loop there works unchanged |
+| upgrading a read txn whose snapshot is stale (another writer committed since it began) | `DBSQL_BUSY_SNAPSHOT`, as in SQLite WAL mode. A libdb update conflict on a newer page version maps to the same code |
+| `__sm_begin_stmt` / `SAVEPOINT` | a stack of child txns. Level 0 is a child of the connection txn that holds all content. Each savepoint adds one level |
+| `ROLLBACK TO i` | abort levels > i, then begin a fresh level i+1 |
+| `RELEASE i` | commit levels ≥ i into their parents |
+| rollback of the whole transaction while keeping it open (`iSavepoint < 0`) | abort level 0 and begin a new one |
+| commit phase one / phase two | The connection has **one** top-level txn shared by every `sm_t` in the same environment (main and same-directory attachments). It commits once, at the first phase-two call. `vdbeCommit` always takes upstream's simple path; the super-journal path is not needed |
+| `PRAGMA synchronous` | `OFF` → `DB_TXN_NOSYNC`, `NORMAL` → `DB_TXN_WRITE_NOSYNC`, `FULL`/`EXTRA` → sync |
+| `DB_LOCK_DEADLOCK`, `DB_LOCK_NOTGRANTED` | `DBSQL_BUSY` |
+| `DB_SNAPSHOT_CONFLICT`, `DB_SNAPSHOT_UNSAFE` | `DBSQL_BUSY_SNAPSHOT` |
+| `DB_RUNRECOVERY` | `DBSQL_CORRUPT`. The connection is unusable until reopened |
 
-The deadlock detector runs on every lock conflict
-(`set_lk_detect(DB_LOCK_DEFAULT)`). `busy_timeout` maps to
-`set_timeout(DB_SET_LOCK_TIMEOUT)` together with retry in the busy handler.
+Databases attached from another directory live in another environment. They
+commit in that environment's own txn, so a transaction spanning two
+directories is not atomic across them. This is listed in DIVERGENCES.md.
 
-## Operations to libdb mapping (summary)
+## Cursors
 
-| sm.h | libdb |
+- Each `sm_cursor_t` has a `DBC` opened in the current innermost txn, plus
+  per-cursor key and data buffers (`DB_DBT_REALLOC`) that hold the current
+  entry. `__sm_payload_fetch` returns a pointer into the buffer that stays
+  valid until the cursor moves, as the VDBE expects.
+- Before a savepoint level is committed or aborted, every `DBC` opened in
+  that level saves its key and is closed (the cursor state becomes
+  `CURSOR_REQUIRESEEK`). The next access reopens it in the current level and
+  seeks back with `DB_SET_RANGE`. On a rollback, `__sm_trip_all_cursors`
+  faults cursors as upstream does.
+- `moveto`: seek with `DB_SET_RANGE` to the smallest key ≥ the probe, falling
+  back to `DB_LAST`. `*res` is the sign of the comparison between the
+  cursor's entry and the probe, exactly as upstream.
+- `insert`: `DBC->put(DB_KEYFIRST)` positions the cursor on the new entry.
+  `delete`: `DBC->del`, and the cursor stays on the deleted slot, so next and
+  prev behave as upstream.
+- `count`: a cursor walk under the snapshot, exact.
+- Incremental blob writes: read the row, patch it, `DBC->put(DB_CURRENT)`.
+
+## Whole-database operations
+
+| Operation | Implementation |
 |---|---|
-| cursor open/close | `DB->cursor(txn, &dbc, DB_READ_COMMITTED or 0)` / `DBC->close` |
-| table_moveto(rowid) | `DBC->get(DB_SET_RANGE)` on the encoded key, then compare |
-| index_moveto(unpacked key) | `DB_SET_RANGE` with the packed probe, then compare with the comparator semantics |
-| first/last/next/prev | `DB_FIRST`/`DB_LAST`/`DB_NEXT`/`DB_PREV` |
-| payload, payload_fetch | the cursor's current DBT (`DB_DBT_USERMEM` buffer, grown on `DB_BUFFER_SMALL`) |
-| insert | `DBC->put(DB_KEYLAST)` or `DB->put` |
-| delete | `DBC->del(0)` |
-| clear_table | `DB->truncate` |
-| drop_table | close the handle, then `DB->remove(file, subdb)` inside the txn |
-| count | `DB->stat(DB_FAST_STAT)` when exact; otherwise a cursor walk |
-| integrity_check | `DB->verify` per sub-database, plus SQL-level checks |
-| VACUUM | `DB->compact(DB_FREE_SPACE)` on each sub-database |
-| VACUUM INTO / backup API | `DB_ENV->dbbackup` for the file, then rewrite the environment |
-| incremental blob I/O | `DB_DBT_PARTIAL` get/put on the row |
+| `__sm_copy_file` (in-place VACUUM) | in the destination's write txn, drop every `t<N>`, copy each source sub-database and the meta |
+| VACUUM INTO | upstream's SQL-level copy into the new file; no extra storage work |
+| `dbsql_backup_*` | logical copy, one sub-database per step unit. `remaining` and `pagecount` count sub-databases (DIVERGENCES.md) |
+| `PRAGMA incremental_vacuum` | `DB->compact(DB_FREE_SPACE)` |
+| `PRAGMA integrity_check` | logical: keys strictly increasing under the comparator, rowid keys decode, entry counts. libdb's own page checks happen on every page read |
+| `PRAGMA page_size` | the libdb page size for the file, settable until the first table exists |
+| `page_count`, `freelist_count` | from `DB->stat(DB_FAST_STAT)` |
 
-## Concurrency
+## Verified libdb behaviours (test/unit/probe_libdb.c, run on the build host)
 
-- Each connection uses its own `DB` handles, opened with `DB_THREAD`.
-- `set_mutex_increment` is sized for (tables + indexes) × 9 mutexes per
-  handle, because the master branch allocates 8 cursor-queue mutexes per
-  threaded handle.
-- Schema changes bump the schema cookie inside the writing transaction. Every
-  statement verifies the cookie at OP_Transaction and returns
-  `DBSQL_SCHEMA` (then re-prepares) on a mismatch, exactly as in SQLite.
+- An environment opens with `DB_MULTIVERSION | DB_TXN_NOWAIT` and
+  `DB_REGISTER | DB_RECOVER`.
+- A `DB_TXN_SNAPSHOT` txn fixes its snapshot at its **first read**, not at
+  `txn_begin`. An SQL read transaction always reads the schema cookie
+  first, so this is equivalent.
+- A stale snapshot txn that writes a page updated after its snapshot gets
+  `DB_LOCK_DEADLOCK`, which maps to `DBSQL_BUSY_SNAPSHOT`.
+- `lock_get(txn->id(), DB_LOCK_NOWAIT, obj, DB_LOCK_WRITE)` gives the
+  database write lock. A second txn gets `DB_LOCK_NOTGRANTED`. The lock is
+  released when the owning txn commits.
+- Aborting a child txn undoes only the child's writes.
+- A named in-memory database in a private env with an in-memory log honours
+  txn abort.
+- An unnamed temporary database in an mpool-only private env spills to its
+  temp directory when the cache fills (10 MB into a 256 KB cache).

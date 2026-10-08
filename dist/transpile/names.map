@@ -51,3 +51,21 @@ sqlite3StrICmp		__str_icmp
 sqlite3StrNICmp		__str_nicmp
 sqlite3_stricmp		dbsql_stricmp
 sqlite3_strnicmp	dbsql_strnicmp
+Sqlite_SafeInit		Dbsql_SafeInit_legacy
+Sqlite_SafeUnload	Dbsql_SafeUnload_legacy
+# Tcl package entry points: Sqlite3_Init -> Dbsql3_Init would read oddly;
+# the shipped package is "Dbsql".  Legacy aliases keep a _legacy suffix.
+Sqlite3_Init		Dbsql_Init
+Tclsqlite3_Init		Tcldbsql_Init
+Sqlite3_Unload		Dbsql_Unload
+Tclsqlite3_Unload	Tcldbsql_Unload
+Sqlite3_SafeInit	Dbsql_SafeInit
+Sqlite3_SafeUnload	Dbsql_SafeUnload
+Sqlite_Init		Dbsql_legacy_Init
+Tclsqlite_Init		Tcldbsql_legacy_Init
+Sqlite_Unload		Dbsql_legacy_Unload
+Tclsqlite_Unload	Tcldbsql_legacy_Unload
+Sqlite_SafeInit		Dbsql_legacy_SafeInit
+Sqlite_SafeUnload	Dbsql_legacy_SafeUnload
+sqlite3_Init		dbsql_Init
+sqlite_Init		dbsql_legacy_Init

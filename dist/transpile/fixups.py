@@ -72,6 +72,10 @@ FIXUPS = [
 	(r'(^|/)cg_where\.c$',
 	 r'("dbsql_autoindex_",\s*)17\b', r'\g<1>16',
 	 'reserved prefix: "dbsql_autoindex_" is 16 chars'),
+	(r'(^|/)cg_alter\.c$',
+	 r"('dbsql_autoindex_' \|\| %Q \|\| substr\(name,%d\+)18\)",
+	 r'\g<1>17)',
+	 'RENAME TABLE: dbsql_autoindex_<tab> suffix starts at len(tab)+17'),
 	# --- lemon action variables -------------------------------------------
 	# yyLookaheadToken is a parameter of the lemon-generated yy_reduce().
 	(r'(^|/)sql_parser\.y$',
