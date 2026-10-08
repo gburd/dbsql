@@ -886,7 +886,9 @@ __sm_dbh_get(sm_shared_t *bt, u_int32_t pgno, key_info_t *ki, int create,
 	if (!h->is_intkey)
 		(void)h->dbp->set_bt_compare(h->dbp, __sm_rec_cmp);
 	__sm_subdb_name(pgno, name);
-	rc = __sm_db_open(bt, h->dbp, name, create ? DB_CREATE : 0);
+	/* Ephemeral tables exist only in this handle: always create. */
+	rc = __sm_db_open(bt, h->dbp, name,
+	    (create || (bt->flags & SM_EPHEMERAL)) ? DB_CREATE : 0);
 	if (rc != DBSQL_OK)
 		goto err;
 	if (ki != NULL)
@@ -920,14 +922,19 @@ __sm_table_kind(sm_shared_t *bt, u_int32_t pgno, int create, int *intkeyp)
 	u_int8_t v;
 	int ret;
 
-	if (pgno == 1 || bt->flags & SM_EPHEMERAL) {
-		if (bt->flags & SM_EPHEMERAL)
-			*intkeyp = create ? (create & BTREE_INTKEY) != 0 :
-			    bt->eph_kind[pgno & 1];
-		else
-			*intkeyp = 1;
-		if (bt->flags & SM_EPHEMERAL)
-			bt->eph_kind[pgno & 1] = *intkeyp;
+	/*
+	 * Table 1 is always a rowid table (the schema table, or an ephemeral
+	 * btree's implicit table).  An ephemeral btree's table 2 is created
+	 * by __sm_create_table with an explicit kind.
+	 */
+	if (pgno == 1) {
+		*intkeyp = 1;
+		return (DBSQL_OK);
+	}
+	if (bt->flags & SM_EPHEMERAL) {
+		if (create)
+			bt->eph_kind[pgno & 1] = (create & BTREE_INTKEY) != 0;
+		*intkeyp = bt->eph_kind[pgno & 1];
 		return (DBSQL_OK);
 	}
 	snprintf(kbuf, sizeof(kbuf), "k%u", (unsigned)pgno);
@@ -974,8 +981,8 @@ __sm_create_table(sm_t *p, pgno_t *pgnop, int flags)
 	if (bt->flags & SM_EPHEMERAL) {
 		/* Ephemeral btrees hold one table, number 2 (SCHEMA_ROOT+1). */
 		*pgnop = 2;
-		return (__sm_dbh_get(bt, 2, NULL, flags ? flags : BTREE_INTKEY,
-		    &h));
+		return (__sm_dbh_get(bt, 2, NULL, (flags & BTREE_INTKEY) ?
+		    BTREE_INTKEY : BTREE_BLOBKEY, &h));
 	}
 	if ((rc = __sm_meta_get_raw(bt, BTREE_LARGEST_ROOT_PAGE, &largest))
 	    != DBSQL_OK)
