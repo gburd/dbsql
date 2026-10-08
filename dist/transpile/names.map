@@ -71,3 +71,9 @@ sqlite3_Init		dbsql_Init
 sqlite_Init		dbsql_legacy_Init
 # fields whose array name is already plural
 aSortFlags	sort_flags
+# Typedefs whose plain snake_case _t form is a system type (sys/types.h,
+# pthread, kernel headers): use a distinct name.
+Errno		errno_info_t
+Mode		shell_mode_t
+Module		module_def_t
+Thread		dbsql_thread_t

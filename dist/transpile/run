@@ -159,6 +159,8 @@ SQL_NAME_RX = re.compile(r'sqlite_|sqliteX_|sqlite\\\\_')
 
 
 def rewrite_string(s):
+	# The SQLite file-format magic names a foreign format (native
+	# validation b-tree, the shell's appendvfs/zip sniffing); keep it.
 	if s == '"SQLite format 3"':
 		return s
 	for rx, rep in STRING_RULES:
@@ -371,6 +373,10 @@ GENERATED = [
 	('pragma.h', 'src/inc/pragma.h'),
 	('ctime.c', 'src/api/ctime.c'),
 	('sqlite3.h', 'src/inc/dbsql_api_ref.h'),
+	# The interactive shell: upstream's mkshellc.tcl inlines ext/misc,
+	# ext/qrf, ext/expert, ext/intck, ext/recover into one file.  .recover
+	# stays compiled out (DBSQL_SHELL_HAVE_RECOVER is never defined).
+	('shell.c', 'src/shell/dbsql.c'),
 ]
 # Header renames applied to quoted #include lines (in addition to the
 # basename map derived from the manifest).
@@ -551,6 +557,16 @@ def main():
 		global_names.update(t for k, t in toks if k == 'id' and
 		    t.startswith('sqlite3'))
 	resolve_globals(renamer, global_names, report)
+	# A typedef must not become a system _t type (mode_t, thread_t...).
+	sys_types = set(l.strip() for l in
+	    open(os.path.join(HERE, 'sys_types.txt')) if l.strip())
+	sys_types -= set(['u_int8_t', 'u_int16_t', 'u_int32_t', 'u_int64_t',
+	    'int8_t', 'int16_t', 'int32_t', 'int64_t', 'pgno_t'])
+	clash = sorted(t for t in renamer.typedefs | set(renamer.struct_tags)
+	    if renamer.map(t) in sys_types)
+	if clash:
+		sys.exit('typedefs mapping onto system types (add to names.map): '
+		    + ' '.join('%s->%s' % (t, renamer.map(t)) for t in clash))
 	for u, d, tag in selected:
 		toks, res = analysed[u]
 		text = transform_text(toks, res, renamer, u, report)

@@ -235,7 +235,9 @@ class Renamer:
 			# hooks (sqlite_search_count), schema names...
 			return 'dbsql_' + t[len('sqlite_'):]
 		if t.startswith('SQLITE_'):
-			return 'DBSQL_' + t[len('SQLITE_'):]
+			return 'DBSQL_' + re.sub(r'SQLITE3?R?', lambda m:
+			    'DBSQLR' if m.group(0).endswith('R') else 'DBSQL',
+			    t[len('SQLITE_'):])
 		if t.startswith('sqlite3Btree'):
 			return '__sm_' + snake(t[len('sqlite3Btree'):])
 		if t.startswith('sqlite3Pager'):
@@ -256,7 +258,8 @@ class Renamer:
 			# (SQLITE3_H, SQLITEINT_H), SQLITE3_TEXT, sqliteHashFirst,
 			# INLINEFUNC_sqlite_offset ... replace the word in place,
 			# then apply the CamelCase rules to the result.
-			r = re.sub(r'SQLITE3?', 'DBSQL', t)
+			r = re.sub(r'SQLITE3R', 'DBSQLR', t)
+			r = re.sub(r'SQLITE3?', 'DBSQL', r)
 			r = re.sub(r'[Ss]qlite3?', 'dbsql', r)
 			if r != t:
 				return self._map(r) if re.search(r'[a-z][A-Z]', r) \
@@ -269,7 +272,7 @@ class Renamer:
 			# then legal C and unambiguous.
 			return snake(self.struct_tags[t]) + '_t'
 		if t in self.filescope and t not in self.macros and \
-		    (is_camel(t) or t[0].isupper()):
+		    is_camel(t):
 			# file-scope (often static) camelCase functions and
 			# variables: __snake.  Lower-case file-scope names
 			# (main, azCompileOpt...) fall through to the local rules.
@@ -314,7 +317,7 @@ class Renamer:
 		    t in TYPE_OVERRIDES or t.startswith(('sqlite3', 'SQLITE_')) or
 		    t in self.typedefs or t in self.macros or
 		    t in self.enums or t in C_KEYWORDS or
-		    (t in self.filescope and (is_camel(t) or t[0].isupper())) or
+		    (t in self.filescope and is_camel(t)) or
 		    (t[0].isupper() and is_camel(t)))
 
 	def fallback(self, t):
@@ -342,6 +345,9 @@ def resolve_globals(renamer, names, report):
 	for t in sorted(names):
 		by_new.setdefault(renamer.map(t), set()).add(t)
 	for new, group in sorted(by_new.items()):
+		group = set(t for t in group if renamer.map(t) != t)
+		if not group:
+			continue	# names that keep their spelling (NULL, TK_*)
 		if new in renamer.reserved and new not in group:
 			for t in sorted(group):
 				if renamer.is_global(t) and new.startswith('__'):

@@ -17,7 +17,8 @@ for d, _, fs in os.walk(root):
 		src = open(p, encoding='utf-8', errors='surrogateescape').read()
 		line = 1
 		for k, t in tokenize(src):
-			if k != 'cmt' and re.search(r'sqlite', t, re.I):
+			if k != 'cmt' and re.search(r'sqlite', t, re.I) and \
+			    t != '"SQLite format 3"':
 				print('%s:%d: %s' % (p, line, t[:80]))
 				bad += 1
 			line += t.count('\n')
