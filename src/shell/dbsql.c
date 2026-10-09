@@ -33299,7 +33299,7 @@ static int do_meta_command(const char *line, shell_state_t *p){
       dbsql_stmt_t *stmt;
       memset(has_stat, 0, sizeof(has_stat));
       rc = dbsql_prepare_v2(p->db,
-               "SELECT substr(name,12,1) FROM dbsql_schema"
+               "SELECT substr(name,11,1) FROM dbsql_schema"
                " WHERE name GLOB 'dbsql_stat[134]'",
                -1, &stmt, 0);
       if( rc==DBSQL_OK ){

@@ -141,6 +141,10 @@ FIXUPS = [
 	 r'#ifdef DBSQL_SM_LIBDB\n#include "sm_int.h"\n#else\n#include "btree_int.h"\n#endif\n',
 	 'test3.c: sm_int.h instead of btree_int.h on libdb'),
 	# --- the shell -------------------------------------------------------
+	(r'(^|/)shell/dbsql\.c$',
+	 r'("SELECT substr\(name,)12(,1\) FROM dbsql_schema"\n\s*" WHERE name GLOB \'dbsql_stat\[134\]\'")',
+	 r'\g<1>11\2',
+	 'shell .expert/.schema stats: digit of "dbsql_stat[134]" is char 11'),
 	# The shell sniffs a file's first 16 bytes for the SQLite header to
 	# decide how to open it.  A dbsql database is a libdb file, which
 	# __is_database_file() recognises through the storage manager; the
