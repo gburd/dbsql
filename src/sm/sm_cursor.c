@@ -34,6 +34,9 @@
 #include "vdbe_int.h"
 #include "sm_int.h"
 
+static void __sm_invalidate_incrblob(sm_cursor_t *, int64_t, int);
+static void __sm_cursors_save_others_keep_incrblob(sm_cursor_t *);
+
 #include <stdlib.h>
 
 /*
@@ -191,7 +194,9 @@ __sm_cursors_invalidate_table(sm_shared_t *bt, u_int32_t pgno)
 	sm_cursor_t *cur;
 
 	for (cur = bt->cursors; cur != NULL; cur = cur->next)
-		if (cur->pgno == pgno && cur->state != CURSOR_FAULT) {
+		if (cur->pgno == pgno && cur->incrblob)
+			cur->state = CURSOR_INVALID;	/* blob handle: gone */
+		else if (cur->pgno == pgno && cur->state != CURSOR_FAULT) {
 			if (cur->dbc != NULL) {
 				(void)cur->dbc->close(cur->dbc);
 				cur->dbc = NULL;
@@ -227,6 +232,29 @@ __sm_cursors_check_pinned(sm_cursor_t *cur)
 		    c->state == CURSOR_REQUIRESEEK))
 			return (DBSQL_CONSTRAINT_PINNED);
 	return (DBSQL_OK);
+}
+
+/*
+ * __sm_cursors_save_others_keep_incrblob --
+ *	As __sm_cursors_save_others, for a blob write: no pin check, and
+ *	every cursor is just released (blob handles re-read on use).
+ */
+static void
+__sm_cursors_save_others_keep_incrblob(sm_cursor_t *cur)
+{
+	sm_cursor_t *c;
+
+	for (c = cur->bt->cursors; c != NULL; c = c->next) {
+		if (c == cur || c->pgno != cur->pgno || c->dbc == NULL)
+			continue;
+		(void)c->dbc->close(c->dbc);
+		c->dbc = NULL;
+		c->dbc_txn = NULL;
+		if (c->state == CURSOR_VALID) {
+			c->state = CURSOR_REQUIRESEEK;
+			c->saved = 1;
+		}
+	}
 }
 
 static int
@@ -842,18 +870,30 @@ int
 __sm_payload_checked(sm_cursor_t *cur, u_int32_t offset, u_int32_t amt,
     void *buf)
 {
-	int rc, diff;
+	int rc, diff, found;
 
 	if (cur->state == CURSOR_INVALID)
 		return (DBSQL_ABORT);
 	if (cur->state == CURSOR_REQUIRESEEK) {
 		if ((rc = __sm_cursor_restore_position(cur, &diff)) != DBSQL_OK)
 			return (rc);
-		if (diff)
+		if (diff || cur->state != CURSOR_VALID)
 			return (DBSQL_ABORT);
 	}
 	if (cur->state == CURSOR_FAULT)
 		return (cur->fault);
+	/*
+	 * Blob reads re-read the row: another blob handle on the same row
+	 * may have written it since this cursor copied it.
+	 */
+	if (cur->incrblob) {
+		if ((rc = __sm_dbc_open(cur)) != DBSQL_OK)
+			return (rc);
+		if ((rc = __sm_dbc_get(cur, DB_CURRENT, &found)) != DBSQL_OK)
+			return (rc);
+		if (!found)
+			return (DBSQL_ABORT);
+	}
 	return (__sm_payload(cur, offset, amt, buf));
 }
 
@@ -868,19 +908,29 @@ __sm_payload_checked(sm_cursor_t *cur, u_int32_t offset, u_int32_t amt,
 int
 __sm_put_data(sm_cursor_t *cur, u_int32_t offset, u_int32_t amt, void *z)
 {
-	int rc, ret, diff;
+	int rc, ret, diff, found;
 
-	if (cur->state == CURSOR_REQUIRESEEK &&
-	    (rc = __sm_cursor_restore_position(cur, &diff)) != DBSQL_OK)
-		return (rc);
+	if (cur->state == CURSOR_REQUIRESEEK) {
+		if ((rc = __sm_cursor_restore_position(cur, &diff)) != DBSQL_OK)
+			return (rc);
+		if (diff)
+			return (DBSQL_ABORT);
+	}
 	if (cur->state != CURSOR_VALID)
 		return (DBSQL_ABORT);
 	if (!cur->wr_flag)
 		return (DBSQL_READONLY);
-	if ((u_int64_t)offset + amt > cur->data.size)
-		return (DBSQL_CORRUPT_BKPT);
 	if ((rc = __sm_dbc_open(cur)) != DBSQL_OK)
 		return (rc);
+	/* Start from the row as stored (another handle may have written). */
+	if ((rc = __sm_dbc_get(cur, DB_CURRENT, &found)) != DBSQL_OK)
+		return (rc);
+	if (!found)
+		return (DBSQL_ABORT);
+	if ((u_int64_t)offset + amt > cur->data.size)
+		return (DBSQL_CORRUPT_BKPT);
+	/* Other blob handles on this row stay valid (upstream). */
+	__sm_cursors_save_others_keep_incrblob(cur);
 	memcpy((u_int8_t *)cur->data.data + offset, z, amt);
 	cur->data.flags = 0;
 	ret = cur->dbc->put(cur->dbc, &cur->key, &cur->data, DB_CURRENT);
@@ -888,11 +938,34 @@ __sm_put_data(sm_cursor_t *cur, u_int32_t offset, u_int32_t amt, void *z)
 	return (__sm_errmap(ret));
 }
 
-/* PUBLIC: void __sm_incrblob_cursor __P((sm_cursor_t *)); */
+/*
+ * __sm_incrblob_cursor --
+ *	Mark a cursor as a blob handle's: a write to its row through any
+ *	other cursor (or clearing the table) invalidates it, and blob I/O on
+ *	it then fails with DBSQL_ABORT.
+ *
+ * PUBLIC: void __sm_incrblob_cursor __P((sm_cursor_t *));
+ */
 void
 __sm_incrblob_cursor(sm_cursor_t *cur)
 {
-	(void)cur;
+	cur->incrblob = 1;
+}
+
+/*
+ * __sm_invalidate_incrblob --
+ *	A write is about to change row 'rowid' of table pgno (or every row,
+ *	with all set): invalidate the blob handles on it.
+ */
+static void
+__sm_invalidate_incrblob(sm_cursor_t *writer, int64_t rowid, int all)
+{
+	sm_cursor_t *c;
+
+	for (c = writer->bt->cursors; c != NULL; c = c->next)
+		if (c != writer && c->incrblob && c->pgno == writer->pgno &&
+		    (all || c->rowid == rowid))
+			c->state = CURSOR_INVALID;
 }
 
 /*
@@ -1041,10 +1114,12 @@ __sm_insert(sm_cursor_t *cur, const sm_payload_t *x, int flags,
 	 * statement is on), so they are saved and re-read, as upstream's
 	 * saveAllCursors.  Index inserts did this above.
 	 */
-	if (cur->dbh->is_intkey && (rc = __sm_cursors_save_others(cur)) !=
-	    DBSQL_OK) {
-		free(zbuf);
-		return (rc);
+	if (cur->dbh->is_intkey) {
+		__sm_invalidate_incrblob(cur, x->n_key, 0);
+		if ((rc = __sm_cursors_save_others(cur)) != DBSQL_OK) {
+			free(zbuf);
+			return (rc);
+		}
 	}
 	ret = cur->dbc->put(cur->dbc, &key, &data, DB_KEYLAST);
 	free(zbuf);
@@ -1079,6 +1154,8 @@ __sm_delete(sm_cursor_t *cur, u_int8_t flags)
 		return (cur->state == CURSOR_FAULT ? cur->fault : DBSQL_OK);
 	if ((rc = __sm_dbc_open(cur)) != DBSQL_OK)
 		return (rc);
+	if (cur->dbh->is_intkey)
+		__sm_invalidate_incrblob(cur, cur->rowid, 0);
 	if ((rc = __sm_cursors_save_others(cur)) != DBSQL_OK)
 		return (rc);
 	if ((ret = cur->dbc->del(cur->dbc, 0)) != 0)
