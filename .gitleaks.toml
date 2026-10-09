@@ -1,0 +1,13 @@
+# gitleaks: extend the default rules; allow the generated SQL-layer
+# sources' identifiers that the generic-api-key rule mistakes for keys
+# (dbsql_api->column_bytes16, FTS5_AVERAGES_ROWID ...).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "identifiers in generated SQLite-derived sources"
+regexTarget = "match"
+regexes = [
+  '''dbsql_api->[a-z_0-9]+''',
+  '''i_key==FTS5_[A-Z_]+''',
+]
