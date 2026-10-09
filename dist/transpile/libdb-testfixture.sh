@@ -50,18 +50,17 @@ sed -e 's/yy/fts5yy/g' -e 's/YY/fts5YY/g' -e 's/TOKEN/FTS5TOKEN/g' \
 
 cat > tf_stubs.c <<'STUB'
 /* Test modules dbsql does not ship (RBU, recover, intck, and the b-tree
-** internals tests test3/test_btree): no-op Tcl inits. */
+** internals test test_btree): no-op Tcl inits. */
 #include <tcl.h>
 int Dbsqltestintck_Init(Tcl_Interp *i){ (void)i; return TCL_OK; }
 int DbsqlRbu_Init(Tcl_Interp *i){ (void)i; return TCL_OK; }
 int __test_recover_init(Tcl_Interp *i){ (void)i; return TCL_OK; }
-int Dbsqltest3_Init(Tcl_Interp *i){ (void)i; return TCL_OK; }
 STUB
 
 SRCS=$(cd "$OUT" && ls src/*.c src/vdbe/*.c src/api/*.c src/common/*.c \
     src/os/*.c src/ext/fts5/fts5.c test/tcl/*.c test/tcl/ext/*.c \
     | grep -vE '/mem[035]\.c$|/base[68][45]\.c$|/api/(backup|dbstat)\.c$' \
-    | grep -vE '^test/tcl/(test3|test_btree)\.c$|/api/notify\.c$')
+    | grep -vE '^test/tcl/test_btree\.c$|/api/notify\.c$')
 fail=0
 : > tf/errors.log
 OBJS=

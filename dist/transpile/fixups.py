@@ -126,6 +126,12 @@ FIXUPS = [
 	 r'(  \} cmds\[\] = \{\n)(    \{ "pager_open",[\s\S]*?\n    \{ "pager_truncate", [^\n]*\n)',
 	 r'\1#ifndef DBSQL_SM_LIBDB\n\2#endif\n',
 	 'test2.c: drop the pager commands from the command table'),
+	# test3.c (btree_open, btree_from_db, btree_set_cache_size ...) uses
+	# the sm.h API plus sm_t.db; on libdb that struct is in sm_int.h.
+	(r'(^|/)test/tcl/test3\.c$',
+	 r'^#include "btree_int\.h"\n',
+	 r'#ifdef DBSQL_SM_LIBDB\n#include "sm_int.h"\n#else\n#include "btree_int.h"\n#endif\n',
+	 'test3.c: sm_int.h instead of btree_int.h on libdb'),
 	# --- the shell -------------------------------------------------------
 	# The shell sniffs a file's first 16 bytes for the SQLite header to
 	# decide how to open it.  A dbsql database is a libdb file, which
