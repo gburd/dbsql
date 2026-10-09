@@ -185,11 +185,13 @@ directories is not atomic across them. This is listed in DIVERGENCES.md.
    to `DBSQL_BUSY`.
 4. **Dropping a sub-database.** `dbremove` returns `DB_LOCK_NOTGRANTED`
    while any other handle on that sub-database is open (persistent and
-   private envs alike).
-   → `__sm_drop_table` closes every cached handle on that table (all cursors
-   must already be closed, as upstream also requires) before `dbremove` in
-   the current txn. `__sm_clear_table` uses `DB->truncate`, which works with
-   other handles open and returns the old count.
+   private envs alike), and other connections keep their handles.
+   `DB->truncate` works with other handles open, and a reader's snapshot
+   still sees the old rows (measured 2026-10-09).
+   → `__sm_drop_table` truncates the table, deletes its kind record and
+   retires its number (LARGEST_ROOT_PAGE only grows), then tries
+   `dbremove` in a child txn; if another handle is open the empty
+   sub-database stays until VACUUM. `__sm_clear_table` uses `truncate`.
 5. **Page size and statistics.**
    - New btrees default to a 16 KB page. dbsql applies `PRAGMA page_size`
      (stored in meta) with `set_pagesize` before `DB->open` creates each
@@ -197,3 +199,32 @@ directories is not atomic across them. This is listed in DIVERGENCES.md.
    - `DB_FAST_STAT` returns 0 for `bt_nkeys` on a new btree, so counts use a
      cursor walk.
    - `DB_SET_RANGE` with an empty key positions on the first key.
+6. **The comparator sees many entries per seek.** libdb's descent calls
+   `bt_compare` on entries far from the landing position, and the record
+   compare sets `unpacked_record_t.eq_seen` on any equal one.
+   → `__sm_index_moveto` clears `eq_seen` after the descent and recomputes
+   it from the landing entry and the one before it (an equal entry
+   compares as `default_rc`, so it is one of the two).
+7. **MVCC keeps a mutex per committed writer.** Under `DB_MULTIVERSION` a
+   committed txn that wrote pages keeps its txn detail (and mutex) until
+   its page versions leave the cache. With libdb's default mutex count,
+   ~3400 one-row write txns on a 32 MB cache fail with ENOMEM
+   (`BDB4525 Unable to allocate memory for transaction detail`).
+   → `mutex_set_max(SM_MUTEX_MAX)`: 4 per 512 bytes of cache.
+8. **In-memory logs bound transaction size.** With `DB_LOG_IN_MEMORY` a txn
+   larger than the log buffer fails with `DB_LOG_BUFFER_FULL`.
+   → `:memory:` uses a 64 MB buffer (the error maps to `DBSQL_FULL`); temp
+   databases get a private on-disk environment in a fresh directory,
+   removed on close.
+9. **The data file lags the log.** Committed pages reach the file at a
+   checkpoint or on cache eviction; `txn_checkpoint(kbytes)` does costly
+   work (SIREAD cleanup) before testing the threshold (~0.2 ms a call).
+   → After a write commit, `__sm_maybe_checkpoint` reads `log_stat` and
+   checkpoints once 256 KB of log has accumulated.
+10. **`DB->compact` then abort.** Measured safe in isolation (compact in
+    a top-level or child txn, then abort, including when it moves a
+    sub-database's meta page). In the suite, a VACUUM that failed after
+    compacting (the page_size bug, since fixed) panicked libdb in
+    `__lock_change` ("old_lp->gen == old_lock->gen") while undoing the
+    compact. VACUUM now compacts only after the copy succeeds; if a
+    reduced case appears, it goes to the libdb maintainers.
