@@ -116,12 +116,14 @@ fts5_parser.c: $(srcdir)/ext/fts5/fts5_parser.y lemon lempar.c
 	    fts5_parser.c > fts5_parser.c.tmp && mv fts5_parser.c.tmp fts5_parser.c
 
 # dbsql.h is the transformed upstream sqlite3.h (sqlite.h.in + rtree,
-# session and fts5 headers, as mksqlite3h.tcl assembles it), with the dbsql
-# release in DBSQL_VERSION* and the SQLite release it carries kept as
-# DBSQL_SQLITE_VERSION / DBSQL_SQLITE_SOURCE_ID.
+# session and fts5 headers, as mksqlite3h.tcl assembles it).
+# DBSQL_VERSION / DBSQL_VERSION_NUMBER stay the SQLite release the SQL
+# engine is (3.53.4 / 3053004): upstream code, extensions and tests test
+# them for features ("#if DBSQL_VERSION_NUMBER>=3052000").  The dbsql
+# release is added as DBSQL_RELEASE / DBSQL_RELEASE_NUMBER, and
+# DBSQL_SOURCE_ID names both.
 dbsql.h: $(srcdir)/inc/dbsql_api_ref.h $(distdir)/RELEASE
-	sed -e 's/^#define DBSQL_VERSION  *"\(.*\)"$$/#define DBSQL_VERSION        "$(VERSION)"\n#define DBSQL_SQLITE_VERSION "\1"/' \
-	    -e 's/^#define DBSQL_VERSION_NUMBER .*/#define DBSQL_VERSION_NUMBER @DBSQL_VERSION_NUMBER@/' \
+	sed -e 's/^#define DBSQL_VERSION_NUMBER \(.*\)$$/#define DBSQL_VERSION_NUMBER \1\n#define DBSQL_RELEASE        "$(VERSION)"\n#define DBSQL_RELEASE_NUMBER @DBSQL_VERSION_NUMBER@/' \
 	    -e 's/^#define DBSQL_SOURCE_ID  *"\(.*\)"$$/#define DBSQL_SOURCE_ID      "@DBSQL_VERSION_STRING@"\n#define DBSQL_SQLITE_SOURCE_ID "\1"/' \
 	    $(srcdir)/inc/dbsql_api_ref.h > $@
 
