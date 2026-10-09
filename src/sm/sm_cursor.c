@@ -1035,7 +1035,13 @@ __sm_insert(sm_cursor_t *cur, const sm_payload_t *x, int flags,
 		if ((rc = __sm_cursors_save_others(cur)) != DBSQL_OK)
 			return (rc);
 	}
-	if (cur->dbh->is_intkey && (rc = __sm_cursors_check_pinned(cur)) !=
+	/*
+	 * Other cursors on the table hold copies of the rows they are on;
+	 * a write may replace one of them (a trigger updating the row its
+	 * statement is on), so they are saved and re-read, as upstream's
+	 * saveAllCursors.  Index inserts did this above.
+	 */
+	if (cur->dbh->is_intkey && (rc = __sm_cursors_save_others(cur)) !=
 	    DBSQL_OK) {
 		free(zbuf);
 		return (rc);
