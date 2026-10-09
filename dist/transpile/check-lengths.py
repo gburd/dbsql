@@ -34,9 +34,24 @@ def main(up, out, manifest):
 			continue
 		for i, (a, b) in enumerate(zip(ul, dl)):
 			# Comment lines: a quoted word there is prose, not code.
+			# A comment that quotes a renamed literal next to code with a
+			# number (zName[16]; /* skip "sqlite_altertab_" */) is code.
 			if re.match(r'\s*(\*\*|\*|/\*|//)', a):
 				continue
 			sa, sb = strings(a), strings(b)
+			if not sa:
+				# The literal may only be named in a trailing comment.
+				ca = re.findall(r'"(sqlite[A-Za-z_0-9]*)"', a)
+				cb = re.findall(r'"(dbsql[A-Za-z_0-9]*)"', b)
+				if ca and len(ca) == len(cb) and nums(a) == nums(b) and \
+				    any(len(x) != len(y) for x, y in zip(ca, cb)) and \
+				    any(re.fullmatch(r'\d+', n) and
+				    int(n) in {len(x), len(x) + 1} for n in nums(a)
+				    for x in ca):
+					print('%s:%d:\n  up:  %s\n  out: %s' % (l[1],
+					    i + 1, a.strip(), b.strip()))
+					bad += 1
+				continue
 			if len(sa) != len(sb) or not sa:
 				continue
 			if all(len(x) == len(y) for x, y in zip(sa, sb)):

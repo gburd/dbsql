@@ -1038,7 +1038,7 @@ static void __analyze_one_table(
     stat1 = (table_t*)__db_malloc_zero(db, sizeof(table_t) + 13);
     if( stat1==0 ) return;
     stat1->name = (char*)&stat1[1];
-    memcpy(stat1->name, "dbsql_stat1", 13);
+    memcpy(stat1->name, "dbsql_stat1", 12);
     stat1->n_col = 3;
     stat1->i_p_key = -1;
     __vdbe_add_op4(parser->vdbe, OP_Noop, 0, 0, 0,(char*)stat1,P4_DYNAMIC);

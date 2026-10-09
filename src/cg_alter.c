@@ -333,7 +333,7 @@ void __alter_finish_add_column(parser_t *parser, Token *col_def){
   assert( __sm_holds_all_mutexes(db) );
   i_db = __schema_to_index(db, p_new->schema);
   z_db = db->dbs[i_db].db_s_name;
-  z_tab = &p_new->name[16];  /* Skip the "dbsql_altertab_" prefix on the name */
+  z_tab = &p_new->name[15];  /* Skip the "dbsql_altertab_" prefix on the name */
   col = &p_new->cols[p_new->n_col-1];
   dflt = __column_expr(p_new, col);
   tab = __find_table(db, z_tab, z_db);

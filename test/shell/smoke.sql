@@ -12,9 +12,10 @@ create virtual table ft using fts5(body);
 insert into ft values ('the quick brown fox'),('lazy dog');
 select rowid, body from ft where ft match 'quick';
 .mode list
+.headers off
 select dbsql_version() is not null, json_object('k', 1), '{"a":5}' ->> '$.a';
-select upper(sqlite_source_id()) is null;
-.timer on
-select count(*) from people;
-.timer off
+select count(*) from dbsql_schema;
+select icu_load_collation('en_US', 'english') is null;
+-- ICU: under the English collation 'a' < 'B' (binary: 'B' < 'a').
+select 'a' < 'B' collate english, 'a' < 'B';
 .print done
