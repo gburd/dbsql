@@ -1,11 +1,15 @@
 Patches applied to the deps/libdb submodule before building it.
 
-libdb-v2026.10.2-freebsd.patch
-	libtool's host patterns freebsd1* and freebsd2* also match FreeBSD
-	10-19 and 2x ("freebsd15.1"), so libtool decides the host has no
-	shared-library support (and uses a.out versioning).  Anchor the
-	patterns to the real FreeBSD 1.x/2.x/3.x releases.  Needed on every
-	current FreeBSD; harmless elsewhere.  Not yet upstream.
+None at present.  The libtool FreeBSD host-pattern fix this directory
+carried for v2026.10.1/.2 (freebsd1* matching FreeBSD 10-19, so no
+shared library was built) is upstream as of libdb v2026.10.3
+(6e1f1c86a).
 
-	Apply:  cd deps/libdb && patch -p1 < ../patches/libdb-v2026.10.2-freebsd.patch
-	(deps/build_libdb.sh does this.)
+A patch here is named libdb-<pinned tag>-<topic>.patch, applies with
+"cd deps/libdb && patch -p1", and is applied idempotently by
+deps/build_libdb.sh.  Drop it when the pin moves past the upstream fix.
+
+Note: in v2026.10.3 five build_windows/*.sln/*.vcproj files are stored
+with CRLF line endings against .gitattributes' "* text=auto", so
+"git status" in the submodule lists them as modified on a fresh
+checkout.  Cosmetic; the build does not use them.

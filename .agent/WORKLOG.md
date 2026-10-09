@@ -6,32 +6,38 @@ things are and how to run them**. Append to it, and keep it accurate.
 
 ## Hosts and paths
 
-- **Build host:** `ssh dbsql-fbsd` (FreeBSD 15.1 amd64, 32 vCPU, 64 GB).
-  The config is in `~/.ssh/ec2/dbsql-fbsd.conf` on the laptop. Use `gmake`,
-  not `make`. Use `~/bin/trash` instead of `rm -rf`, because a safety hook
-  blocks `rm -rf`.
-- **Laptop checkout:** `~/ws/dbsql`, branch `rebuild/3.53`. Commits are made
-  and **signed here** (SSH signing key; the host has no signing key).
-  The flow is: edit on the laptop, `git push fbsd rebuild/3.53`, then
-  `git -C ~/w/dbsql pull` on the host. Alternatively, edit on the host,
-  `git diff > x.patch`, then scp it to the laptop and `git apply` + commit.
-- **Host repo:** `~/w/dbsql` (clone of the bare `~/w/dbsql.git`).
-  `deps/libdb` is a clone of `~/w/libdb.git`, branch `pin` = v2026.10.1.
-- **Upstream SQLite:** `~/src/sqlite-3.53.4` (fossil checkout of tag
-  version-3.53.4). Treat it as read-only. A stock reference build is in
-  `~/src/sq-build`, with `sqlite3` (the differential-testing oracle) and
-  `testfixture`.
-- **libdb:** built from `deps/libdb/build_unix` with `--enable-debug
-  --enable-diagnostic --enable-test --with-tcl`, and installed to
-  `~/w/inst/libdb` (`libdb-2026.0.so`, `db.h`). It needs
-  `deps/patches/libdb-v2026.10.2-freebsd.patch` applied to build shared
-  libraries on FreeBSD 10+.
-- **Python:** `python3.11`. libclang bindings are in `~/w/venv` (not
-  currently used).
+- **Build host:** `ssh dbsql-deb` -- Debian 13 amd64, c7i.16xlarge
+  (64 vCPU, 123 GB, 400 GB gp3), instance `i-0950a15f95412ede7`, key pair `dbsql-deb-20261009T004900Z`,
+  account `hotdog`, us-east-2.  Config: `~/.ssh/ec2/dbsql-deb.conf`.
+  It replaced the FreeBSD host `dbsql-fbsd` (`i-025a08857fb2c27b8`)
+  on 2026-10-09: that host's 1 TB pool filled with test scratch that
+  suite.sh had moved to a trash can.  The FreeBSD host is kept only to
+  check the FreeBSD build before release; terminate both at the end.
+- **Laptop checkout:** `~/ws/dbsql`, branch `rebuild/3.53`.  Commits are
+  made and **signed here** (SSH signing key; the hosts have none), then
+  `git push deb rebuild/3.53` (bare repo `~/w/dbsql.git` on the host)
+  and `git -C ~/w/dbsql pull` there.  For edit/test loops before a
+  commit, `.agent/sync-deb.sh [builddir]` rsyncs src/sm and dist to the
+  host and rebuilds the libdb testfixture in `~/w/<builddir>`.
+- **Host layout:**
+  - `~/w/dbsql`: clone; `deps/libdb` is the submodule at the pin.
+  - `~/w/inst/libdb`: libdb installed from deps/libdb
+    (`sh deps/build_libdb.sh --enable-debug --enable-diagnostic
+    --prefix=$HOME/w/inst/libdb && make -C deps/libdb/build_unix install`).
+  - `~/src/sqlite-3.53.4`: upstream source, read-only.
+  - `~/w/tp`: copy of dist/transpile; `lo/` = `run --keep-sql-names`
+    output (libdb build), `out/` = `--native --keep-sql-names`, `nb/`
+    = native testfixture, `tst/test` = prepared SQLite tests, `*.txt`
+    = suite results.
+  - `~/w/lb*`: libdb testfixture builds (libdb-testfixture.sh).
+  - `~/w/one.sh TF TEST [N]`: run one test file in a scratch copy.
+- **Toolchain:** clang 19 (`CC=clang`), tcl8.6-dev, python3 3.13, gdb,
+  valgrind, ICU.  Scratch copies under /tmp are deleted with `rm`.
+- **libdb pin:** v2026.10.3 (98749ce0c).  No local patches.
 
 ## Transform (dist/transpile)
 
-- `python3.11 dist/transpile/run --sqlite ~/src/sqlite-3.53.4 --out OUT
+- `python3 dist/transpile/run --sqlite ~/src/sqlite-3.53.4 --out OUT
   [--native] --report report.txt` writes OUT/src (and OUT/native when
   `--native` is given). `report.txt` lists every collision fallback and the
   full identifier map (`MAP old new` lines).

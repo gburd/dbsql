@@ -6,7 +6,7 @@ naming and coding style of Berkeley DB.
 ## The goal
 
 Every SQL feature of **SQLite 3.53.4** (plus the FTS5 and ICU extensions and the
-full interactive shell, here named `dbsql`), executing on **libdb v2026.10.2**
+full interactive shell, here named `dbsql`), executing on **libdb v2026.10.3**
 as the only storage engine, with **no `sqlite3` symbols, types, or headers** in
 the public API. Production quality: every feature tested, sanitizer-clean,
 packaged, and released.

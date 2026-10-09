@@ -15,7 +15,7 @@ this file whenever a phase lands.
    SQLite's Hungarian (see TRANSFORM.md).
 3. **One libdb file per SQL database**, with tables and indexes as
    sub-databases.
-4. **libdb pinned to `v2026.10.2`** (moved from v2026.10.1 on 2026-10-08, at the maintainer's request, when .2 was released).
+4. **libdb pinned to `v2026.10.3`** (v2026.10.1 -> .2 on 2026-10-08 and .2 -> .3 on 2026-10-09, each at the maintainer's request when released; .3 carries the FreeBSD shared-library fix upstream, so deps/patches is empty).
 5. **No sqlite3 API**, not even a compatibility shim.
 6. `.agent/` is tracked except `.agent/archive/` (old reports).
 7. **Scope**: core SQL (3.53.4), FTS5, ICU, and the full shell as `dbsql`.
@@ -30,8 +30,8 @@ this file whenever a phase lands.
 ## Status
 
 - [x] Phase 0: cleanup, `.agent/` layout, north star and steering.
-- [ ] Phase 1: libdb v2026.10.2 submodule and build glue.
-- [ ] Phase 2: transform pipeline (dist/transpile) and vendored lemon.
+- [x] Phase 1: libdb v2026.10.3 submodule and build glue.
+- [x] Phase 2: transform pipeline (dist/transpile) and vendored lemon.
 - [ ] Phase 3: storage manager (src/sm/).
 - [ ] Phase 4: public API, TCL testfixture, SQLite test-suite runner.
 - [ ] Phase 5: storage-dependent features (VACUUM, backup, blob, integrity).
@@ -40,7 +40,10 @@ this file whenever a phase lands.
 
 ## Build host
 
-FreeBSD 15.1-RELEASE amd64, c7i.8xlarge, us-east-2, account `hotdog`.
-Tagged Owner=gburd, Purpose=dbsql-rebuild, Expires=2026-10-14. Access is via
-`ssh dbsql-fbsd` (config in `~/.ssh/ec2/dbsql-fbsd.conf`). **Terminate it when
-the release is done.**
+Debian 13 (trixie) amd64, c7i.16xlarge (64 vCPU, 123 GB, 400 GB gp3),
+us-east-2, account `hotdog`, instance `i-0950a15f95412ede7`.  Tagged Owner=gburd,
+Purpose=dbsql-rebuild, Expires=2026-10-16.  Access: `ssh dbsql-deb`
+(config `~/.ssh/ec2/dbsql-deb.conf`).  It replaced the FreeBSD 15.1
+host (`i-025a08857fb2c27b8`, `ssh dbsql-fbsd`) on 2026-10-09 when that
+host's disk filled.  **Terminate both when the release is done.**
+Details (paths, sync flow) are in WORKLOG.md.
