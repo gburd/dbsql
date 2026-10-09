@@ -2,7 +2,7 @@
 # check-names.sh OUTDIR -- the "no sqlite in code" gate.  Reports every
 # occurrence of sqlite (any case) outside comments in transformed sources.
 # Comments may keep attribution ("derived from SQLite").
-python3.11 - "$1" <<'PY'
+${PYTHON:-python3} - "$1" <<'PY'
 import os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])) if False else '.', ''))
 sys.path.insert(0, os.path.expanduser('~/w/tp'))

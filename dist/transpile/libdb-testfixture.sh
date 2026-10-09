@@ -16,6 +16,11 @@ cd "$B"
 CC=${CC:-cc}
 CFLAGS=${CFLAGS:--O1 -g}
 LDFLAGS=${LDFLAGS:-}
+if [ -z "${TCLINC:-}" ]; then
+	for c in /usr/lib/tcl8.6/tclConfig.sh /usr/local/lib/tcl8.6/tclConfig.sh; do
+		[ -f "$c" ] && { . "$c"; TCLINC=$TCL_INCLUDE_SPEC; TCLLIB=$TCL_LIB_SPEC; break; }
+	done
+fi
 TCLINC=${TCLINC:--I/usr/local/include/tcl8.6}
 TCLLIB=${TCLLIB:--L/usr/local/lib -ltcl86}
 DEFS="-DDBSQL_TEST=1 -DTCLSH_INIT_PROC=__test_init \

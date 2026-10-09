@@ -21,7 +21,9 @@ cp -R "$TD" "$d/test" || exit 1
 cd "$d/test" || exit 1
 out=$(timeout 900 "$TF" "$t" --testdir="$d/t" 2>&1)
 rc=$?
-cd / && "$HOME/bin/trash" "$d"
+# Scratch copies are test output, not data: delete them (a trash can
+# filled the disk once: 12k copies of the test directory).
+cd / && rm -r -f -- "$d"
 line=$(printf '%s\n' "$out" | grep -E '^[0-9]+ errors out of [0-9]+ tests' | tail -1)
 if [ $rc -eq 124 ]; then r=TIMEOUT
 elif [ -n "$line" ]; then
@@ -35,6 +37,6 @@ chmod +x "$R"
 cd "$TD"
 ls *.test | grep -vE '^(all|veryquick|quick|full|extraquick|permutations|testrunner|soak|mallocAll|main)\.test$' |
 	xargs -P "$JOBS" -n 1 "$R" "$TF" "$TD" > "$OUTF"
-"$HOME/bin/trash" "$R"
+rm -f -- "$R"
 sort -o "$OUTF" "$OUTF"
 awk -F'\t' '{split($2,a," "); c[a[1]]++} END {for (k in c) printf "%s=%d ", k, c[k]; print ""}' "$OUTF"

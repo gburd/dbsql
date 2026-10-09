@@ -409,7 +409,7 @@ def generate(sqlite, work):
 		    '--enable-fts5', '--disable-tcl', '--disable-readline'],
 		    cwd=work, stdout=subprocess.DEVNULL)
 	targets = [g for g, _ in GENERATED] + ['parse.h']
-	subprocess.check_call(['gmake', '-s'] + targets, cwd=work,
+	subprocess.check_call([shutil.which('gmake') or 'make', '-s'] + targets, cwd=work,
 	    stdout=subprocess.DEVNULL)
 	out = {}
 	for g, _ in GENERATED:
