@@ -219,10 +219,11 @@ directories is not atomic across them. This is listed in DIVERGENCES.md.
    databases get a private on-disk environment in a fresh directory,
    removed on close.
 9. **The data file lags the log.** Committed pages reach the file at a
-   checkpoint or on cache eviction; `txn_checkpoint(kbytes)` does costly
-   work (SIREAD cleanup) before testing the threshold (~0.2 ms a call).
-   → After a write commit, `__sm_maybe_checkpoint` reads `log_stat` and
-   checkpoints once 256 KB of log has accumulated.
+   checkpoint or on cache eviction.
+   → After a write commit, `txn_checkpoint(SM_CKPT_KBYTES)`. A call below
+   the threshold costs ~210 us (SIREAD cleanup runs before the threshold
+   test; reported to libdb, /tmp/libdb-bugs R3), which dominates small
+   autocommit writes until fixed upstream.
 10. **A pinned deleted item is revived by an "equal" put.** libdb keeps a
     deleted item on its page while any DBC refers to it, and a put of a
     key that `bt_compare` calls equal (NOCASE, or a WITHOUT ROWID key

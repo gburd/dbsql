@@ -770,8 +770,6 @@ __sm_commit_phase_one(sm_t *p, const char *super)
 	return (DBSQL_OK);
 }
 
-static void __sm_maybe_checkpoint(sm_env_t *);
-
 /*
  * __sm_end_trans --
  *	Commit or abort the connection txn shared by this environment and
@@ -824,35 +822,18 @@ __sm_end_trans(sm_t *p, int commit)
 	 * A committed write is durable in the log; the database file
 	 * catches up at a checkpoint.  Checkpoint once SM_CKPT_KBYTES of
 	 * log has accumulated so the file (and its size) track the data,
-	 * as tools that copy or measure the file expect.
+	 * as tools that copy or measure the file expect.  (libdb does
+	 * expensive work before testing the threshold: reported upstream,
+	 * /tmp/libdb-bugs.)
 	 */
 	if (bt->wrote && !(bt->flags & (SM_MEMORY | SM_EPHEMERAL))) {
 		bt->wrote = 0;
-		__sm_maybe_checkpoint(bt->env);
+		(void)bt->env->dbenv->txn_checkpoint(bt->env->dbenv,
+		    SM_CKPT_KBYTES, 0, 0);
 	}
 	return (rc);
 }
 
-/*
- * __sm_maybe_checkpoint --
- *	Checkpoint if SM_CKPT_KBYTES of log were written since the last
- *	one.  txn_checkpoint's own kbytes test runs after work (SIREAD
- *	cleanup) that costs ~0.2 ms per call, so test the log statistics
- *	first.
- */
-static void
-__sm_maybe_checkpoint(sm_env_t *env)
-{
-	DB_LOG_STAT *st;
-	u_int32_t kb;
-
-	if (env->dbenv->log_stat(env->dbenv, &st, 0) != 0)
-		return;
-	kb = st->st_wc_mbytes * 1024 + st->st_wc_bytes / 1024;
-	free(st);
-	if (kb >= SM_CKPT_KBYTES)
-		(void)env->dbenv->txn_checkpoint(env->dbenv, 0, 0, 0);
-}
 
 /*
  * __sm_commit_phase_two --
