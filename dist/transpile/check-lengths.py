@@ -33,6 +33,9 @@ def main(up, out, manifest):
 		if len(ul) != len(dl):
 			continue
 		for i, (a, b) in enumerate(zip(ul, dl)):
+			# Comment lines: a quoted word there is prose, not code.
+			if re.match(r'\s*(\*\*|\*|/\*|//)', a):
+				continue
 			sa, sb = strings(a), strings(b)
 			if len(sa) != len(sb) or not sa:
 				continue

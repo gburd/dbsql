@@ -481,7 +481,28 @@ def main():
 	ap.add_argument('--native', action='store_true')
 	ap.add_argument('--report', default=None)
 	ap.add_argument('--keep-sql-names', action='store_true')
+	ap.add_argument('--check', action='store_true')
 	args = ap.parse_args()
+	if args.check:
+		# Transform into a scratch tree and compare it with --out: the
+		# committed generated sources must be exactly what the tool
+		# produces from the pinned SQLite release.
+		scratch = tempfile.mkdtemp(prefix='dbsql-transpile-check.')
+		argv = [a for a in sys.argv[1:] if a != '--check']
+		i = argv.index('--out')
+		committed, argv[i + 1] = argv[i + 1], scratch
+		subprocess.check_call([sys.executable, os.path.abspath(__file__)]
+		    + argv)
+		rc = subprocess.call(['diff', '-r', '-q',
+		    '-x', 'sm', '-x', 'lemon', '-x', 'native',
+		    os.path.join(scratch, 'src'), os.path.join(committed, 'src')])
+		rc |= subprocess.call(['diff', '-r', '-q',
+		    os.path.join(scratch, 'test', 'tcl'),
+		    os.path.join(committed, 'test', 'tcl')])
+		shutil.rmtree(scratch)
+		print('transform reproducible' if rc == 0 else
+		    'transform differs from --out')
+		sys.exit(1 if rc else 0)
 	global KEEP_SQL_NAMES
 	KEEP_SQL_NAMES = args.keep_sql_names
 	names.KEEP_SQL_NAMES = KEEP_SQL_NAMES
