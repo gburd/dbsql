@@ -169,7 +169,10 @@ __sm_txn_pop(sm_shared_t *bt, int commit)
  * __sm_meta_get_raw --
  *	Read meta value 'idx' (0 if absent) within the current txn.
  */
-static int
+/*
+ * PUBLIC: int __sm_meta_get_raw __P((sm_shared_t *, int, u_int32_t *));
+ */
+int
 __sm_meta_get_raw(sm_shared_t *bt, int idx, u_int32_t *value)
 {
 	DBT key, data;
@@ -201,7 +204,10 @@ __sm_meta_get_raw(sm_shared_t *bt, int idx, u_int32_t *value)
  * __sm_meta_put_raw --
  *	Write meta value 'idx' within the current txn.
  */
-static int
+/*
+ * PUBLIC: int __sm_meta_put_raw __P((sm_shared_t *, int, u_int32_t));
+ */
+int
 __sm_meta_put_raw(sm_shared_t *bt, int idx, u_int32_t value)
 {
 	DBT key, data;
@@ -307,6 +313,16 @@ __sm_meta_open(sm_shared_t *bt, int create)
 		data.size = sizeof(SM_FORMAT_MAGIC) - 1;
 		data.flags = 0;
 		ret = dbp->put(dbp, __sm_cur_txn(bt), &key, &data, 0);
+		if (ret == 0) {
+			/* A new database: record its auto_vacuum mode. */
+			bt->meta = dbp;
+			if (__sm_meta_put_raw(bt, SM_META_AUTOVAC,
+			    bt->auto_vacuum != 0) != DBSQL_OK ||
+			    __sm_meta_put_raw(bt, BTREE_INCR_VACUUM,
+			    bt->auto_vacuum == 2) != DBSQL_OK)
+				ret = EIO;
+			bt->meta = NULL;
+		}
 	} else if (ret == 0 && (data.size != sizeof(SM_FORMAT_MAGIC) - 1 ||
 	    memcmp(buf, SM_FORMAT_MAGIC, data.size) != 0))
 		ret = EINVAL;
@@ -754,12 +770,14 @@ __sm_commit_phase_one(sm_t *p, const char *super)
 	return (DBSQL_OK);
 }
 
+static void __sm_maybe_checkpoint(sm_env_t *);
+
 /*
  * __sm_end_trans --
  *	Commit or abort the connection txn shared by this environment and
  *	reset every sm_t of the connection that uses it.
  */
-static int
+int
 __sm_end_trans(sm_t *p, int commit)
 {
 	sm_shared_t *bt;
@@ -785,8 +803,10 @@ __sm_end_trans(sm_t *p, int commit)
 			if (q == NULL || q->bt->txn != t)
 				continue;
 			if (q->bt->in_trans == DBSQL_TXN_WRITE && commit &&
-			    rc == DBSQL_OK)
+			    rc == DBSQL_OK) {
 				q->bt->data_version++;
+				q->bt->wrote = 1;
+			}
 			q->bt->in_trans = DBSQL_TXN_NONE;
 			q->in_trans = DBSQL_TXN_NONE;
 			q->bt->flags &= ~SM_WRLOCKED;
@@ -800,7 +820,38 @@ __sm_end_trans(sm_t *p, int commit)
 	bt->in_trans = DBSQL_TXN_NONE;
 	p->in_trans = DBSQL_TXN_NONE;
 	bt->flags &= ~SM_WRLOCKED;
+	/*
+	 * A committed write is durable in the log; the database file
+	 * catches up at a checkpoint.  Checkpoint once SM_CKPT_KBYTES of
+	 * log has accumulated so the file (and its size) track the data,
+	 * as tools that copy or measure the file expect.
+	 */
+	if (bt->wrote && !(bt->flags & (SM_MEMORY | SM_EPHEMERAL))) {
+		bt->wrote = 0;
+		__sm_maybe_checkpoint(bt->env);
+	}
 	return (rc);
+}
+
+/*
+ * __sm_maybe_checkpoint --
+ *	Checkpoint if SM_CKPT_KBYTES of log were written since the last
+ *	one.  txn_checkpoint's own kbytes test runs after work (SIREAD
+ *	cleanup) that costs ~0.2 ms per call, so test the log statistics
+ *	first.
+ */
+static void
+__sm_maybe_checkpoint(sm_env_t *env)
+{
+	DB_LOG_STAT *st;
+	u_int32_t kb;
+
+	if (env->dbenv->log_stat(env->dbenv, &st, 0) != 0)
+		return;
+	kb = st->st_wc_mbytes * 1024 + st->st_wc_bytes / 1024;
+	free(st);
+	if (kb >= SM_CKPT_KBYTES)
+		(void)env->dbenv->txn_checkpoint(env->dbenv, 0, 0, 0);
 }
 
 /*
@@ -822,6 +873,10 @@ __sm_commit_phase_two(sm_t *p, int cleanup)
 	}
 	if (p->in_trans == DBSQL_TXN_NONE && p->bt->in_trans == DBSQL_TXN_NONE)
 		return (DBSQL_OK);
+	/* auto_vacuum=FULL: give free pages back before committing. */
+	if (p->bt->in_trans == DBSQL_TXN_WRITE &&
+	    __sm_get_auto_vacuum(p) == BTREE_AUTOVACUUM_FULL)
+		(void)__sm_compact(p);
 	return (__sm_end_trans(p, 1));
 }
 
@@ -1199,6 +1254,17 @@ __sm_get_meta(sm_t *p, int idx, u_int32_t *value)
 		*value = bt->data_version + p->data_version_base;
 		return;
 	}
+	if (idx == BTREE_LARGEST_ROOT_PAGE) {
+		/* Upstream: the largest root page, or 0 when the database
+		 * is not auto-vacuum (the PRAGMA tests it for that). */
+		u_int32_t on;
+		*value = 0;
+		if (__sm_meta_get_raw(bt, SM_META_AUTOVAC, &on) == DBSQL_OK &&
+		    on && __sm_meta_get_raw(bt, idx, value) == DBSQL_OK &&
+		    *value < 1)
+			*value = 1;
+		return;
+	}
 	if (idx == BTREE_FREE_PAGE_COUNT) {
 		*value = 0;
 		return;
@@ -1430,19 +1496,54 @@ __sm_secure_delete(sm_t *p, int on)
 	return (p->bt->secure_delete);
 }
 
-/* PUBLIC: int __sm_set_auto_vacuum __P((sm_t *, int)); */
+/*
+ * __sm_set_auto_vacuum --
+ *	PRAGMA auto_vacuum = NONE(0) | FULL(1) | INCREMENTAL(2).  As
+ *	upstream: whether auto-vacuum is on is fixed when the database is
+ *	created (SM_META_AUTOVAC); changing it afterwards returns
+ *	DBSQL_READONLY (VACUUM changes it by rebuilding).  FULL versus
+ *	INCREMENTAL is meta[BTREE_INCR_VACUUM], which the PRAGMA's program
+ *	writes.  On libdb FULL compacts at each commit and INCREMENTAL on
+ *	PRAGMA incremental_vacuum (DIVERGENCES.md).
+ *
+ * PUBLIC: int __sm_set_auto_vacuum __P((sm_t *, int));
+ */
 int
 __sm_set_auto_vacuum(sm_t *p, int v)
 {
-	p->bt->auto_vacuum = v;
+	sm_shared_t *bt;
+	u_int32_t on;
+
+	bt = p->bt;
+	if (v < 0 || v > 2)
+		return (DBSQL_OK);
+	if (bt->meta != NULL &&
+	    __sm_meta_get_raw(bt, SM_META_AUTOVAC, &on) == DBSQL_OK &&
+	    (on != 0) != (v != 0))
+		return (DBSQL_READONLY);
+	bt->auto_vacuum = v;
 	return (DBSQL_OK);
 }
 
-/* PUBLIC: int __sm_get_auto_vacuum __P((sm_t *)); */
+/*
+ * __sm_get_auto_vacuum --
+ *	The database's mode, or the requested one before it is created.
+ *
+ * PUBLIC: int __sm_get_auto_vacuum __P((sm_t *));
+ */
 int
 __sm_get_auto_vacuum(sm_t *p)
 {
-	return (p->bt->auto_vacuum);
+	sm_shared_t *bt;
+	u_int32_t on, incr;
+
+	bt = p->bt;
+	if (bt->meta == NULL ||
+	    __sm_meta_get_raw(bt, SM_META_AUTOVAC, &on) != DBSQL_OK ||
+	    __sm_meta_get_raw(bt, BTREE_INCR_VACUUM, &incr) != DBSQL_OK)
+		return (bt->auto_vacuum);
+	return (!on ? BTREE_AUTOVACUUM_NONE :
+	    incr ? BTREE_AUTOVACUUM_INCR : BTREE_AUTOVACUUM_FULL);
 }
 
 /*

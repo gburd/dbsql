@@ -167,20 +167,23 @@ __sm_clear_all(sm_t *dest)
 static int
 __sm_copy_meta(sm_t *dest, sm_t *src, int bump_schema)
 {
-	u_int32_t v;
+	u_int32_t v, old;
 	int idx, rc;
 
+	/* Raw values: the table counter and the auto_vacuum mode too. */
 	for (idx = 1; idx < DBSQL_N_BTREE_META; idx++) {
 		if (idx == BTREE_DATA_VERSION)
 			continue;
-		__sm_get_meta(src, idx, &v);
+		if ((rc = __sm_meta_get_raw(src->bt, idx, &v)) != DBSQL_OK)
+			return (rc);
 		if (idx == BTREE_SCHEMA_VERSION && bump_schema) {
-			u_int32_t old;
-			__sm_get_meta(dest, idx, &old);
+			if ((rc = __sm_meta_get_raw(dest->bt, idx, &old)) !=
+			    DBSQL_OK)
+				return (rc);
 			if (v <= old)
 				v = old + 1;
 		}
-		if ((rc = __sm_update_meta(dest, idx, v)) != DBSQL_OK)
+		if ((rc = __sm_meta_put_raw(dest->bt, idx, v)) != DBSQL_OK)
 			return (rc);
 	}
 	return (DBSQL_OK);

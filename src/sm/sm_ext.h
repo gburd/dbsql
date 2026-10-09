@@ -11,6 +11,8 @@ int __sm_copy_file(sm_t *, sm_t *);
 void __backup_restart(dbsql_backup_t *);
 void __backup_update(dbsql_backup_t *, pgno_t, const u_int8_t *);
 DB_TXN *__sm_cur_txn(sm_shared_t *);
+int __sm_meta_get_raw(sm_shared_t *, int, u_int32_t *);
+int __sm_meta_put_raw(sm_shared_t *, int, u_int32_t);
 int __sm_open(dbsql_vfs_t *, const char *, DBSQL *, sm_t **, int, int);
 int __sm_close(sm_t *);
 int __sm_begin_trans(sm_t *, int, int *);

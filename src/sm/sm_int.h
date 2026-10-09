@@ -33,6 +33,9 @@
 #define	SM_META_DB		"__dbsql_meta"
 #define	SM_FORMAT_KEY		"format"
 #define	SM_FORMAT_MAGIC		"dbsql 1"
+/* Meta slot for the auto_vacuum mode (upstream's 16 slots leave 9-14
+ * unused; upstream keeps the flag in header fields we do not have). */
+#define	SM_META_AUTOVAC		13
 
 /* Sub-database name for SQL table/index number N: "t<N>". */
 #define	SM_SUBDB_FMT		"t%u"
@@ -82,6 +85,10 @@ typedef struct sm_env {
 #define	SM_LOCKS_MAX		1000000
 #define	SM_LOG_REGIONMAX	(4 * 1024 * 1024)
 #define	SM_ENV_REGION_MAX	(512 * 1024 * 1024)
+/* Mutexes: 4 per 512-byte page of the shared cache (buffers + MVCC). */
+/* Checkpoint after a write commit once this much log (KB) has grown. */
+#define	SM_CKPT_KBYTES		256
+#define	SM_MUTEX_MAX		(4 * (SM_ENV_CACHE / 512))
 
 /*
  * sm_dbh_t --
@@ -146,6 +153,7 @@ struct sm_shared_t {
 	int secure_delete;
 	int n_backup;			/* Backups in progress reading this. */
 	int snapshot_stale;		/* Read snapshot older than a commit. */
+	int wrote;			/* Committed a write since checkpoint. */
 	int eph_kind[2];		/* Ephemeral: table kinds by pgno&1. */
 	int cache_size;			/* PRAGMA cache_size (stored). */
 	int auto_vacuum;		/* PRAGMA auto_vacuum (stored). */
