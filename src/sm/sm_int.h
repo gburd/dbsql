@@ -36,6 +36,8 @@
 /* Meta slot for the auto_vacuum mode (upstream's 16 slots leave 9-14
  * unused; upstream keeps the flag in header fields we do not have). */
 #define	SM_META_AUTOVAC		13
+/* Meta slot counting committed write transactions (PRAGMA data_version). */
+#define	SM_META_COMMITS		14
 
 /* Sub-database name for SQL table/index number N: "t<N>". */
 #define	SM_SUBDB_FMT		"t%u"
@@ -162,7 +164,10 @@ struct sm_shared_t {
 	void *schema;			/* __sm_schema blob. */
 	void (*free_schema)(void *);
 	int in_trans;			/* DBSQL_TXN_* for this database. */
-	u_int32_t data_version;		/* For BTREE_DATA_VERSION. */
+	u_int32_t own_seen;		/* Our commits (data_version excludes). */
+	u_int32_t commits_seen;		/* SM_META_COMMITS at our last txn. */
+	u_int32_t commits_base;		/* ... at our first txn. */
+	int commits_base_set;
 	int read_only;
 	u_int32_t flags;
 #define	SM_EPHEMERAL	0x01		/* BTREE_SINGLE|BTREE_OMIT_JOURNAL. */

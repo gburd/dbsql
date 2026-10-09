@@ -290,7 +290,13 @@ __sm_pager_cache_stat(pager_t *pager, int type, int reset, u_int64_t *value)
 u_int32_t
 __sm_pager_data_version(pager_t *pager)
 {
-	return (BT(pager)->data_version);
+	/*
+	 * DBSQL_FCNTL_DATA_VERSION: as upstream's pager, counts every
+	 * commit, ours included, as of this connection's most recent
+	 * transaction (another connection's commit shows after we next
+	 * start one).
+	 */
+	return (1 + BT(pager)->commits_seen - BT(pager)->commits_base);
 }
 
 /* PUBLIC: int __sm_pager_wal_system_errno __P((pager_t *)); */

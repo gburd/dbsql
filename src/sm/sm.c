@@ -664,6 +664,14 @@ __sm_begin_trans(sm_t *p, int wrflag, int *schema_version)
 		rc = __sm_meta_get_raw(bt, BTREE_SCHEMA_VERSION, &v);
 		*schema_version = (int)v;
 	}
+	if (rc == DBSQL_OK && !(bt->flags & (SM_MEMORY | SM_EPHEMERAL))) {
+		(void)__sm_meta_get_raw(bt, SM_META_COMMITS, &bt->commits_seen);
+		/* data_version counts from this connection's first txn. */
+		if (!bt->commits_base_set) {
+			bt->commits_base = bt->commits_seen;
+			bt->commits_base_set = 1;
+		}
+	}
 	return (rc);
 }
 
@@ -802,8 +810,9 @@ __sm_end_trans(sm_t *p, int commit)
 				continue;
 			if (q->bt->in_trans == DBSQL_TXN_WRITE && commit &&
 			    rc == DBSQL_OK) {
-				q->bt->data_version++;
 				q->bt->wrote = 1;
+				/* Own commits do not change our data_version. */
+				q->bt->own_seen++;
 			}
 			q->bt->in_trans = DBSQL_TXN_NONE;
 			q->in_trans = DBSQL_TXN_NONE;
@@ -854,10 +863,30 @@ __sm_commit_phase_two(sm_t *p, int cleanup)
 	}
 	if (p->in_trans == DBSQL_TXN_NONE && p->bt->in_trans == DBSQL_TXN_NONE)
 		return (DBSQL_OK);
-	/* auto_vacuum=FULL: give free pages back before committing. */
-	if (p->bt->in_trans == DBSQL_TXN_WRITE &&
-	    __sm_get_auto_vacuum(p) == BTREE_AUTOVACUUM_FULL)
-		(void)__sm_compact(p);
+	if (p->bt->in_trans == DBSQL_TXN_WRITE) {
+		u_int32_t n;
+		int rc;
+
+		/* auto_vacuum=FULL: give free pages back before committing. */
+		if (__sm_get_auto_vacuum(p) == BTREE_AUTOVACUUM_FULL)
+			(void)__sm_compact(p);
+		/*
+		 * Count commits in meta (SM_META_COMMITS): other connections
+		 * see PRAGMA data_version change (__sm_get_meta), and this
+		 * one's DBSQL_FCNTL_DATA_VERSION counts its own commit.
+		 */
+		if (p->bt->meta != NULL &&
+		    !(p->bt->flags & (SM_MEMORY | SM_EPHEMERAL))) {
+			if ((rc = __sm_meta_get_raw(p->bt, SM_META_COMMITS,
+			    &n)) != DBSQL_OK ||
+			    (rc = __sm_meta_put_raw(p->bt, SM_META_COMMITS,
+			    n + 1)) != DBSQL_OK) {
+				(void)__sm_end_trans(p, 0);
+				return (rc);
+			}
+			p->bt->commits_seen = n + 1;
+		}
+	}
 	return (__sm_end_trans(p, 1));
 }
 
@@ -1232,7 +1261,18 @@ __sm_get_meta(sm_t *p, int idx, u_int32_t *value)
 
 	bt = p->bt;
 	if (idx == BTREE_DATA_VERSION) {
-		*value = bt->data_version + p->data_version_base;
+		/*
+		 * Upstream: changes when another connection commits, not
+		 * when this one does.  1 + commits visible in this snapshot
+		 * (SM_META_COMMITS) - this connection's own commits.
+		 */
+		u_int32_t n;
+
+		if (bt->flags & (SM_MEMORY | SM_EPHEMERAL) ||
+		    __sm_meta_get_raw(bt, SM_META_COMMITS, &n) != DBSQL_OK)
+			n = 0;
+		*value = 1 + (n - bt->commits_base - bt->own_seen) +
+		    p->data_version_base;
 		return;
 	}
 	if (idx == BTREE_LARGEST_ROOT_PAGE) {
