@@ -4,6 +4,19 @@ This is the operational state for agents working unsupervised on the build
 host. Design lives in NORTH_STAR.md and steering/. This file records **where
 things are and how to run them**. Append to it, and keep it accurate.
 
+## Deadline: AWS account `hotdog` expires 2026-10-10 14:43:47 UTC
+
+Everything on the hosts is disposable: commits live on the laptop
+(`~/ws/dbsql`, pushed to `deb` as a convenience), host-only results are
+copied to `~/backups/dbsql-hosts-20261009/` (suite result files, the
+classifier output, the prepared SQLite source tarball).  Plan:
+- stop starting new long runs at ~12:00 UTC on 2026-10-10;
+- by ~13:30 UTC: final backup, terminate `dbsql-deb` and `dbsql-fbsd`,
+  delete both key pairs and security group sg-0ac1cb145a7e27331, drop
+  the `Include ~/.ssh/ec2/dbsql-*.conf` lines from ~/.ssh/config;
+- the release itself (merge/tag/push to origin) happens from the laptop
+  and does not need AWS.
+
 ## Hosts and paths
 
 - **Build host:** `ssh dbsql-deb` -- Debian 13 amd64, c7i.16xlarge
