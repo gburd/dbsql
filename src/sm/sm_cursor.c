@@ -117,6 +117,7 @@ __sm_dbc_open(sm_cursor_t *cur)
 static void
 __sm_cursor_set_current(sm_cursor_t *cur)
 {
+	cur->generation++;
 	cur->state = CURSOR_VALID;
 	cur->at_eof = 0;
 	cur->saved = 0;
@@ -1335,15 +1336,18 @@ __sm_cursor_unpin(sm_cursor_t *cur)
 
 /*
  * __sm_offset --
- *	sqlite_offset(): there is no file offset in a libdb file.
+ *	Upstream returns the file offset of the cell; there is none in a
+ *	libdb file.  The VDBE also uses the value to tell rows apart (its
+ *	large-value column cache is keyed on it), so it is a counter that
+ *	changes whenever the cursor's current entry changes.  sqlite_offset()
+ *	is not meaningful on dbsql (DIVERGENCES.md).
  *
  * PUBLIC: int64_t __sm_offset __P((sm_cursor_t *));
  */
 int64_t
 __sm_offset(sm_cursor_t *cur)
 {
-	(void)cur;
-	return (0);
+	return ((int64_t)cur->generation);
 }
 
 /*

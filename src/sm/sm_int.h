@@ -206,6 +206,7 @@ struct sm_cursor_t {
 	int empty;			/* Table of a not yet created db. */
 	int pinned;			/* OP_CursorLock: may not be moved. */
 	int incrblob;			/* A blob handle's cursor. */
+	u_int64_t generation;		/* Bumped on each move (__sm_offset). */
 	void *preformat;		/* __sm_transfer_row payload. */
 	u_int32_t preformat_size;
 	u_int32_t preformat_alloc;
