@@ -205,12 +205,14 @@ directories is not atomic across them. This is listed in DIVERGENCES.md.
    → `__sm_index_moveto` clears `eq_seen` after the descent and recomputes
    it from the landing entry and the one before it (an equal entry
    compares as `default_rc`, so it is one of the two).
-7. **MVCC keeps a mutex per committed writer.** Under `DB_MULTIVERSION` a
-   committed txn that wrote pages keeps its txn detail (and mutex) until
-   its page versions leave the cache. With libdb's default mutex count,
+7. **MVCC retains committed writers.** Under `DB_MULTIVERSION` a committed
+   txn is retained until the last page it created leaves the cache, so
+   "an additional transaction may be needed for each page in the cache"
+   (libdb's transapp_read guide). With the default transaction table,
    ~3400 one-row write txns on a 32 MB cache fail with ENOMEM
-   (`BDB4525 Unable to allocate memory for transaction detail`).
-   → `mutex_set_max(SM_MUTEX_MAX)`: 4 per 512 bytes of cache.
+   (`BDB4525 Unable to allocate memory for transaction detail`);
+   `mutex_set_max` does not help, `set_tx_max` does (measured).
+   → `set_tx_max(SM_TX_MAX)`: one per 512-byte page of cache, +25%.
 8. **In-memory logs bound transaction size.** With `DB_LOG_IN_MEMORY` a txn
    larger than the log buffer fails with `DB_LOG_BUFFER_FULL`.
    → `:memory:` uses a 64 MB buffer (the error maps to `DBSQL_FULL`); temp

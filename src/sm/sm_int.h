@@ -85,10 +85,11 @@ typedef struct sm_env {
 #define	SM_LOCKS_MAX		1000000
 #define	SM_LOG_REGIONMAX	(4 * 1024 * 1024)
 #define	SM_ENV_REGION_MAX	(512 * 1024 * 1024)
-/* Mutexes: 4 per 512-byte page of the shared cache (buffers + MVCC). */
 /* Checkpoint after a write commit once this much log (KB) has grown. */
 #define	SM_CKPT_KBYTES		256
-#define	SM_MUTEX_MAX		(4 * (SM_ENV_CACHE / 512))
+/* Transactions: one per page the shared cache can hold (see sm_env.c);
+ * the smallest page size dbsql creates is 512 bytes, plus 25%. */
+#define	SM_TX_MAX		(SM_ENV_CACHE / 512 + SM_ENV_CACHE / 2048)
 
 /*
  * sm_dbh_t --

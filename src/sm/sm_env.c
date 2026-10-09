@@ -153,15 +153,15 @@ __sm_env_size_regions(sm_env_t *env)
 	(void)dbenv->set_lg_regionmax(dbenv, SM_LOG_REGIONMAX);
 	(void)dbenv->set_memory_max(dbenv, 0, SM_ENV_REGION_MAX);
 	/*
-	 * Under DB_MULTIVERSION a committed transaction that wrote pages
-	 * keeps its transaction detail, and that detail's mutex, until its
-	 * old page versions leave the cache.  A stream of small write
-	 * transactions therefore holds up to about one mutex per cached
-	 * page version, on top of one per buffer; libdb's default mutex
-	 * count does not allow for that ("out of memory" after a few
-	 * thousand autocommit INSERTs).
+	 * Under DB_MULTIVERSION a committed transaction is "retained until
+	 * the last page it created is evicted from cache, so ... an
+	 * additional transaction may be needed for each page in the cache"
+	 * (libdb, transapp_read).  Size the transaction table for that, as
+	 * the documentation says; the default fails after a few thousand
+	 * small write transactions (ENOMEM, "Unable to allocate memory for
+	 * transaction detail").
 	 */
-	(void)dbenv->mutex_set_max(dbenv, SM_MUTEX_MAX);
+	(void)dbenv->set_tx_max(dbenv, SM_TX_MAX);
 }
 
 /*
