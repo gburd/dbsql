@@ -824,7 +824,7 @@ __sm_end_trans(sm_t *p, int commit)
 	 * log has accumulated so the file (and its size) track the data,
 	 * as tools that copy or measure the file expect.  (libdb does
 	 * expensive work before testing the threshold: reported upstream,
-	 * /tmp/libdb-bugs.)
+	 * .agent/libdb-bugs R3.)
 	 */
 	if (bt->wrote && !(bt->flags & (SM_MEMORY | SM_EPHEMERAL))) {
 		bt->wrote = 0;

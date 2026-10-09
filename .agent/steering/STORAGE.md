@@ -222,15 +222,15 @@ directories is not atomic across them. This is listed in DIVERGENCES.md.
    checkpoint or on cache eviction.
    → After a write commit, `txn_checkpoint(SM_CKPT_KBYTES)`. A call below
    the threshold costs ~210 us (SIREAD cleanup runs before the threshold
-   test; reported to libdb, /tmp/libdb-bugs R3), which dominates small
+   test; reported to libdb, .agent/libdb-bugs (copy in /tmp/libdb-bugs) R3), which dominates small
    autocommit writes until fixed upstream.
 10. **An "equal" put revives a referenced deleted item (libdb bug,
-    reported: /tmp/libdb-bugs R1).** A btree put of a key the comparator
+    reported: .agent/libdb-bugs (copy in /tmp/libdb-bugs) R1).** A btree put of a key the comparator
     calls equal to a just-deleted item stores the deleted item's old key
     bytes when any cursor (including the deleting one) still refers to
     it. Visible as NOCASE or WITHOUT ROWID key updates keeping the old
     spelling (without_rowid1-2.1.2, upfrom2). Not worked around.
-11. **`DB->compact` then abort (libdb bug, reported: /tmp/libdb-bugs R4).**
+11. **`DB->compact` then abort (libdb bug, reported: .agent/libdb-bugs (copy in /tmp/libdb-bugs) R4).**
     Aborting a txn that ran `DB->compact(DB_FREE_SPACE)` on a
     sub-database after another sub-database of the file was `dbremove`d
     in the same txn fails "old_lp->gen == old_lock->gen" in

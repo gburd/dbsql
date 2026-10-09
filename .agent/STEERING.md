@@ -27,6 +27,15 @@ this file whenever a phase lands.
 10. Work happens unsupervised on a FreeBSD 15.1 EC2 host. When qualified:
     package, clean up, tag, and release.
 
+## libdb defects
+
+dbsql does not work around libdb bugs (maintainer, 2026-10-09).  A
+failure traced to libdb gets a reduced, controlled reproducer and a
+write-up in `.agent/libdb-bugs/` (also handed over in /tmp/libdb-bugs),
+and the affected SQLite tests are listed in test/tcl/known-failures.txt
+against that report.  Using libdb as documented (sizing knobs, handle
+lifetimes) is not a workaround.
+
 ## Status
 
 - [x] Phase 0: cleanup, `.agent/` layout, north star and steering.

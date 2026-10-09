@@ -1094,7 +1094,7 @@ __sm_insert(sm_cursor_t *cur, const sm_payload_t *x, int flags,
 		 * ROWID primary key); libdb, comparing whole records, would
 		 * keep both.  (libdb then stores the old item's key bytes when
 		 * the deleted item is still referenced: a libdb bug, reported
-		 * as /tmp/libdb-bugs R1; NOCASE/WITHOUT ROWID key updates
+		 * as .agent/libdb-bugs R1; NOCASE/WITHOUT ROWID key updates
 		 * keep the old spelling until it is fixed.)
 		 */
 		if ((rc = __sm_index_replace(cur, x)) != DBSQL_OK ||
