@@ -188,6 +188,9 @@ struct sm_cursor_t {
 	int saved;			/* key/data hold a position to restore. */
 	int at_eof;			/* Positioned past the last entry. */
 	int empty;			/* Table of a not yet created db. */
+	void *preformat;		/* __sm_transfer_row payload. */
+	u_int32_t preformat_size;
+	u_int32_t preformat_alloc;
 	u_int8_t rowid_key[SM_ROWID_KEYLEN];
 	DBT key;			/* Current key (rowid key or record). */
 	DBT data;			/* Current data (row record or empty). */

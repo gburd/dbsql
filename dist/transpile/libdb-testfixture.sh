@@ -74,7 +74,12 @@ do
 	esac
 	o=tf/$(echo "$s" | tr '/' '_' | sed 's/\.c$/.o/')
 	OBJS="$OBJS $o"
-	if [ ! -f "$o" ] || [ "$p" -nt "$o" ]; then
+	# sm/ objects also depend on the sm headers.
+	stale=
+	case $s in SM/*)
+		for h in "$SM"/*.h; do [ "$h" -nt "$o" ] && stale=1; done ;;
+	esac
+	if [ ! -f "$o" ] || [ "$p" -nt "$o" ] || [ -n "$stale" ]; then
 		$CC $CFLAGS $DEFS $INC -c "$p" -o "$o" 2>>tf/errors.log ||
 		    fail=$((fail+1))
 	fi

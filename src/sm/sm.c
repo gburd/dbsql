@@ -697,28 +697,36 @@ __sm_savepoint(sm_t *p, int op, int i_savepoint)
 	t = bt->txn;
 	if (t == NULL || bt->in_trans != DBSQL_TXN_WRITE)
 		return (DBSQL_OK);
-	/* Savepoint i lives at stack[i + 2]; -1 means the level-0 child. */
+	/*
+	 * Savepoint i lives at stack[i + 2], so "savepoints 0..i-1 open"
+	 * is depth i + 2; i == -1 means the level-0 content child,
+	 * stack[1] (depth 1 without it).
+	 */
 	keep = i_savepoint + 2;
 	if (keep < 1)
 		keep = 1;
 	rc = DBSQL_OK;
 	if (op == SAVEPOINT_RELEASE) {
+		/* Commit savepoint i and everything above into its parent. */
 		while (rc == DBSQL_OK && t->depth > keep)
 			rc = __sm_txn_pop(bt, 1);
 		return (rc);
 	}
+	/*
+	 * Roll back: abort savepoint i (stack[keep]) and everything above,
+	 * then open it again, as upstream leaves a rolled-back savepoint
+	 * open.
+	 */
+	if (bt->meta != NULL && bt->meta_level >= keep) {
+		/* Meta opened in a level being aborted: reopen lazily. */
+		(void)bt->meta->close(bt->meta, DB_NOSYNC);
+		bt->meta = NULL;
+	}
 	while (rc == DBSQL_OK && t->depth > keep)
-		rc = __sm_txn_pop(bt, 0);
-	if (rc == DBSQL_OK && t->depth == keep)
 		rc = __sm_txn_pop(bt, 0);
 	if (rc == DBSQL_OK)
 		rc = __sm_txn_push(t, (bt->flags & SM_MEMORY) ?
 		    0 : DB_TXN_SNAPSHOT);
-	if (bt->meta != NULL && bt->meta_level >= keep - 1 &&
-	    bt->meta_level >= t->depth - 1) {
-		/* Meta handle opened in a level we aborted: reopen lazily. */
-		bt->meta = NULL;
-	}
 	return (rc);
 }
 

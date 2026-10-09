@@ -235,9 +235,24 @@ __sm_cursors_save_others(sm_cursor_t *cur)
  * PUBLIC: int __sm_cursor __P((sm_t *, pgno_t, int, struct key_info_t *,
  * PUBLIC:     sm_cursor_t *));
  */
+static int __sm_cursor_open(sm_t *, pgno_t, int, key_info_t *,
+    sm_cursor_t *, int);
+
 int
 __sm_cursor(sm_t *p, pgno_t i_table, int wr_flag, key_info_t *ki,
     sm_cursor_t *cur)
+{
+	return (__sm_cursor_open(p, i_table, wr_flag, ki, cur, 1));
+}
+
+/*
+ * __sm_cursor_open --
+ *	Open a cursor; with check_kind, a key_info/table-kind mismatch is
+ *	corruption (integrity_check opens every table without key_info).
+ */
+static int
+__sm_cursor_open(sm_t *p, pgno_t i_table, int wr_flag, key_info_t *ki,
+    sm_cursor_t *cur, int check_kind)
 {
 	sm_shared_t *bt;
 	int rc;
@@ -262,7 +277,8 @@ __sm_cursor(sm_t *p, pgno_t i_table, int wr_flag, key_info_t *ki,
 	 * An index cursor (key_info) on a rowid table or the reverse: the
 	 * schema's rootpage is wrong (upstream sees the wrong page type).
 	 */
-	if (cur->dbh != NULL && (ki == NULL) != (cur->dbh->is_intkey != 0)) {
+	if (check_kind && cur->dbh != NULL &&
+	    (ki == NULL) != (cur->dbh->is_intkey != 0)) {
 		cur->bt = NULL;
 		return (DBSQL_CORRUPT_BKPT);
 	}
@@ -295,6 +311,7 @@ __sm_close_cursor(sm_cursor_t *cur)
 	    cur->btree : NULL;
 	free(cur->key.data);
 	free(cur->data.data);
+	free(cur->preformat);
 	memset(cur, 0, sizeof(*cur));
 	if (p != NULL)
 		(void)__sm_close(p);
@@ -802,6 +819,30 @@ __sm_incrblob_cursor(sm_cursor_t *cur)
 }
 
 /*
+ * __sm_index_replace --
+ *	Delete the entry whose first x->n_mem fields equal x->mems, if any.
+ */
+static int
+__sm_index_replace(sm_cursor_t *cur, const sm_payload_t *x)
+{
+	unpacked_record_t r;
+	int rc, res, ret;
+
+	memset(&r, 0, sizeof(r));
+	r.key_info = cur->key_info;
+	r.mems = x->mems;
+	r.n_field = x->n_mem;
+	if ((rc = __sm_index_moveto(cur, &r, &res)) != DBSQL_OK)
+		return (rc);
+	if (res != 0 || cur->state != CURSOR_VALID)
+		return (DBSQL_OK);
+	__sm_cursors_save_others(cur);
+	if ((ret = cur->dbc->del(cur->dbc, 0)) != 0)
+		return (__sm_errmap(ret));
+	return (DBSQL_OK);
+}
+
+/*
  * __sm_insert --
  *	Insert or replace an entry.  Tables: key = rowid payload->n_key,
  *	data = payload->pData (+ n_zero zero bytes).  Indexes: key =
@@ -827,7 +868,19 @@ __sm_insert(sm_cursor_t *cur, const sm_payload_t *x, int flags,
 	memset(&key, 0, sizeof(key));
 	memset(&data, 0, sizeof(data));
 	zbuf = NULL;
-	if (cur->dbh->is_intkey) {
+	if (flags & BTREE_PREFORMAT) {
+		/* The payload was prepared by __sm_transfer_row. */
+		if (cur->dbh->is_intkey) {
+			__sm_rowid_to_key(x->n_key, kbuf);
+			key.data = kbuf;
+			key.size = SM_ROWID_KEYLEN;
+			data.data = cur->preformat;
+			data.size = cur->preformat_size;
+		} else {
+			key.data = cur->preformat;
+			key.size = cur->preformat_size;
+		}
+	} else if (cur->dbh->is_intkey) {
 		__sm_rowid_to_key(x->n_key, kbuf);
 		key.data = kbuf;
 		key.size = SM_ROWID_KEYLEN;
@@ -847,6 +900,16 @@ __sm_insert(sm_cursor_t *cur, const sm_payload_t *x, int flags,
 	} else {
 		key.data = (void *)x->key;
 		key.size = (u_int32_t)x->n_key;
+		/*
+		 * x->mems: the first x->n_mem fields identify the entry
+		 * (a WITHOUT ROWID primary key).  An existing entry equal
+		 * on those fields is replaced, as upstream overwrites it;
+		 * libdb would order the two records apart by their other
+		 * fields and keep both.
+		 */
+		if (x->n_mem > 0 && (rc = __sm_index_replace(cur, x)) !=
+		    DBSQL_OK)
+			return (rc);
 	}
 	ret = cur->dbc->put(cur->dbc, &key, &data, DB_KEYLAST);
 	free(zbuf);
@@ -889,8 +952,11 @@ __sm_delete(sm_cursor_t *cur, u_int8_t flags)
 
 /*
  * __sm_transfer_row --
- *	Copy the current row of src into dest with rowid i_key (used by
- *	INSERT INTO ... SELECT transfer optimisation).
+ *	OP_RowCell: prepare the current row of src for the BTREE_PREFORMAT
+ *	insert that follows on dest (upstream builds the cell here and the
+ *	insert writes it).  The payload is copied into dest's preformat
+ *	buffer; for rowid tables the insert supplies the key (i_key, also
+ *	the OP_Insert's rowid).
  *
  * PUBLIC: int __sm_transfer_row __P((sm_cursor_t *, sm_cursor_t *,
  * PUBLIC:     int64_t));
@@ -898,19 +964,22 @@ __sm_delete(sm_cursor_t *cur, u_int8_t flags)
 int
 __sm_transfer_row(sm_cursor_t *dest, sm_cursor_t *src, int64_t i_key)
 {
-	sm_payload_t x;
+	const void *p;
+	void *buf;
 	u_int32_t n;
 
-	memset(&x, 0, sizeof(x));
-	if (dest->dbh->is_intkey) {
-		x.n_key = i_key;
-		x.data = __sm_payload_all(src, &n);
-		x.n_data = (int)n;
-	} else {
-		x.key = __sm_payload_all(src, &n);
-		x.n_key = n;
+	(void)i_key;
+	p = __sm_payload_all(src, &n);
+	if (n > dest->preformat_alloc) {
+		if ((buf = realloc(dest->preformat, n)) == NULL)
+			return (DBSQL_NOMEM);
+		dest->preformat = buf;
+		dest->preformat_alloc = n;
 	}
-	return (__sm_insert(dest, &x, 0, 0));
+	if (n > 0)
+		memcpy(dest->preformat, p, n);
+	dest->preformat_size = n;
+	return (DBSQL_OK);
 }
 
 /*
@@ -1089,7 +1158,8 @@ __sm_integrity_check(DBSQL *db, sm_t *p, pgno_t *roots, dbsql_value_t *cnts,
 	for (i = 0; i < n_root && nerr < mx_err; i++) {
 		if (roots[i] == 0)
 			continue;
-		if ((rc = __sm_cursor(p, roots[i], 0, NULL, &cur)) != DBSQL_OK) {
+		if ((rc = __sm_cursor_open(p, roots[i], 0, NULL, &cur, 0)) !=
+		    DBSQL_OK) {
 			dbsql_str_appendf(&acc, "%stable %u: cannot open",
 			    nerr++ ? "\n" : "", (unsigned)roots[i]);
 			continue;
