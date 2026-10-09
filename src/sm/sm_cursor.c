@@ -223,7 +223,8 @@ __sm_cursors_check_pinned(sm_cursor_t *cur)
 	 */
 	for (c = cur->bt->cursors; c != NULL; c = c->next)
 		if (c != cur && c->pgno == cur->pgno && c->pinned &&
-		    c->state == CURSOR_VALID)
+		    (c->state == CURSOR_VALID ||
+		    c->state == CURSOR_REQUIRESEEK))
 			return (DBSQL_CONSTRAINT_PINNED);
 	return (DBSQL_OK);
 }
