@@ -221,7 +221,15 @@ directories is not atomic across them. This is listed in DIVERGENCES.md.
    work (SIREAD cleanup) before testing the threshold (~0.2 ms a call).
    → After a write commit, `__sm_maybe_checkpoint` reads `log_stat` and
    checkpoints once 256 KB of log has accumulated.
-10. **`DB->compact` then abort.** Measured safe in isolation (compact in
+10. **A pinned deleted item is revived by an "equal" put.** libdb keeps a
+    deleted item on its page while any DBC refers to it, and a put of a
+    key that `bt_compare` calls equal (NOCASE, or a WITHOUT ROWID key
+    equal on its primary-key fields) revives the item with its **old**
+    key bytes (probe_libdb.c checks this).
+    → A delete closes the deleting DBC and keeps the position as a saved
+    key (`__sm_after_delete`); an index insert first replaces any equal
+    entry and closes every other DBC on the table.
+11. **`DB->compact` then abort.** Measured safe in isolation (compact in
     a top-level or child txn, then abort, including when it moves a
     sub-database's meta page). In the suite, a VACUUM that failed after
     compacting (the page_size bug, since fixed) panicked libdb in

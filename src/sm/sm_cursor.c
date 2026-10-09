@@ -217,14 +217,16 @@ __sm_cursors_save_others(sm_cursor_t *cur)
 	sm_cursor_t *c;
 
 	for (c = cur->bt->cursors; c != NULL; c = c->next) {
-		if (c == cur || c->pgno != cur->pgno || c->dbc == NULL ||
-		    c->state != CURSOR_VALID)
+		if (c == cur || c->pgno != cur->pgno || c->dbc == NULL)
 			continue;
+		/* Any open DBC can pin a deleted item; close them all. */
 		(void)c->dbc->close(c->dbc);
 		c->dbc = NULL;
 		c->dbc_txn = NULL;
-		c->state = CURSOR_REQUIRESEEK;
-		c->saved = 1;
+		if (c->state == CURSOR_VALID) {
+			c->state = CURSOR_REQUIRESEEK;
+			c->saved = 1;
+		}
 	}
 }
 
@@ -872,6 +874,27 @@ __sm_incrblob_cursor(sm_cursor_t *cur)
 }
 
 /*
+ * __sm_after_delete --
+ *	The entry under the cursor was just deleted.  libdb keeps a
+ *	deleted item on its page while a DBC points at it, and a put of a
+ *	key the comparator calls equal then revives the item with its old
+ *	key bytes (NOCASE keys, WITHOUT ROWID updates).  So the DBC is
+ *	closed, which lets libdb remove the item, and the cursor keeps the
+ *	deleted key as a saved position: the next __sm_next/__sm_previous
+ *	lands where it would have without the delete (upstream's
+ *	BTREE_SAVEPOSITION), via __sm_cursor_restore_position.
+ */
+static void
+__sm_after_delete(sm_cursor_t *cur)
+{
+	(void)cur->dbc->close(cur->dbc);
+	cur->dbc = NULL;
+	cur->dbc_txn = NULL;
+	cur->state = CURSOR_REQUIRESEEK;
+	cur->saved = 1;
+}
+
+/*
  * __sm_index_replace --
  *	Delete the entry whose first x->n_mem fields equal x->mems, if any.
  */
@@ -881,17 +904,32 @@ __sm_index_replace(sm_cursor_t *cur, const sm_payload_t *x)
 	unpacked_record_t r;
 	int rc, res, ret;
 
-	memset(&r, 0, sizeof(r));
-	r.key_info = cur->key_info;
-	r.mems = x->mems;
-	r.n_field = x->n_mem;
-	if ((rc = __sm_index_moveto(cur, &r, &res)) != DBSQL_OK)
+	unpacked_record_t *rp;
+
+	if (x->n_mem > 0) {
+		memset(&r, 0, sizeof(r));
+		r.key_info = cur->key_info;
+		r.mems = x->mems;
+		r.n_field = x->n_mem;
+		rp = &r;
+	} else {
+		/* The whole record identifies the entry. */
+		if ((rp = __vdbe_alloc_unpacked_record(cur->key_info)) == NULL)
+			return (DBSQL_NOMEM);
+		__vdbe_record_unpack((int)x->n_key, x->key, rp);
+		rp->default_rc = 0;
+	}
+	rc = __sm_index_moveto(cur, rp, &res);
+	if (rp != &r)
+		__dbsql_db_free(cur->key_info->db, rp);
+	if (rc != DBSQL_OK)
 		return (rc);
 	if (res != 0 || cur->state != CURSOR_VALID)
 		return (DBSQL_OK);
 	__sm_cursors_save_others(cur);
 	if ((ret = cur->dbc->del(cur->dbc, 0)) != 0)
 		return (__sm_errmap(ret));
+	__sm_after_delete(cur);
 	return (DBSQL_OK);
 }
 
@@ -954,15 +992,24 @@ __sm_insert(sm_cursor_t *cur, const sm_payload_t *x, int flags,
 		key.data = (void *)x->key;
 		key.size = (u_int32_t)x->n_key;
 		/*
-		 * x->mems: the first x->n_mem fields identify the entry
-		 * (a WITHOUT ROWID primary key).  An existing entry equal
-		 * on those fields is replaced, as upstream overwrites it;
-		 * libdb would order the two records apart by their other
-		 * fields and keep both.
+		 * An existing entry that compares equal to the new one is
+		 * replaced, key bytes included, as upstream overwrites the
+		 * cell.  libdb would keep the old key's bytes (a key equal
+		 * under NOCASE is "the same key"), and with x->n_mem only
+		 * the first n_mem fields identify the entry (a WITHOUT
+		 * ROWID primary key), so it would keep both.
 		 */
-		if (x->n_mem > 0 && (rc = __sm_index_replace(cur, x)) !=
-		    DBSQL_OK)
+		if ((rc = __sm_index_replace(cur, x)) != DBSQL_OK ||
+		    (rc = __sm_dbc_open(cur)) != DBSQL_OK)
 			return (rc);
+		/*
+		 * libdb keeps a deleted item on its page while any DBC
+		 * refers to it, and a put of a key the comparator calls
+		 * equal then revives that item with its old key bytes
+		 * (measured, test/unit/probe_libdb.c).  Release the other
+		 * cursors' DBCs on this table first.
+		 */
+		__sm_cursors_save_others(cur);
 	}
 	ret = cur->dbc->put(cur->dbc, &key, &data, DB_KEYLAST);
 	free(zbuf);
@@ -1000,6 +1047,7 @@ __sm_delete(sm_cursor_t *cur, u_int8_t flags)
 	__sm_cursors_save_others(cur);
 	if ((ret = cur->dbc->del(cur->dbc, 0)) != 0)
 		return (__sm_errmap(ret));
+	__sm_after_delete(cur);
 	return (DBSQL_OK);
 }
 

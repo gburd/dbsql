@@ -22,6 +22,71 @@ dbt(const char *s)
 	return (d);
 }
 
+/* Case-insensitive comparator: "abc" and "ABC" are the same key. */
+static int
+ci_cmp(DB *dbp, const DBT *a, const DBT *b)
+{
+	size_t i, n;
+	int ca, cb;
+
+	(void)dbp;
+	n = a->size < b->size ? a->size : b->size;
+	for (i = 0; i < n; i++) {
+		ca = ((const unsigned char *)a->data)[i] | 0x20;
+		cb = ((const unsigned char *)b->data)[i] | 0x20;
+		if (ca != cb)
+			return (ca - cb);
+	}
+	return ((int)a->size - (int)b->size);
+}
+
+/*
+ * A deleted item stays on its page while any DBC refers to it, and a
+ * put of an "equal" key (per bt_compare) then revives it with the old
+ * key bytes.  dbsql's index replace relies on this exact behaviour to
+ * know it must close the table's other DBCs (sm_cursor.c).
+ */
+static void
+probe_revive(DB_ENV *env)
+{
+	DB *db;
+	DB_TXN *t;
+	DBC *pin, *a, *b;
+	DBT k, v;
+	char got[8];
+
+	memset(got, 0, sizeof(got));
+	(void)db_create(&db, env, 0);
+	(void)db->set_bt_compare(db, ci_cmp);
+	(void)env->txn_begin(env, NULL, &t, 0);
+	(void)db->open(db, t, "revive.db", NULL, DB_BTREE, DB_CREATE, 0644);
+	k = dbt("abc");
+	v = dbt("");
+	(void)db->put(db, t, &k, &v, 0);
+	(void)db->cursor(db, t, &pin, 0);
+	memset(&k, 0, sizeof(k));
+	(void)pin->get(pin, &k, &v, DB_FIRST);		/* pins "abc" */
+	(void)db->cursor(db, t, &a, 0);
+	(void)a->get(a, &k, &v, DB_FIRST);
+	(void)a->del(a, 0);
+	(void)a->close(a);
+	(void)db->cursor(db, t, &b, 0);
+	k = dbt("ABC");
+	v = dbt("");
+	(void)b->put(b, &k, &v, DB_KEYLAST);
+	(void)b->close(b);
+	(void)pin->close(pin);
+	(void)db->cursor(db, t, &b, 0);
+	memset(&k, 0, sizeof(k));
+	if (b->get(b, &k, &v, DB_FIRST) == 0 && k.size < sizeof(got))
+		memcpy(got, k.data, k.size);
+	(void)b->close(b);
+	CHECK(strcmp(got, "abc") == 0,
+	    "deleted item pinned by a DBC is revived with its old key bytes");
+	(void)t->commit(t, 0);
+	(void)db->close(db, 0);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -181,6 +246,7 @@ main(int argc, char *argv[])
 	mem->close(mem, 0);
 	penv->close(penv, 0);
 	db->close(db, 0);
+	probe_revive(env);
 	env->close(env, 0);
 	printf("%d failures\n", fails);
 	return (fails != 0);
