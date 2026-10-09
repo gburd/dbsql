@@ -130,12 +130,15 @@ void
 enable_simulated_io_errors(void)
 {
 }
+#endif
 
+#ifdef DBSQL_DEBUG
 /*
- * sm.h defines __sm_seek_count as 0 outside DBSQL_DEBUG builds, so this
- * has no PUBLIC: line.
+ * __sm_seek_count --
+ *	DBSQL_TESTCTRL_SEEK_COUNT: upstream counts b-tree seeks; libdb
+ *	does not report them.  sm.h declares it (a macro for 0 outside
+ *	DBSQL_DEBUG builds), so there is no PUBLIC: line.
  */
-u_int64_t (__sm_seek_count)(sm_t *);
 u_int64_t
 (__sm_seek_count)(sm_t *p)
 {

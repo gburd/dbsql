@@ -152,14 +152,18 @@ if test "$with_storage" = libdb; then
 	DB_LIBS="-L$DB_LIBDIR -l$db_lib -Wl,-rpath,$DB_LIBDIR"
 	save_CPPFLAGS="$CPPFLAGS"
 	CPPFLAGS="$CPPFLAGS $DB_CPPFLAGS"
-	AC_MSG_CHECKING([libdb version >= 2026.0])
-	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <db.h>]],
-	    [[#if DB_VERSION_MAJOR < 2026
-	      #error libdb too old
-	      #endif]])],
-	    [AC_MSG_RESULT([yes])],
-	    [AC_MSG_RESULT([no])
-	     AC_MSG_ERROR([dbsql needs libdb v2026.10.1 or later])])
+	# libdb's numeric version is its format/ABI level and stays put across
+	# releases; DB_CALVER ("2026.10.3") names the release.
+	AC_PROG_CPP
+	AC_MSG_CHECKING([libdb release >= $DBSQL_LIBDB_VERSION])
+	db_calver=`printf '#include <db.h>\nDB_CALVER\n' |
+	    $CPP $CPPFLAGS - 2>/dev/null | sed -n 's/^"\([[0-9.]]*\)"$/\1/p'`
+	AS_VERSION_COMPARE([$db_calver], [$DBSQL_LIBDB_VERSION],
+	    [db_calver_ok=no], [db_calver_ok=yes], [db_calver_ok=yes])
+	test -n "$db_calver" || db_calver_ok=no
+	AC_MSG_RESULT([$db_calver_ok (${db_calver:-unknown})])
+	test "$db_calver_ok" = yes ||
+	    AC_MSG_ERROR([dbsql needs libdb v$DBSQL_LIBDB_VERSION or later])
 	CPPFLAGS="$save_CPPFLAGS"
 fi
 AC_SUBST(DB_CPPFLAGS)

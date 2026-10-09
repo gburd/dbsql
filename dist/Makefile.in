@@ -148,19 +148,28 @@ libdbsql_tcl.la: $(testdir)/tcl/tcl_dbsql.c $(libdbsql)
 	    $(TCL_LIBS)
 
 # Testfixture: the library compiled with the test hooks, plus test/tcl.
+# The same configuration as dist/transpile/libdb-testfixture.sh (the
+# suite runner's build), so `make check` and the qualification runs test
+# the same thing.
 TF_DEFS=	-DDBSQL_TEST=1 -DTCLSH_INIT_PROC=__test_init -DDBSQL_SERVER=1 \
 		-DDBSQL_PRIVATE= -DDBSQL_CORE -DBUILD_dbsql \
 		-DDBSQL_SERIES_CONSTRAINT_VERIFY=1 -DDBSQL_DEFAULT_PAGE_SIZE=1024 \
 		-DDBSQL_ENABLE_STMTVTAB -DDBSQL_ENABLE_BYTECODE_VTAB \
+		-DDBSQL_ENABLE_CARRAY -DDBSQL_ENABLE_PERCENTILE \
 		-DDBSQL_STATIC_RANDOMJSON -DDBSQL_STRICT_SUBTYPE=1 \
-		-DDBSQL_CKSUMVFS_STATIC -DDBSQL_NO_SYNC=1 -DDBSQL_DEBUG=1
-TF_EXCLUDE=	$(if $(filter native,$(STORAGE)),,%/test2.c %/test3.c %/test_btree.c)
-TF_SRCS=	$(LIB_SRCS) $(filter-out $(TF_EXCLUDE),$(TCL_SRCS)) \
-		$(testdir)/tcl/tf_stubs.c
+		-DDBSQL_ENABLE_FTS5 -DDBSQL_ENABLE_MATH_FUNCTIONS \
+		-DDBSQL_ENABLE_EXPLAIN_COMMENTS \
+		-DDBSQL_CKSUMVFS_STATIC -DDBSQL_NO_SYNC=1 -DDBSQL_DEBUG=1 \
+		$(if $(filter native,$(STORAGE)),,-DDBSQL_SM_LIBDB)
+# ext/basexx.c #includes base64.c and base85.c.
+TF_EXCLUDE=	%/test_btree.c %/ext/base64.c %/ext/base85.c \
+		$(if $(filter native,$(STORAGE)),%/tf_stubs.c,)
+TF_SRCS=	$(LIB_SRCS) $(filter-out $(TF_EXCLUDE),$(TCL_SRCS))
+# mem2.c (DBSQL_MEMDEBUG builds) is compiled into the testfixture only.
 testfixture: $(TF_SRCS) dbsql.h sql_parser.c fts5_parser.c
 	$(COMPILE) $(TF_DEFS) -I$(testdir)/tcl -I$(testdir)/tcl/ext \
-	    $(TCL_CPPFLAGS) -o $@ $(TF_SRCS) sql_parser.c \
-	    $(DB_LIBS) $(ICU_LIBS) $(TCL_LIBS) -lz $(LIBS)
+	    $(TCL_CPPFLAGS) -o $@ $(TF_SRCS) $(srcdir)/common/mem2.c \
+	    sql_parser.c $(DB_LIBS) $(ICU_LIBS) $(TCL_LIBS) -lz -lm $(LIBS)
 
 %_test: $(testdir)/unit/%_test.c $(libdbsql)
 	$(LTLINK) $(DEFS) $(CPPFLAGS) -DDBSQL_CORE -o $@ $< $(libdbsql) \
