@@ -1073,34 +1073,75 @@ __sm_dbh_close_table(sm_shared_t *bt, u_int32_t pgno)
  *
  * PUBLIC: int __sm_drop_table __P((sm_t *, int, int *));
  */
+static int __sm_subdb_remove(sm_shared_t *, const char *);
+
 int
 __sm_drop_table(sm_t *p, int pgno, int *movedp)
 {
 	sm_shared_t *bt;
+	sm_dbh_t *h;
 	DBT key;
+	u_int32_t count;
 	char name[SM_SUBDB_MAX], kbuf[SM_SUBDB_MAX];
-	int ret;
+	int rc, ret;
 
 	bt = p->bt;
 	*movedp = 0;
-	__sm_dbh_close_table(bt, (u_int32_t)pgno);
-	if (bt->flags & SM_EPHEMERAL)
+	if (bt->flags & SM_EPHEMERAL) {
+		__sm_dbh_close_table(bt, (u_int32_t)pgno);
 		return (DBSQL_OK);
+	}
+	/*
+	 * dbremove needs every handle on the sub-database closed, and
+	 * other connections keep theirs open (DB_LOCK_NOTGRANTED).  So the
+	 * table is emptied with truncate, which other handles and their
+	 * snapshots tolerate, and forgotten: its kind record goes and the
+	 * number is never reused (LARGEST_ROOT_PAGE only grows).  The
+	 * empty sub-database is removed now if nobody else has it open;
+	 * otherwise it stays, empty, until a VACUUM rewrites the file
+	 * (DIVERGENCES.md).
+	 */
+	if ((rc = __sm_dbh_get(bt, (u_int32_t)pgno, NULL, 0, &h)) == DBSQL_OK) {
+		__sm_cursors_invalidate_table(bt, (u_int32_t)pgno);
+		if ((ret = h->dbp->truncate(h->dbp, __sm_cur_txn(bt), &count,
+		    0)) != 0)
+			return (__sm_errmap(ret));
+	} else if (rc != DBSQL_CANTOPEN)
+		return (rc);
+	__sm_dbh_close_table(bt, (u_int32_t)pgno);
 	__sm_subdb_name((u_int32_t)pgno, name);
-	if (bt->flags & SM_MEMORY)
-		ret = bt->env->dbenv->dbremove(bt->env->dbenv, __sm_cur_txn(bt),
-		    bt->env->home != NULL ? SM_TEMP_FILE : NULL, name, 0);
-	else
-		ret = bt->env->dbenv->dbremove(bt->env->dbenv, __sm_cur_txn(bt),
-		    bt->path, name, 0);
-	if (ret != 0 && ret != ENOENT)
-		return (__sm_errmap(ret));
+	(void)__sm_subdb_remove(bt, name);
 	snprintf(kbuf, sizeof(kbuf), "k%u", (unsigned)pgno);
 	memset(&key, 0, sizeof(key));
 	key.data = kbuf;
 	key.size = (u_int32_t)strlen(kbuf);
 	ret = bt->meta->del(bt->meta, __sm_cur_txn(bt), &key, 0);
 	return (ret == DB_NOTFOUND ? DBSQL_OK : __sm_errmap(ret));
+}
+
+/*
+ * __sm_subdb_remove --
+ *	dbremove sub-database 'name' in a child of the current txn, so a
+ *	refusal (another handle open: DB_LOCK_NOTGRANTED) leaves the
+ *	caller's txn untouched.  Returns the libdb error.
+ */
+static int
+__sm_subdb_remove(sm_shared_t *bt, const char *name)
+{
+	DB_ENV *dbenv;
+	DB_TXN *child;
+	int ret;
+
+	dbenv = bt->env->dbenv;
+	if ((ret = dbenv->txn_begin(dbenv, __sm_cur_txn(bt), &child,
+	    DB_TXN_NOWAIT)) != 0)
+		return (ret);
+	ret = dbenv->dbremove(dbenv, child, (bt->flags & SM_MEMORY) ?
+	    (bt->env->home != NULL ? SM_TEMP_FILE : NULL) : bt->path, name, 0);
+	if (ret == 0 || ret == ENOENT)
+		return (child->commit(child, 0) == 0 ? 0 : ret);
+	(void)child->abort(child);
+	return (ret);
 }
 
 /*
