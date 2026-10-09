@@ -204,6 +204,7 @@ struct sm_cursor_t {
 	int saved;			/* key/data hold a position to restore. */
 	int at_eof;			/* Positioned past the last entry. */
 	int empty;			/* Table of a not yet created db. */
+	int pinned;			/* OP_CursorLock: may not be moved. */
 	void *preformat;		/* __sm_transfer_row payload. */
 	u_int32_t preformat_size;
 	u_int32_t preformat_alloc;

@@ -211,11 +211,31 @@ __sm_cursors_invalidate_table(sm_shared_t *bt, u_int32_t pgno)
  *	cursor on the table is saved, so it reports "moved" and re-seeks
  *	(upstream's saveAllCursors).
  */
-static void
-__sm_cursors_save_others(sm_cursor_t *cur)
+static int
+__sm_cursors_check_pinned(sm_cursor_t *cur)
 {
 	sm_cursor_t *c;
 
+	/*
+	 * A write that would move a pinned cursor (OP_CursorLock: a REPLACE
+	 * conflict resolution in progress) fails, as upstream's
+	 * saveCursorPosition does.
+	 */
+	for (c = cur->bt->cursors; c != NULL; c = c->next)
+		if (c != cur && c->pgno == cur->pgno && c->pinned &&
+		    c->state == CURSOR_VALID)
+			return (DBSQL_CONSTRAINT_PINNED);
+	return (DBSQL_OK);
+}
+
+static int
+__sm_cursors_save_others(sm_cursor_t *cur)
+{
+	sm_cursor_t *c;
+	int rc;
+
+	if ((rc = __sm_cursors_check_pinned(cur)) != DBSQL_OK)
+		return (rc);
 	for (c = cur->bt->cursors; c != NULL; c = c->next) {
 		if (c == cur || c->pgno != cur->pgno || c->dbc == NULL)
 			continue;
@@ -228,6 +248,7 @@ __sm_cursors_save_others(sm_cursor_t *cur)
 			c->saved = 1;
 		}
 	}
+	return (DBSQL_OK);
 }
 
 /*
@@ -926,7 +947,8 @@ __sm_index_replace(sm_cursor_t *cur, const sm_payload_t *x)
 		return (rc);
 	if (res != 0 || cur->state != CURSOR_VALID)
 		return (DBSQL_OK);
-	__sm_cursors_save_others(cur);
+	if ((rc = __sm_cursors_save_others(cur)) != DBSQL_OK)
+		return (rc);
 	if ((ret = cur->dbc->del(cur->dbc, 0)) != 0)
 		return (__sm_errmap(ret));
 	__sm_after_delete(cur);
@@ -1009,7 +1031,13 @@ __sm_insert(sm_cursor_t *cur, const sm_payload_t *x, int flags,
 		 * (measured, test/unit/probe_libdb.c).  Release the other
 		 * cursors' DBCs on this table first.
 		 */
-		__sm_cursors_save_others(cur);
+		if ((rc = __sm_cursors_save_others(cur)) != DBSQL_OK)
+			return (rc);
+	}
+	if (cur->dbh->is_intkey && (rc = __sm_cursors_check_pinned(cur)) !=
+	    DBSQL_OK) {
+		free(zbuf);
+		return (rc);
 	}
 	ret = cur->dbc->put(cur->dbc, &key, &data, DB_KEYLAST);
 	free(zbuf);
@@ -1044,7 +1072,8 @@ __sm_delete(sm_cursor_t *cur, u_int8_t flags)
 		return (cur->state == CURSOR_FAULT ? cur->fault : DBSQL_OK);
 	if ((rc = __sm_dbc_open(cur)) != DBSQL_OK)
 		return (rc);
-	__sm_cursors_save_others(cur);
+	if ((rc = __sm_cursors_save_others(cur)) != DBSQL_OK)
+		return (rc);
 	if ((ret = cur->dbc->del(cur->dbc, 0)) != 0)
 		return (__sm_errmap(ret));
 	__sm_after_delete(cur);
@@ -1210,14 +1239,14 @@ __sm_cursor_has_hint(sm_cursor_t *cur, unsigned int mask)
 void
 __sm_cursor_pin(sm_cursor_t *cur)
 {
-	(void)cur;
+	cur->pinned = 1;
 }
 
 /* PUBLIC: void __sm_cursor_unpin __P((sm_cursor_t *)); */
 void
 __sm_cursor_unpin(sm_cursor_t *cur)
 {
-	(void)cur;
+	cur->pinned = 0;
 }
 
 /*
