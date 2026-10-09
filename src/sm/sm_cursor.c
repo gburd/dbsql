@@ -266,17 +266,20 @@ __sm_cursors_save_others(sm_cursor_t *cur)
 
 	if ((rc = __sm_cursors_check_pinned(cur)) != DBSQL_OK)
 		return (rc);
+	/*
+	 * A write through 'cur' may change or remove the entries other
+	 * cursors on the table are on: save their positions (upstream's
+	 * saveAllCursors); they re-seek on next use.
+	 */
 	for (c = cur->bt->cursors; c != NULL; c = c->next) {
-		if (c == cur || c->pgno != cur->pgno || c->dbc == NULL)
+		if (c == cur || c->pgno != cur->pgno || c->dbc == NULL ||
+		    c->state != CURSOR_VALID)
 			continue;
-		/* Any open DBC can pin a deleted item; close them all. */
 		(void)c->dbc->close(c->dbc);
 		c->dbc = NULL;
 		c->dbc_txn = NULL;
-		if (c->state == CURSOR_VALID) {
-			c->state = CURSOR_REQUIRESEEK;
-			c->saved = 1;
-		}
+		c->state = CURSOR_REQUIRESEEK;
+		c->saved = 1;
 	}
 	return (DBSQL_OK);
 }
@@ -971,14 +974,10 @@ __sm_invalidate_incrblob(sm_cursor_t *writer, int64_t rowid, int all)
 
 /*
  * __sm_after_delete --
- *	The entry under the cursor was just deleted.  libdb keeps a
- *	deleted item on its page while a DBC points at it, and a put of a
- *	key the comparator calls equal then revives the item with its old
- *	key bytes (NOCASE keys, WITHOUT ROWID updates).  So the DBC is
- *	closed, which lets libdb remove the item, and the cursor keeps the
- *	deleted key as a saved position: the next __sm_next/__sm_previous
- *	lands where it would have without the delete (upstream's
- *	BTREE_SAVEPOSITION), via __sm_cursor_restore_position.
+ *	The entry under the cursor was just deleted: keep its key as a
+ *	saved position, so the next __sm_next/__sm_previous lands where it
+ *	would have without the delete (upstream's BTREE_SAVEPOSITION), via
+ *	__sm_cursor_restore_position.
  */
 static void
 __sm_after_delete(sm_cursor_t *cur)
@@ -1090,23 +1089,16 @@ __sm_insert(sm_cursor_t *cur, const sm_payload_t *x, int flags,
 		key.size = (u_int32_t)x->n_key;
 		/*
 		 * An existing entry that compares equal to the new one is
-		 * replaced, key bytes included, as upstream overwrites the
-		 * cell.  libdb would keep the old key's bytes (a key equal
-		 * under NOCASE is "the same key"), and with x->n_mem only
-		 * the first n_mem fields identify the entry (a WITHOUT
-		 * ROWID primary key), so it would keep both.
+		 * replaced, as upstream overwrites the cell.  With x->n_mem
+		 * only the first n_mem fields identify the entry (a WITHOUT
+		 * ROWID primary key); libdb, comparing whole records, would
+		 * keep both.  (libdb then stores the old item's key bytes when
+		 * the deleted item is still referenced: a libdb bug, reported
+		 * as /tmp/libdb-bugs R1; NOCASE/WITHOUT ROWID key updates
+		 * keep the old spelling until it is fixed.)
 		 */
 		if ((rc = __sm_index_replace(cur, x)) != DBSQL_OK ||
 		    (rc = __sm_dbc_open(cur)) != DBSQL_OK)
-			return (rc);
-		/*
-		 * libdb keeps a deleted item on its page while any DBC
-		 * refers to it, and a put of a key the comparator calls
-		 * equal then revives that item with its old key bytes
-		 * (measured, test/unit/probe_libdb.c).  Release the other
-		 * cursors' DBCs on this table first.
-		 */
-		if ((rc = __sm_cursors_save_others(cur)) != DBSQL_OK)
 			return (rc);
 	}
 	/*

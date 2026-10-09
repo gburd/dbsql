@@ -224,18 +224,16 @@ directories is not atomic across them. This is listed in DIVERGENCES.md.
    the threshold costs ~210 us (SIREAD cleanup runs before the threshold
    test; reported to libdb, /tmp/libdb-bugs R3), which dominates small
    autocommit writes until fixed upstream.
-10. **A pinned deleted item is revived by an "equal" put.** libdb keeps a
-    deleted item on its page while any DBC refers to it, and a put of a
-    key that `bt_compare` calls equal (NOCASE, or a WITHOUT ROWID key
-    equal on its primary-key fields) revives the item with its **old**
-    key bytes (probe_libdb.c checks this).
-    → A delete closes the deleting DBC and keeps the position as a saved
-    key (`__sm_after_delete`); an index insert first replaces any equal
-    entry and closes every other DBC on the table.
-11. **`DB->compact` then abort.** Measured safe in isolation (compact in
-    a top-level or child txn, then abort, including when it moves a
-    sub-database's meta page). In the suite, a VACUUM that failed after
-    compacting (the page_size bug, since fixed) panicked libdb in
-    `__lock_change` ("old_lp->gen == old_lock->gen") while undoing the
-    compact. VACUUM now compacts only after the copy succeeds; if a
-    reduced case appears, it goes to the libdb maintainers.
+10. **An "equal" put revives a referenced deleted item (libdb bug,
+    reported: /tmp/libdb-bugs R1).** A btree put of a key the comparator
+    calls equal to a just-deleted item stores the deleted item's old key
+    bytes when any cursor (including the deleting one) still refers to
+    it. Visible as NOCASE or WITHOUT ROWID key updates keeping the old
+    spelling (without_rowid1-2.1.2, upfrom2). Not worked around.
+11. **`DB->compact` then abort (libdb bug, reported: /tmp/libdb-bugs R4).**
+    Aborting a txn that ran `DB->compact(DB_FREE_SPACE)` on a
+    sub-database after another sub-database of the file was `dbremove`d
+    in the same txn fails "old_lp->gen == old_lock->gen" in
+    `__lock_change` during undo (panic in release builds). dbsql reaches
+    it when a VACUUM, `incremental_vacuum` or an auto_vacuum=FULL commit
+    is rolled back after DROP TABLE. Not worked around; waiting on libdb.
