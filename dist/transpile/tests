@@ -67,7 +67,7 @@ def main(src, out):
 		if os.path.isdir(p):
 			continue
 		q = os.path.join(out, name)
-		if name.endswith(('.test', '.tcl', '.txt')) or '.' not in name:
+		if name.endswith(('.test', '.tcl', '.txt', '.sql')) or '.' not in name:
 			try:
 				text = open(p, encoding='utf-8').read()
 			except UnicodeDecodeError:

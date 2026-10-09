@@ -37168,9 +37168,9 @@ int DBSQL_CDECL main(int argc, char **argv){
       char *home;
       char *history;
       cli_printf(stdout,
-            "dbsql version %s %.19s\n" /*extra-version-info*/
+            "dbsql version " DBSQL_RELEASE " (SQLite %s, libdb storage)\n"
             "Enter \".help\" for usage hints.\n",
-            dbsql_libversion(), dbsql_sourceid());
+            dbsql_libversion());
       if( warn_inmemory_db ){
         sputz(stdout, "Connected to a ");
         __print_bold("transient in-memory database");

@@ -141,6 +141,12 @@ FIXUPS = [
 	 r'#ifdef DBSQL_SM_LIBDB\n#include "sm_int.h"\n#else\n#include "btree_int.h"\n#endif\n',
 	 'test3.c: sm_int.h instead of btree_int.h on libdb'),
 	# --- the shell -------------------------------------------------------
+	# The interactive banner names dbsql and its release; upstream's
+	# "%.19s" cuts the source id to its date, which dbsql's is not.
+	(r'(^|/)shell/dbsql\.c$',
+	 r'"dbsql version %s %\.19s\\n" /\*extra-version-info\*/\n(\s*)"Enter \\"\.help\\" for usage hints\.\\n",\n(\s*)dbsql_libversion\(\), dbsql_sourceid\(\)\);',
+	 r'"dbsql version " DBSQL_RELEASE " (SQLite %s, libdb storage)\\n"\n\1"Enter \\".help\\" for usage hints.\\n",\n\2dbsql_libversion());',
+	 'shell banner: dbsql release, SQLite version, libdb'),
 	(r'(^|/)shell/dbsql\.c$',
 	 r'("SELECT substr\(name,)12(,1\) FROM dbsql_schema"\n\s*" WHERE name GLOB \'dbsql_stat\[134\]\'")',
 	 r'\g<1>11\2',
