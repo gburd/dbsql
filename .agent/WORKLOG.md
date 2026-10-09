@@ -56,32 +56,41 @@ things are and how to run them**. Append to it, and keep it accurate.
   - `reserved.txt` holds libc, libdb and system-header `__` names, which
     renamed globals must avoid.
 
-## Validation status (2026-10-08)
+## Validation status (2026-10-09, Debian host, libdb 2026.10.3)
 
-- `run --native --keep-sql-names` + `native-testfixture.sh` +
-  `tests --keep-sql-names` + `suite.sh` (all in dist/transpile, copied to
-  `~/w/tp` on the host):
-  - The transformed tree on SQLite's own storage passes **1147/1181** test
-    files.
-  - Stock 3.53.4 passes 1173. Every file that passes on stock also passes on
-    the transform except qrf06 (the shell's QRF formatter is not linked into
-    the testfixture yet).
-  - Results are in `~/w/tp/native.txt` and `~/w/tp/stock.txt`.
-- `check-names.sh` reports 0 occurrences of sqlite outside comments in
-  out/src and out/test (default mode).
-- `check-lengths.py` reports 0 unhandled prefix-length sites.
+SQLite 3.53.4 test files (1181), one testfixture process per file,
+`dist/transpile/suite.sh`, results in `~/w/tp/*.txt` on the host:
+
+| Build | Pass | File |
+|---|---|---|
+| native (SQLite storage, transformed) | 1164 | deb-native.txt |
+| libdb, first full run | 810 | deb-libdb1.txt |
+| libdb, latest full run | 927 | deb-libdb8.txt |
+
+Of the libdb non-passes that pass natively (~240): ~220 test SQLite's
+file format, journal/WAL, VFS fault injection or page counts (expected
+divergences, to be listed in test/tcl/known-failures.txt); ~17 are still
+unexplained; R1 accounts for without_rowid1 and upfrom2; R4 for the
+VACUUM rollback crash.  Classifier output: `/tmp/kf.txt` on the host.
+
+- libdb defects: `.agent/libdb-bugs/` (R1-R5), not worked around.
+- Gates: `run --check` reproducible; check-names 0; check-lengths 0.
+- `configure --with-berkeleydb=... --enable-test && make` builds
+  libdbsql, `dbsql` (reports libdb 2026.10.3) and the testfixture.
+- Performance: a 98k-row txn is ~6x upstream; a one-row autocommit
+  INSERT ~20x (R3).
 
 ## Next steps (in order)
 
-1. **Native validation testfixture.** Transform `src/tclsqlite.c`,
-   `src/test*.c` and `ext/misc` (as the test inputs; they are not shipped).
-   Build a testfixture on the native tree. Run SQLite's `test/*.test`
-   (rewritten the same way: `sqlite3` → `dbsql`, `sqlite_` → `dbsql_`) and
-   compare with the stock testfixture's results on the same tests. This
-   proves the transform preserves semantics. Keep a list of tests that pass
-   on stock and fail on the transformed build. Each one is a transform bug.
-2. **Storage manager src/sm/** (see steering/STORAGE.md), which implements
-   `src/inc/sm.h` on libdb. Then switch the default build to it.
-3. **dist/Makefile.in + configure.ac** for the real tree (libdbsql,
-   `dbsql` shell, testfixture, `gmake check`).
-4. FTS5, ICU, shell (shell.c.in → `dbsql`), packaging, docs, release.
+1. test/tcl/run.sh + known-failures.txt (name, reason) so `make check`
+   runs the suite; test/shell/run.sh for smoke.sql.  Note: the committed
+   tree uses dbsql_ SQL names; the suite so far ran the --keep-sql-names
+   build, so run `tests` (without --keep-sql-names) against `make`'s
+   testfixture for the shipped names.
+2. The ~17 unexplained failures, 9 crashes, 6 timeouts (classify:
+   dbsql bug -> fix; libdb bug -> report in .agent/libdb-bugs).
+3. Remaining TESTING.md tiers: api, diff vs stock sqlite3, bdb (kill -9
+   recovery, multi-process, BUSY), fuzz, unit (savepoints, snapshot).
+4. Qualification: ASan/UBSan build, valgrind, 30-min fuzz, nm -D gate.
+5. Packaging/docs: dbsql.1, Tcl package, flake.nix, DIVERGENCES, README.
+6. Release: merge, tag, push origin; terminate both hosts.
