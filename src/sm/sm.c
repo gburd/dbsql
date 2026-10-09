@@ -1346,6 +1346,9 @@ __sm_set_page_size(sm_t *p, int page_size, int n_reserve, int fix)
 
 	(void)n_reserve;
 	bt = p->bt;
+	/* As upstream: no change requested is not an error when fixed. */
+	if (page_size <= 0 || (u_int32_t)page_size == bt->page_size)
+		return (DBSQL_OK);
 	if (bt->page_size_fixed)
 		return (DBSQL_READONLY);
 	if (page_size >= 512 && page_size <= 65536 &&
@@ -1451,14 +1454,39 @@ __sm_get_auto_vacuum(sm_t *p)
 int
 __sm_incr_vacuum(sm_t *p)
 {
+	(void)__sm_compact(p);
+	return (DBSQL_DONE);
+}
+
+/*
+ * __sm_compact --
+ *	Compact every table and the meta sub-database, returning free
+ *	pages at the end of the file to the filesystem (DB_FREE_SPACE).
+ *	VACUUM and PRAGMA incremental_vacuum.
+ *
+ * PUBLIC: int __sm_compact __P((sm_t *));
+ */
+int
+__sm_compact(sm_t *p)
+{
 	sm_shared_t *bt;
 	sm_dbh_t *h;
+	u_int32_t *t;
+	int i, n, rc;
 
 	bt = p->bt;
-	for (h = bt->handles; h != NULL; h = h->next)
-		(void)h->dbp->compact(h->dbp, __sm_cur_txn(bt), NULL, NULL,
-		    NULL, DB_FREE_SPACE, NULL);
-	return (DBSQL_DONE);
+	if (bt->flags & (SM_EPHEMERAL | SM_MEMORY) || bt->meta == NULL)
+		return (DBSQL_OK);
+	if ((rc = __sm_table_list(p, &t, &n)) != DBSQL_OK)
+		return (rc);
+	for (i = 0; i < n; i++)
+		if (__sm_dbh_get(bt, t[i], NULL, 0, &h) == DBSQL_OK)
+			(void)h->dbp->compact(h->dbp, __sm_cur_txn(bt), NULL,
+			    NULL, NULL, DB_FREE_SPACE, NULL);
+	(void)bt->meta->compact(bt->meta, __sm_cur_txn(bt), NULL, NULL, NULL,
+	    DB_FREE_SPACE, NULL);
+	dbsql_free(t);
+	return (DBSQL_OK);
 }
 
 /* PUBLIC: const char *__sm_get_filename __P((sm_t *)); */

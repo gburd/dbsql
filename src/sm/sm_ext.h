@@ -6,6 +6,7 @@
 extern "C" {
 #endif
 
+int __sm_table_list(sm_t *, u_int32_t **, int *);
 int __sm_copy_file(sm_t *, sm_t *);
 void __backup_restart(dbsql_backup_t *);
 void __backup_update(dbsql_backup_t *, pgno_t, const u_int8_t *);
@@ -45,6 +46,7 @@ int __sm_secure_delete(sm_t *, int);
 int __sm_set_auto_vacuum(sm_t *, int);
 int __sm_get_auto_vacuum(sm_t *);
 int __sm_incr_vacuum(sm_t *);
+int __sm_compact(sm_t *);
 const char *__sm_get_filename(sm_t *);
 const char *__sm_get_journalname(sm_t *);
 int __sm_is_readonly(sm_t *);

@@ -80,8 +80,10 @@ __sm_copy_one(sm_t *dest, sm_t *src, u_int32_t pgno)
 /*
  * __sm_table_list --
  *	All table numbers of a database: 1 plus every "k<N>" kind record.
+ *	The array is dbsql_malloc'd.
  */
-static int
+/* PUBLIC: int __sm_table_list __P((sm_t *, u_int32_t **, int *)); */
+int
 __sm_table_list(sm_t *p, u_int32_t **tablesp, int *np)
 {
 	sm_shared_t *bt;
@@ -206,6 +208,8 @@ __sm_copy_file(sm_t *to, sm_t *from)
 	dbsql_free(t);
 	if (rc == DBSQL_OK)
 		rc = __sm_copy_meta(to, from, 0);
+	if (rc == DBSQL_OK)
+		rc = __sm_compact(to);
 	return (rc);
 }
 
