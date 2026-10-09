@@ -55,7 +55,9 @@
  */
 typedef struct sm_env {
 	DB_ENV *dbenv;
-	char *home;			/* Directory (NULL for private envs). */
+	char *home;			/* Directory; a private temp env's own
+					   directory (removed on close);
+					   NULL for other private envs. */
 	int refs;			/* Connections/handles using it. */
 	u_int32_t flags;
 #define	SM_ENV_PRIVATE	0x01		/* DB_PRIVATE, connection-owned. */
@@ -67,7 +69,13 @@ typedef struct sm_env {
 /* Cache sizes: shared per directory; private per connection. */
 #define	SM_ENV_CACHE		(32 * 1024 * 1024)
 #define	SM_PRIVATE_CACHE	(8 * 1024 * 1024)
-#define	SM_MEMLOG_SIZE		(4 * 1024 * 1024)
+#define	SM_MEMLOG_SIZE		(64 * 1024 * 1024)
+
+/* __sm_env_open_private kinds. */
+#define	SM_PRIV_EPHEMERAL	0
+#define	SM_PRIV_MEMORY		1
+#define	SM_PRIV_TEMP		2
+#define	SM_TEMP_FILE		"temp.db"	/* In a temp env's home. */
 
 /* Lock and log region sizing (see __sm_env_size_regions). */
 #define	SM_LOCKS_INIT		10000

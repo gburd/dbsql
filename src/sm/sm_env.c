@@ -28,6 +28,8 @@
 #include "dbsql_int.h"
 #include "sm_int.h"
 
+#include <unistd.h>
+#include <dirent.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -82,6 +84,7 @@ __sm_errmap(int ret)
 	case EROFS:
 		return (DBSQL_READONLY);
 	case ENOSPC:
+	case DB_LOG_BUFFER_FULL:
 		return (DBSQL_FULL);
 	case EIO:
 		return (DBSQL_IOERR);
@@ -230,53 +233,132 @@ err:	if (env != NULL) {
 
 /*
  * __sm_env_open_private --
- *	Create a connection-private environment.  With 'txn' set it is
- *	transactional (in-memory log): :memory: and temp databases.
- *	Without, it is a plain cache for non-transactional ephemeral
- *	tables, which libdb pages to its temp directory when full.
+ *	Create a connection-private environment:
+ *	  SM_PRIV_MEMORY  :memory: -- transactional, everything in memory
+ *	                  (log buffer and databases; bounded by the cache).
+ *	  SM_PRIV_TEMP    a temp database ("" filename) -- transactional,
+ *	                  backed by a private directory under the temp
+ *	                  directory so it can outgrow memory; removed when
+ *	                  the environment closes.
+ *	  SM_PRIV_EPHEMERAL  non-transactional cache for ephemeral tables,
+ *	                  paged to the temp directory when full.
  *
  * PUBLIC: int __sm_env_open_private __P((int, sm_env_t **));
  */
+static char *__sm_mktempdir(void);
+static void __sm_rmtempdir(char *);
+
 int
-__sm_env_open_private(int txn, sm_env_t **envp)
+__sm_env_open_private(int kind, sm_env_t **envp)
 {
 	sm_env_t *env;
 	u_int32_t flags;
 	int ret;
+	char *home;
 
 	*envp = NULL;
-	if ((env = dbsql_malloc(sizeof(*env))) == NULL)
+	home = NULL;
+	if (kind == SM_PRIV_TEMP && (home = __sm_mktempdir()) == NULL)
+		return (DBSQL_CANTOPEN);
+	if ((env = dbsql_malloc(sizeof(*env))) == NULL) {
+		__sm_rmtempdir(home);
 		return (DBSQL_NOMEM);
+	}
 	memset(env, 0, sizeof(*env));
+	env->home = home;
 	if ((ret = db_env_create(&env->dbenv, 0)) != 0) {
+		__sm_rmtempdir(home);
 		dbsql_free(env);
 		return (__sm_errmap(ret));
 	}
 	__sm_env_configure(env);
 	env->flags = SM_ENV_PRIVATE;
 	flags = DB_CREATE | DB_PRIVATE | DB_INIT_MPOOL | DB_THREAD;
-	if (txn) {
-		(void)env->dbenv->set_flags(env->dbenv, DB_TXN_NOWAIT, 1);
-		(void)env->dbenv->log_set_config(env->dbenv,
-		    DB_LOG_IN_MEMORY, 1);
-		(void)env->dbenv->set_lg_bsize(env->dbenv, SM_MEMLOG_SIZE);
-		flags |= DB_INIT_LOCK | DB_INIT_LOG | DB_INIT_TXN;
-	} else
+	if (kind == SM_PRIV_EPHEMERAL)
 		env->flags |= SM_ENV_NOTXN;
-	(void)env->dbenv->set_cachesize(env->dbenv, 0, SM_PRIVATE_CACHE, 1);
-	if (txn)
+	else {
+		(void)env->dbenv->set_flags(env->dbenv, DB_TXN_NOWAIT, 1);
+		if (kind == SM_PRIV_MEMORY) {
+			(void)env->dbenv->log_set_config(env->dbenv,
+			    DB_LOG_IN_MEMORY, 1);
+			(void)env->dbenv->set_lg_bsize(env->dbenv,
+			    SM_MEMLOG_SIZE);
+		} else {
+			(void)env->dbenv->log_set_config(env->dbenv,
+			    DB_LOG_AUTO_REMOVE, 1);
+			(void)env->dbenv->set_flags(env->dbenv,
+			    DB_TXN_NOSYNC, 1);
+		}
+		flags |= DB_INIT_LOCK | DB_INIT_LOG | DB_INIT_TXN;
 		__sm_env_size_regions(env);
-	if (dbsql_temp_directory != NULL)
+	}
+	(void)env->dbenv->set_cachesize(env->dbenv, 0, SM_PRIVATE_CACHE, 1);
+	if (home != NULL)
+		(void)env->dbenv->set_tmp_dir(env->dbenv, home);
+	else if (dbsql_temp_directory != NULL)
 		(void)env->dbenv->set_tmp_dir(env->dbenv,
 		    dbsql_temp_directory);
-	if ((ret = env->dbenv->open(env->dbenv, NULL, flags, 0)) != 0) {
+	if ((ret = env->dbenv->open(env->dbenv, home, flags, 0600)) != 0) {
 		(void)env->dbenv->close(env->dbenv, 0);
+		__sm_rmtempdir(home);
 		dbsql_free(env);
 		return (__sm_errmap(ret));
 	}
 	env->refs = 1;
 	*envp = env;
 	return (DBSQL_OK);
+}
+
+/*
+ * __sm_mktempdir --
+ *	A fresh private directory for a temp database, under
+ *	dbsql_temp_directory, $TMPDIR or /tmp.
+ */
+static char *
+__sm_mktempdir(void)
+{
+	const char *base;
+	char *dir;
+
+	if ((base = dbsql_temp_directory) == NULL &&
+	    (base = getenv("TMPDIR")) == NULL)
+		base = "/tmp";
+	if ((dir = dbsql_mprintf("%s/dbsql_tmp.XXXXXX", base)) == NULL)
+		return (NULL);
+	if (mkdtemp(dir) == NULL) {
+		dbsql_free(dir);
+		return (NULL);
+	}
+	return (dir);
+}
+
+/*
+ * __sm_rmtempdir --
+ *	Remove a temp database directory and the files libdb left in it.
+ */
+static void
+__sm_rmtempdir(char *dir)
+{
+	DIR *d;
+	struct dirent *e;
+	char *f;
+
+	if (dir == NULL)
+		return;
+	if ((d = opendir(dir)) != NULL) {
+		while ((e = readdir(d)) != NULL) {
+			if (strcmp(e->d_name, ".") == 0 ||
+			    strcmp(e->d_name, "..") == 0)
+				continue;
+			if ((f = dbsql_mprintf("%s/%s", dir, e->d_name)) != NULL) {
+				(void)unlink(f);
+				dbsql_free(f);
+			}
+		}
+		(void)closedir(d);
+	}
+	(void)rmdir(dir);
+	dbsql_free(dir);
 }
 
 /*
@@ -298,6 +380,7 @@ __sm_env_release(sm_env_t *env)
 	if (env->flags & SM_ENV_PRIVATE) {
 		if (--env->refs == 0) {
 			(void)env->dbenv->close(env->dbenv, 0);
+			__sm_rmtempdir(env->home);
 			dbsql_free(env);
 		}
 		return;

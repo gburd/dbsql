@@ -257,8 +257,11 @@ __sm_db_open(sm_shared_t *bt, DB *dbp, const char *name, u_int32_t flags)
 		return (__sm_errmap(dbp->open(dbp, NULL, NULL, NULL,
 		    DB_BTREE, flags, 0)));
 	if (bt->flags & SM_MEMORY)
-		ret = dbp->open(dbp, __sm_cur_txn(bt), NULL, name, DB_BTREE,
-		    flags, 0);
+		/* :memory: sub-databases are unnamed-file (in-memory); a
+		 * temp database's live in "temp.db" in its private home. */
+		ret = dbp->open(dbp, __sm_cur_txn(bt),
+		    bt->env->home != NULL ? SM_TEMP_FILE : NULL, name,
+		    DB_BTREE, flags, 0600);
 	else {
 		if (bt->read_only)
 			flags = (flags & ~DB_CREATE) | DB_RDONLY;
@@ -449,11 +452,18 @@ __sm_open(dbsql_vfs_t *vfs, const char *filename, DBSQL *db, sm_t **btp,
 	if (is_temp && (flags & BTREE_SINGLE)) {
 		/* Ephemeral table: private, non-transactional cache. */
 		bt->flags |= SM_EPHEMERAL;
-		if ((rc = __sm_env_open_private(0, &bt->env)) != DBSQL_OK)
+		if ((rc = __sm_env_open_private(SM_PRIV_EPHEMERAL,
+		    &bt->env)) != DBSQL_OK)
 			goto err;
 	} else if (is_mem) {
+		/*
+		 * :memory: lives entirely in memory; a temp database ("")
+		 * gets a private on-disk environment so it can grow.  Both
+		 * are SM_MEMORY: private, no write lock, no file name.
+		 */
 		bt->flags |= SM_MEMORY;
-		if ((rc = __sm_env_open_private(1, &bt->env)) != DBSQL_OK)
+		if ((rc = __sm_env_open_private(is_temp ? SM_PRIV_TEMP :
+		    SM_PRIV_MEMORY, &bt->env)) != DBSQL_OK)
 			goto err;
 		if ((rc = __sm_txn_for(db, bt->env, &bt->txn)) != DBSQL_OK)
 			goto err;
@@ -1079,7 +1089,7 @@ __sm_drop_table(sm_t *p, int pgno, int *movedp)
 	__sm_subdb_name((u_int32_t)pgno, name);
 	if (bt->flags & SM_MEMORY)
 		ret = bt->env->dbenv->dbremove(bt->env->dbenv, __sm_cur_txn(bt),
-		    NULL, name, 0);
+		    bt->env->home != NULL ? SM_TEMP_FILE : NULL, name, 0);
 	else
 		ret = bt->env->dbenv->dbremove(bt->env->dbenv, __sm_cur_txn(bt),
 		    bt->path, name, 0);
