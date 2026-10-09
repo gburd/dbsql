@@ -624,6 +624,8 @@ __sm_table_moveto(sm_cursor_t *cur, int64_t int_key, int bias, int *res)
  * PUBLIC: int __sm_index_moveto __P((sm_cursor_t *, unpacked_record_t *,
  * PUBLIC:     int *));
  */
+static int __sm_index_eq_before(sm_cursor_t *, unpacked_record_t *, int);
+
 int
 __sm_index_moveto(sm_cursor_t *cur, unpacked_record_t *un_key, int *res)
 {
@@ -656,21 +658,72 @@ __sm_index_moveto(sm_cursor_t *cur, unpacked_record_t *un_key, int *res)
 	cur->key.app_data = un_key;
 	ret = cur->dbc->get(cur->dbc, &cur->key, &cur->data, DB_SET_RANGE);
 	cur->key.app_data = NULL;
-	if (ret == 0) {
-		__sm_cursor_set_current(cur);
-		*res = __vdbe_record_compare((int)cur->key.size,
-		    cur->key.data, un_key);
-		return (DBSQL_OK);
-	}
-	if (ret != DB_NOTFOUND) {
+	/*
+	 * The record compare sets un_key->eq_seen whenever an entry equals
+	 * the probe on all its fields, and libdb's descent compared many
+	 * entries.  Upstream's meaning (BTREE_SEEK_EQ seeks jump to "not
+	 * found" without it) is "an equal entry exists", and DB_SET_RANGE
+	 * lands on the first entry >= the probe, so the landing entry
+	 * alone decides it.
+	 */
+	un_key->eq_seen = 0;
+	if (ret != 0 && ret != DB_NOTFOUND) {
 		cur->state = CURSOR_FAULT;
 		cur->fault = __sm_errmap(ret);
 		return (cur->fault);
 	}
-	if ((rc = __sm_dbc_get(cur, DB_LAST, &found)) != DBSQL_OK)
+	if (ret == 0) {
+		__sm_cursor_set_current(cur);
+		*res = __vdbe_record_compare((int)cur->key.size,
+		    cur->key.data, un_key);
+	} else {
+		if ((rc = __sm_dbc_get(cur, DB_LAST, &found)) != DBSQL_OK)
+			return (rc);
+		*res = -1;
+		if (!found)
+			return (DBSQL_OK);
+	}
+	/*
+	 * An entry equal on the probe's fields compares as default_rc
+	 * (never 0 for a seek with fewer fields than the index), so it is
+	 * either the landing entry (compared above) or the one just before
+	 * it.  Compare that one too, for eq_seen only.
+	 */
+	if (!un_key->eq_seen &&
+	    (rc = __sm_index_eq_before(cur, un_key, ret == 0)) != DBSQL_OK)
 		return (rc);
-	*res = -1;
 	return (DBSQL_OK);
+}
+
+/*
+ * __sm_index_eq_before --
+ *	Set un_key->eq_seen if the entry before the cursor's landing entry
+ *	(or the landing entry itself when the seek ran off the end) equals
+ *	the probe on its fields.  The cursor's position is not changed.
+ */
+static int
+__sm_index_eq_before(sm_cursor_t *cur, unpacked_record_t *un_key, int landed)
+{
+	DBC *dbc;
+	DBT k, d;
+	int ret;
+
+	if (!landed) {
+		(void)__vdbe_record_compare((int)cur->key.size, cur->key.data,
+		    un_key);
+		return (DBSQL_OK);
+	}
+	if ((ret = cur->dbc->dup(cur->dbc, &dbc, DB_POSITION)) != 0)
+		return (__sm_errmap(ret));
+	memset(&k, 0, sizeof(k));
+	memset(&d, 0, sizeof(d));
+	k.flags = d.flags = DB_DBT_REALLOC;
+	if ((ret = dbc->get(dbc, &k, &d, DB_PREV)) == 0)
+		(void)__vdbe_record_compare((int)k.size, k.data, un_key);
+	(void)dbc->close(dbc);
+	free(k.data);
+	free(d.data);
+	return (ret == 0 || ret == DB_NOTFOUND ? DBSQL_OK : __sm_errmap(ret));
 }
 
 /*
