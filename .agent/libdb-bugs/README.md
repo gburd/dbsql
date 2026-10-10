@@ -19,7 +19,7 @@ libdb programs with controls.
 | R3 | performance | `txn_checkpoint(kbytes)` below its threshold costs ~210 µs/call (47x a one-row write txn): `__lock_sicleanup` runs before the threshold test | r3_ckpt_cost.c |
 | R4 | crash (environment panic) | Abort of a txn that did `dbremove` of one sub-database then `DB->compact(DB_FREE_SPACE)` of another in the same file: assertion `old_lp->gen == old_lock->gen` in `__lock_change` during undo | r4_compact_abort.c |
 | R5 | crash (environment panic) | With `DB_MULTIVERSION` + `DB_TXN_SNAPSHOT`, a txn whose put fails with `ENOMEM` (cache / mutex region exhausted) cannot be aborted: undo panics (`BDB0057 unable to create/retrieve page`, `BDB0061 PANIC: Cannot allocate memory`) | r5_abort_after_enomem.c |
-| R6 | crash (environment panic) | With `DB_REGISTER \| DB_RECOVER` (the documented multi-process recipe), a process that exits without closing the environment makes the next opener recover the environment out from under every live process: their next operation fails with `DB_RUNRECOVERY` / PANIC.  Adding `DB_FAILCHK` + `is_alive` (the documented hybrid) avoids it | r6_register.c |
+| R6 | crash (environment panic) | With `DB_REGISTER \| DB_RECOVER` (the documented multi-process recipe), a process that exits without closing the environment makes the next opener recover the environment out from under every live process: their next operation fails with `DB_RUNRECOVERY` / PANIC.  The documented hybrid (`DB_FAILCHK` + `is_alive`) avoids that but trips diagnostic assertions in single-process use | r6_register.c |
 | R7 | memory leak | `DB_ENV->dbremove` of an in-memory named database inside a txn that is then **aborted** leaks the txn event `__db_inmem_remove` queued with `__txn_remevent` (249 bytes, 6 allocations, per remove) | r7_inmem_remove_leak.c |
 
 Details follow.  "Expected" is quoted from libdb's own documentation
@@ -289,13 +289,35 @@ Two questions for libdb:
    only safe when every process always closes the environment, and point
    to the hybrid.
 
-**dbsql impact.**  dbsql uses `DB_REGISTER | DB_RECOVER`.  The `dbsql`
-shell's `-help` and `usage()` paths call `exit()` with the environment
-open; the next opener (any other process) recovers, and a connection
-that was open in a third process then reports "database disk image is
-malformed".  SQLite's shell1.test hits this (shell1-1.2.1 then 1.3.1).
-dbsql's fix, which uses libdb as documented, is to take the hybrid
-approach (`DB_FAILCHK` + `is_alive`).
+**dbsql impact.**  dbsql uses `DB_REGISTER | DB_RECOVER`.  Any process
+that exits with a dbsql database open (the shell's `usage()` path, a
+Tcl script that exits without `db close`, a crash) makes the next
+opener recover the environment, and a connection open in a third
+process then reports "database disk image is malformed".  SQLite's
+shell1.test (shell1-3.24.1) and savepoint4.test hit this;
+test/bdb/snapshot.test reports it as KNOWN.
+
+**The hybrid does not help in practice.**  dbsql tried
+`DB_REGISTER | DB_RECOVER | DB_FAILCHK` with `set_isalive` and
+`set_thread_count(256)` (commit 089065a).  R6's reproducer passes, but
+with thread tracking on, libdb (built `--enable-diagnostic`) aborts in
+ordinary single-process use: SQLite's select1, malloc, ioerr,
+writecrash, symlink, tkt4018 and the crash* tests crash.  Two of the
+assertions, not yet reduced to standalone programs:
+
+```
+__memp_fget mp_fget.c:1261   (DIAGNOSTIC: dirty page pinned without a
+  DB_LOCK_WRITE page lock, __db_has_pagelock) from
+  __db_master_update(MU_REMOVE) <- __db_subdb_remove <- DB_ENV->dbremove
+  of a sub-database inside a child txn  (select1: DROP TABLE)
+lo_report mut_order.c:409 "same latch acquired twice by one thread
+  (self-deadlock)" from __dbc_cleanup <- __db_master_update(MU_OPEN)
+  <- __fop_subdb_setup <- DB->open of a sub-database after failchk
+  freed a dead process's mutexes ("BDB2017 Freeing mutex")
+```
+
+dbsql therefore stays on `DB_REGISTER | DB_RECOVER` and lists the
+affected tests as known failures against R6.
 
 ---
 

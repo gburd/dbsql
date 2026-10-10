@@ -73,13 +73,6 @@ typedef struct sm_env {
 	struct sm_env *next;		/* Registry list (persistent only). */
 } sm_env_t;
 
-/*
- * DB_FAILCHK thread table: one entry per process attached to a shared
- * environment (dbsql sets no thread id function); slots of dead
- * processes are reused.
- */
-#define	SM_THREAD_COUNT		256
-
 /* Cache sizes: shared per directory; private per connection. */
 #define	SM_ENV_CACHE		(32 * 1024 * 1024)
 #define	SM_PRIVATE_CACHE	(8 * 1024 * 1024)
