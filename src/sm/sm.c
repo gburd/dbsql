@@ -152,11 +152,24 @@ __sm_txn_pop(sm_shared_t *bt, int commit)
 {
 	sm_txn_t *t;
 	DB_TXN *txn;
-	int ret, level;
+	int i, ret, level;
 
 	t = bt->txn;
 	level = t->depth - 1;
 	txn = t->stack[level];
+	/*
+	 * The txn is shared by every database of the connection in this
+	 * environment (main and same-directory attachments).  Ending it ends
+	 * their DBCs, and an abort destroys handles opened in it with all
+	 * their DBCs: save and discard for each of them, not just 'bt'.
+	 */
+	for (i = 0; i < t->db->n_db; i++) {
+		sm_t *q = t->db->dbs[i].bt;
+		if (q == NULL || q->bt == bt || q->bt->txn != t)
+			continue;
+		__sm_cursors_save(q->bt, txn);
+		__sm_dbh_discard_level(q->bt, level, !commit);
+	}
 	__sm_cursors_save(bt, txn);
 	__sm_dbh_discard_level(bt, level, !commit);
 	if (commit)
