@@ -47,7 +47,7 @@ fail=0
 export LSAN_OPTIONS="suppressions=$top/test/fuzz/lsan.supp${LSAN_OPTIONS:+:$LSAN_OPTIONS}"
 export ASAN_OPTIONS="fast_unwind_on_malloc=0${ASAN_OPTIONS:+:$ASAN_OPTIONS}"
 cd "$w/artifacts" || exit 1
-for t in sql cmp; do
+for t in ${TARGETS:-sql cmp}; do
 	echo "fuzz: $t for ${secs}s on $jobs jobs"
 	"$w/${t}_fuzz" -max_total_time="$secs" -jobs="$jobs" -workers="$jobs" \
 	    -max_len=8192 -timeout=30 -rss_limit_mb=4096 -report_slow_units=20 \
