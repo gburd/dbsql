@@ -16,9 +16,7 @@ import sys
 # Files traced to a specific reported libdb defect.
 LIBDB = {
 	'without_rowid1': 'R1', 'upfrom2': 'R1',
-	'shell1': 'R6', 'savepoint4': 'R6', 'crash': 'R6', 'crash2': 'R6',
-	'crash3': 'R6', 'crash4': 'R6', 'crash5': 'R6', 'crash6': 'R6',
-	'crash7': 'R6', 'crash8': 'R6',
+	'shell1': 'R6', 'savepoint4': 'R6',
 	'misc7': 'R10',
 	'autovacuum': 'R11', 'autovacuum_ioerr2': 'R11', 'avtrans': 'R11',
 }
@@ -41,6 +39,11 @@ MANUAL = {
 	'alterfault': 'filecopy', 'fuzz3': 'fileformat',
 	'corruptC': 'fileformat', 'pagerfault': 'fileformat',
 	'tkt2686': 'pager', 'tkt2565': 'pager', 'lock4': 'journal',
+	# crashsql's crash VFS never sees libdb's writes: the "crash" never
+	# happens, so the child commits everything (durability under a real
+	# SIGKILL is test/bdb/crash.sh).
+	'crash': 'vfs', 'crash2': 'vfs', 'crash3': 'vfs', 'crash4': 'vfs',
+	'crash5': 'vfs', 'crash6': 'vfs', 'crash7': 'vfs', 'crash8': 'vfs',
 	'swarmvtab': 'vfs',
 }
 NOTES = {
