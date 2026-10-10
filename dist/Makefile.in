@@ -81,7 +81,9 @@ vpath %.c $(sort $(dir $(LIB_SRCS)))
 
 TCL_SRCS=	$(wildcard $(testdir)/tcl/*.c) $(wildcard $(testdir)/tcl/ext/*.c)
 UNIT_SRCS=	$(wildcard $(testdir)/unit/*_test.c)
-UNIT_PROGS=	$(patsubst $(testdir)/unit/%.c,%,$(UNIT_SRCS))
+API_SRCS=	$(wildcard $(testdir)/api/*_test.c)
+UNIT_PROGS=	$(patsubst $(testdir)/unit/%.c,%,$(UNIT_SRCS)) \
+		$(patsubst $(testdir)/api/%.c,%,$(API_SRCS))
 
 libdbsql=	libdbsql-$(LIBVERSION).la
 
@@ -186,6 +188,10 @@ testfixture: $(TF_SRCS) $(LIB_HDRS) dbsql.h dbsql_config.h sql_parser.c fts5_par
 %_test: $(testdir)/unit/%_test.c $(libdbsql)
 	$(LTLINK) $(DEFS) $(CPPFLAGS) -DDBSQL_CORE -o $@ $< $(libdbsql) \
 	    $(DB_LIBS) $(LIBS)
+
+# API tests use only the public header, as an application does.
+%_test: $(testdir)/api/%_test.c $(libdbsql) dbsql.h
+	$(LTLINK) -I. -o $@ $< $(libdbsql) $(DB_LIBS) $(LIBS)
 
 ##################################################
 # Testing.  See .agent/steering/TESTING.md.
