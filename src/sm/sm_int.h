@@ -38,6 +38,8 @@
 #define	SM_META_AUTOVAC		13
 /* Meta slot counting committed write transactions (PRAGMA data_version). */
 #define	SM_META_COMMITS		14
+/* __sm_row_count_est counts at most this many entries. */
+#define	SM_ROW_EST_MAX		100000
 
 /* Sub-database name for SQL table/index number N: "t<N>". */
 #define	SM_SUBDB_FMT		"t%u"

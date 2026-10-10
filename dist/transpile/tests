@@ -25,6 +25,8 @@ RULES = [
 	# Tcl procs whose dbsql_ spelling would replace a testfixture command
 	# (bind.test's "proc sqlite_step" vs the C command for sqlite3_step).
 	(re.compile(r'\bsqlite_step\b'), 'dbsql_legacy_step', False),
+	# test1.c's command string "test_sqlite3_log" becomes "test_dbsql3_log"
+	(re.compile(r'\btest_sqlite3_log\b'), 'test_dbsql3_log', False),
 	(re.compile(r'\bsqlite_temp_schema\b'), 'dbsql_temp_schema', True),
 	(re.compile(r'\bsqlite_temp_master\b'), 'dbsql_temp_master', True),
 	(re.compile(r'sqlite_'), 'dbsql_', True),

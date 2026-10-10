@@ -1230,23 +1230,35 @@ __sm_count(DBSQL *db, sm_cursor_t *cur, int64_t *n)
 
 /*
  * __sm_row_count_est --
- *	Estimated rows, for the query planner (log-estimate is enough).
+ *	Estimated rows (OP_IfSizeBetween, OP_Count with P3): as upstream,
+ *	0 unless the cursor is on an entry, else a positive estimate that
+ *	is only used as a log-estimate.  libdb's DB_FAST_STAT does not
+ *	maintain a key count, so the estimate counts entries from the
+ *	first one, stopping at SM_ROW_EST_MAX.
  *
  * PUBLIC: int64_t __sm_row_count_est __P((sm_cursor_t *));
  */
 int64_t
 __sm_row_count_est(sm_cursor_t *cur)
 {
-	DB_BTREE_STAT *st;
+	DBC *dbc;
+	DBT k, d;
 	int64_t n;
 
-	n = -1;
-	if (cur->dbh != NULL && cur->dbh->dbp->stat(cur->dbh->dbp,
-	    __sm_cur_txn(cur->bt), &st, DB_FAST_STAT) == 0) {
-		n = st->bt_nkeys > 0 ? (int64_t)st->bt_nkeys : -1;
-		free(st);
-	}
-	return (n);
+	/* ponytail: capped walk; a libdb key count would make this O(1). */
+	if (cur->state != CURSOR_VALID || cur->dbh == NULL)
+		return (0);
+	if (cur->dbh->dbp->cursor(cur->dbh->dbp, __sm_cur_txn(cur->bt),
+	    &dbc, 0) != 0)
+		return (1);
+	memset(&k, 0, sizeof(k));
+	memset(&d, 0, sizeof(d));
+	k.flags = d.flags = DB_DBT_PARTIAL | DB_DBT_USERMEM;
+	for (n = 0; n < SM_ROW_EST_MAX &&
+	    dbc->get(dbc, &k, &d, DB_NEXT) == 0; n++)
+		;
+	(void)dbc->close(dbc);
+	return (n > 0 ? n : 1);
 }
 
 /*
