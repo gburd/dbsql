@@ -140,6 +140,14 @@ FIXUPS = [
 	 r'^#include "btree_int\.h"\n',
 	 r'#ifdef DBSQL_SM_LIBDB\n#include "sm_int.h"\n#else\n#include "btree_int.h"\n#endif\n',
 	 'test3.c: sm_int.h instead of btree_int.h on libdb'),
+	# --- ICU --------------------------------------------------------------
+	# Upstream bug: icu_load_collation() with an unknown strength returns
+	# without closing the collator it opened (found by test/fuzz).
+	(r'(^|/)ext/icu/icu\.c$',
+	 r'(      dbsql_result_error\(p, dbsql_str_value\(str\), -1\);\n'
+	 r'      dbsql_free\(dbsql_str_finish\(str\)\);\n)(      return;)',
+	 r'\1      ucol_close(u_collator);\n\2',
+	 'icu_load_collation: close the collator on an unknown strength'),
 	# --- the shell -------------------------------------------------------
 	# The interactive banner names dbsql and its release; upstream's
 	# "%.19s" cuts the source id to its date, which dbsql's is not.

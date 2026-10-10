@@ -516,6 +516,7 @@ static void __icu_load_collation(
       }
       dbsql_result_error(p, dbsql_str_value(str), -1);
       dbsql_free(dbsql_str_finish(str));
+      ucol_close(u_collator);
       return;
     }
   }

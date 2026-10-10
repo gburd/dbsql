@@ -1328,9 +1328,14 @@ __sm_get_meta(sm_t *p, int idx, u_int32_t *value)
 		 */
 		u_int32_t n;
 
-		if (bt->flags & (SM_MEMORY | SM_EPHEMERAL) ||
-		    __sm_meta_get_raw(bt, SM_META_COMMITS, &n) != DBSQL_OK)
-			n = 0;
+		/* Private (memory, temp) databases have no other
+		 * connections: always 1, as upstream. */
+		if (bt->flags & (SM_MEMORY | SM_EPHEMERAL)) {
+			*value = 1 + p->data_version_base;
+			return;
+		}
+		if (__sm_meta_get_raw(bt, SM_META_COMMITS, &n) != DBSQL_OK)
+			n = bt->commits_base + bt->own_seen;
 		*value = 1 + (n - bt->commits_base - bt->own_seen) +
 		    p->data_version_base;
 		return;
