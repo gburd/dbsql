@@ -22,6 +22,7 @@ libdb programs with controls.
 | R6 | crash (environment panic) | With `DB_REGISTER \| DB_RECOVER` (the documented multi-process recipe), a process that exits without closing the environment makes the next opener recover the environment out from under every live process: their next operation fails with `DB_RUNRECOVERY` / PANIC.  The documented hybrid (`DB_FAILCHK` + `is_alive`) avoids that but trips diagnostic assertions in single-process use | r6_register.c |
 | R9 | crash (process abort) | `DB_REGISTER \| DB_RECOVER` open that must recover (a registrant died) meets a log record for a file that is now a non-libdb (e.g. empty) file: recovery fails, and `__env_attach_regions` **panics and aborts the process** instead of returning an error | r9_recover_foreign_file.c |
 | R10 | crash (environment panic) | Out of file descriptors (`EMFILE`) when a log write must (re)open the log file panics the environment: `__log_name` treats any open error other than `ENOENT` as fatal (`"log file unreadable"` -> `__env_panic`) | r10_log_emfile.c (partial) |
+| R11 | hang | In one txn: `dbremove` a sub-database, then `DB->compact(DB_FREE_SPACE)` the others while a second handle on one of them is open.  Compaction moves a metadata page into the removed one's page and `__db_move_metadata` waits forever on the handle lock (`__fop_lock_handle` -> blocking `__lock_get`) despite `DB_TXN_NOWAIT` and the deadlock detector | r11_compact_after_remove.c |
 | R7 | memory leak | `DB_ENV->dbremove` of an in-memory named database inside a txn that is then **aborted** leaks the txn event `__db_inmem_remove` queued with `__txn_remevent` (249 bytes, 6 allocations, per remove) | r7_inmem_remove_leak.c |
 
 Details follow.  "Expected" is quoted from libdb's own documentation
@@ -447,4 +448,40 @@ pagerfault
   __os_abort <- __db_goff <- __db_moff <- __bam_cmp <- __bam_search
   (an overflow item on a corrupted page)
 ```
+
+---
+
+## R11 — compact after dbremove waits forever on a handle lock
+
+**Observed.**  Environment with `DB_MULTIVERSION | DB_TXN_NOWAIT`,
+`set_lk_detect(DB_LOCK_DEFAULT)`.  File `f.db` with sub-databases s0..s3
+(one record each), committed.  A second handle on s2 is opened (as
+another connection would).  Then, in one txn: `dbremove(s1)` in a
+child (committed into the parent), then `DB->compact(DB_FREE_SPACE)`
+on s0, s2, s3.  The compact of s2 never returns:
+
+```
+$ ./r11 noremove      # control
+noremove: compact s0 0 / s2 0 / s3 0, commit 0
+$ ./r11 remove
+remove: dbremove s1 0
+remove: compact s0 0
+HUNG: compact did not return within 10 s
+```
+
+Stack (dbsql, same shape): `__db_compact_pp` -> `__bam_truncate_ipages`
+-> `__db_move_metadata` -> `__fop_lock_handle` -> `__lock_get` ->
+`__db_tas_mutex_lock` (a blocking wait).  `db_stat -Co` shows the
+compacting txn's locker holding the new metadata page's handle lock
+WRITE and the second handle's locker WAITing READ on it, and vice versa
+on the old one.
+
+**Expected.**  `DB_LOCK_NOTGRANTED` / `DB_LOCK_DEADLOCK` (the
+environment asked for no waiting and runs the detector), or compaction
+that does not move a sub-database's metadata page while other handles
+hold its handle lock.
+
+**dbsql impact.**  `auto_vacuum=FULL` compacts at commit, so dropping a
+table while another connection has the database open hangs
+(autovacuum.test 2.5.4).  Listed against R11.
 
