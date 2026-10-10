@@ -2,10 +2,9 @@
 # check-names.sh OUTDIR -- the "no sqlite in code" gate.  Reports every
 # occurrence of sqlite (any case) outside comments in transformed sources.
 # Comments may keep attribution ("derived from SQLite").
-${PYTHON:-python3} - "$1" <<'PY'
+${PYTHON:-python3} - "$1" "$(cd "$(dirname "$0")" && pwd)" <<'PY'
 import os, re, sys
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])) if False else '.', ''))
-sys.path.insert(0, os.path.expanduser('~/w/tp'))
+sys.path.insert(0, sys.argv[2])		# dist/transpile: ctok.py
 from ctok import tokenize
 root = sys.argv[1]
 bad = 0

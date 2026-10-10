@@ -37168,7 +37168,7 @@ int DBSQL_CDECL main(int argc, char **argv){
       char *home;
       char *history;
       cli_printf(stdout,
-            "dbsql version " DBSQL_RELEASE " (SQLite %s, libdb storage)\n"
+            "dbsql version " DBSQL_RELEASE " (SQL %s, libdb storage)\n"
             "Enter \".help\" for usage hints.\n",
             dbsql_libversion());
       if( warn_inmemory_db ){

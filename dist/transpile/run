@@ -496,7 +496,10 @@ def main():
 		rc = subprocess.call(['diff', '-r', '-q',
 		    '-x', 'sm', '-x', 'lemon', '-x', 'native',
 		    os.path.join(scratch, 'src'), os.path.join(committed, 'src')])
+		# test/tcl also holds hand-written files (the suite runner,
+		# testfixture stubs, the known-failures list).
 		rc |= subprocess.call(['diff', '-r', '-q',
+		    '-x', 'run.sh', '-x', 'tf_stubs.c', '-x', 'known-failures.txt',
 		    os.path.join(scratch, 'test', 'tcl'),
 		    os.path.join(committed, 'test', 'tcl')])
 		shutil.rmtree(scratch)
@@ -507,9 +510,10 @@ def main():
 	KEEP_SQL_NAMES = args.keep_sql_names
 	names.KEEP_SQL_NAMES = KEEP_SQL_NAMES
 	if KEEP_SQL_NAMES:
+		# Fixups tied to the 6-char "dbsql_" prefix do not apply when
+		# SQL names keep the 7-char "sqlite_" spelling.
 		fixups.FIXUPS[:] = [f for f in fixups.FIXUPS
-		    if not f[3].startswith(('reserved prefix', 'RENAME TABLE: dbsql',
-		    'dbsql_autoindex'))]
+		    if not f[3].startswith('reserved prefix')]
 
 	manifest = load_manifest(os.path.join(HERE, 'manifest'))
 	glob, func, keep = load_overrides(os.path.join(HERE, 'names.map'))
