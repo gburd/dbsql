@@ -158,6 +158,7 @@ struct sm_shared_t {
 	int secure_delete;
 	int n_backup;			/* Backups in progress reading this. */
 	int snapshot_stale;		/* Read snapshot older than a commit. */
+	int foreign;			/* Not a libdb file: DBSQL_NOTADB. */
 	int wrote;			/* Committed a write since checkpoint. */
 	int eph_kind[2];		/* Ephemeral: table kinds by pgno&1. */
 	int cache_size;			/* PRAGMA cache_size (stored). */

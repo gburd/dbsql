@@ -342,23 +342,25 @@ __sm_meta_open(sm_shared_t *bt, int create)
 }
 
 /*
- * __sm_file_is_dbsql --
- *	Without opening an environment: does 'path' look like a libdb file?
- *	(Used to reject foreign files early with DBSQL_NOTADB.)
+ * __sm_file_check --
+ *	Before opening an environment: DBSQL_OK if 'path' is absent, empty or
+ *	looks like a libdb file; DBSQL_NOTADB for any other file; and, as
+ *	upstream, DBSQL_CANTOPEN for a file that exists but cannot be read.
+ *	(__sm_open defers NOTADB to the first transaction, as upstream.)
  */
 static int
-__sm_file_is_foreign(const char *path)
+__sm_file_check(const char *path)
 {
 	FILE *fp;
 	unsigned char hdr[16];
 	size_t n;
 
 	if ((fp = fopen(path, "rb")) == NULL)
-		return (0);		/* absent: will be created */
+		return (errno == ENOENT ? DBSQL_OK : DBSQL_CANTOPEN);
 	n = fread(hdr, 1, sizeof(hdr), fp);
 	fclose(fp);
 	if (n == 0)
-		return (0);		/* empty file: will be initialised */
+		return (DBSQL_OK);	/* empty file: will be initialised */
 	/* libdb btree metadata page: magic 0x053162 at offset 12. */
 	if (n >= 16) {
 		u_int32_t m = (u_int32_t)hdr[12] | ((u_int32_t)hdr[13] << 8) |
@@ -366,9 +368,9 @@ __sm_file_is_foreign(const char *path)
 		u_int32_t mb = (u_int32_t)hdr[15] | ((u_int32_t)hdr[14] << 8) |
 		    ((u_int32_t)hdr[13] << 16) | ((u_int32_t)hdr[12] << 24);
 		if (m == 0x053162 || mb == 0x053162)
-			return (0);
+			return (DBSQL_OK);
 	}
-	return (1);
+	return (DBSQL_NOTADB);
 }
 
 /*
@@ -484,10 +486,16 @@ __sm_open(dbsql_vfs_t *vfs, const char *filename, DBSQL *db, sm_t **btp,
 		if ((rc = __sm_txn_for(db, bt->env, &bt->txn)) != DBSQL_OK)
 			goto err;
 	} else {
-		if (__sm_file_is_foreign(filename)) {
-			rc = DBSQL_NOTADB;
-			goto err;
+		/*
+		 * A foreign file opens, as upstream, and fails with
+		 * DBSQL_NOTADB at the first transaction (the schema read).
+		 */
+		if ((rc = __sm_file_check(filename)) == DBSQL_NOTADB) {
+			bt->foreign = 1;
+			rc = DBSQL_OK;
 		}
+		if (rc != DBSQL_OK)
+			goto err;
 		if ((rc = __sm_path_split(filename, &dir, &base)) != DBSQL_OK)
 			goto err;
 		full = dbsql_mprintf("%s/%s", dir, base);
@@ -610,6 +618,8 @@ __sm_begin_trans(sm_t *p, int wrflag, int *schema_version)
 
 	bt = p->bt;
 	t = bt->txn;
+	if (bt->foreign)
+		return (DBSQL_NOTADB);
 	if (wrflag && bt->read_only)
 		return (DBSQL_READONLY);
 	if (bt->flags & SM_EPHEMERAL) {
