@@ -40,6 +40,7 @@ MANUAL = {
 	'strict2': 'droptable',
 	'alterfault': 'filecopy', 'fuzz3': 'fileformat',
 	'corruptC': 'fileformat', 'pagerfault': 'fileformat',
+	'tkt2686': 'pager', 'tkt2565': 'pager', 'lock4': 'journal',
 	'swarmvtab': 'vfs',
 }
 NOTES = {
