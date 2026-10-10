@@ -1,0 +1,5 @@
+# LeakSanitizer suppressions for test/fuzz.  Each entry is a reported
+# libdb defect (.agent/libdb-bugs), not a dbsql leak.
+# R7: dbremove of an in-memory database in an aborted txn leaks the
+# event __db_inmem_remove queues.
+leak:__txn_remevent

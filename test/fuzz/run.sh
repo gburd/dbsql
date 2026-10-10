@@ -35,11 +35,13 @@ for f in sorted(os.listdir(src)):
 PY
 fi
 fail=0
+# Known libdb leaks (reported, see lsan.supp) must not mask new ones.
+export LSAN_OPTIONS="suppressions=$top/test/fuzz/lsan.supp${LSAN_OPTIONS:+:$LSAN_OPTIONS}"
 cd "$w/artifacts" || exit 1
 for t in sql cmp; do
 	echo "fuzz: $t for ${secs}s on $jobs jobs"
 	"$w/${t}_fuzz" -max_total_time="$secs" -jobs="$jobs" -workers="$jobs" \
-	    -max_len=8192 -timeout=30 -rss_limit_mb=4096 \
+	    -max_len=8192 -timeout=30 -rss_limit_mb=4096 -report_slow_units=20 \
 	    -artifact_prefix="$w/artifacts/${t}-" "$w/corpus-$t" \
 	    > "$w/$t.log" 2>&1
 	if ls "$w/artifacts/${t}-"* > /dev/null 2>&1; then

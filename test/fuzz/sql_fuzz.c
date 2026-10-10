@@ -13,28 +13,39 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "dbsql.h"
 
+/* As upstream's ossfuzz.c: each input gets a 2 s wall-clock budget. */
+static int64_t
+now_ms(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ((int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+}
+
 static int
 progress(void *arg)
 {
-	return (++*(int *)arg > 100000);
+	return (now_ms() >= *(int64_t *)arg);
 }
 
 static void
 run(const char *name, const char *sql)
 {
 	DBSQL *db;
-	int steps;
+	int64_t cutoff;
 
 	if (dbsql_open(name, &db) != DBSQL_OK) {
 		dbsql_close(db);
 		return;
 	}
-	steps = 0;
-	dbsql_progress_handler(db, 100, progress, &steps);
+	cutoff = now_ms() + 2000;
+	dbsql_progress_handler(db, 10, progress, &cutoff);
 	dbsql_limit(db, DBSQL_LIMIT_LENGTH, 1000000);
 	dbsql_limit(db, DBSQL_LIMIT_SQL_LENGTH, 100000);
 	dbsql_db_config(db, DBSQL_DBCONFIG_DEFENSIVE, 1, NULL);
