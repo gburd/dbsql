@@ -1394,10 +1394,16 @@ __sm_integrity_check(DBSQL *db, sm_t *p, pgno_t *roots, dbsql_value_t *cnts,
 			continue;
 		if ((rc = __sm_cursor_open(p, roots[i], 0, NULL, &cur, 0)) !=
 		    DBSQL_OK) {
-			/* Out of memory is an error, not a finding. */
+			/*
+			 * Out of memory is an error, not a finding: as
+			 * upstream's __check_oom, return NOMEM with at least
+			 * one error counted (the VDBE requires it).
+			 */
 			if ((rc & 0xff) == DBSQL_NOMEM) {
 				dbsql_str_reset(&acc);
-				return (rc);
+				*pn_err = nerr > 0 ? nerr : 1;
+				*out = NULL;
+				return (DBSQL_NOMEM);
 			}
 			dbsql_str_appendf(&acc, "%stable %u: cannot open",
 			    nerr++ ? "\n" : "", (unsigned)roots[i]);
