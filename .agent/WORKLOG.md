@@ -17,6 +17,39 @@ classifier output, the prepared SQLite source tarball).  Plan:
 - the release itself (merge/tag/push to origin) happens from the laptop
   and does not need AWS.
 
+## 2026-10-10 01:45 UTC — nested readers and test harness
+
+- `812dcb8`: preserve a shared read transaction when a nested statement
+  aborts; after ending a write transaction, reopen read transactions/meta
+  handles for surviving readers. Preserve SKIPNEXT when closing a DBC at a
+  transaction boundary. Also report persistent database filenames as full
+  paths, reusing the allocated path.
+- Debian targeted checks: progress 12/12, tkt2820 17/17, rollback2 138/138,
+  misc8 16/16, returning1 89/89, dataversion1 9/9, trans2 408/408,
+  savepoint6 8007/8007. These do not establish a green suite. strict2-3.0,
+  the existing 32 savepoint failures and trans (NORESULT) remain.
+- `217fac3`: build dbsql-static for Tcl shell tests; the normal `dbsql`
+  is a libtool wrapper and cannot be copied alone. The test runner now
+  requires the shell instead of silently continuing without it. Objects
+  and testfixture depend on dbsql_config.h.
+- Validation trap: host dist/config.hin was stale. `dist/s_config` plus
+  configure regenerated it; DBSQL_HAVE_ZLIB is now defined. Previous
+  make8 zipfile/shell8 results with only 1 test were skips, not coverage.
+  With fresh config, zipfile runs 116 tests and still fails 14.10.
+- `vtab_err-3-oom-transient.432` fails with both HEAD-before-fix storage
+  sources and the new sources (same binary configuration, 2967 tests).
+  Its earlier 2937-test pass is not an equivalent control.
+- Full suites: make8 uses the stale config; make9 uses fresh config,
+  relocated testfixture + dbsql-static, and the current fixes. Results
+  `~/w/tp/make{8,9}.txt`; logs `/tmp/suite-make{8,9}.log`. make9 started
+  about 01:45 UTC. Do not count untriaged failures as divergences.
+- libdb v2026.10.4 is still absent from origin, github.com/gburd/libdb,
+  and the FreeBSD bare repo's tags; pin remains v2026.10.3, pending the
+  requested release becoming available.
+- Host build tree contains synced changes, not yet pulled commits;
+  never discard differences without checking them against laptop HEAD.
+  All temporary ERRDBG instrumentation was removed before validation.
+
 ## Hosts and paths
 
 - **Build host:** `ssh dbsql-deb` -- Debian 13 amd64, c7i.16xlarge
