@@ -196,21 +196,23 @@ __sm_cursors_invalidate_table(sm_shared_t *bt, u_int32_t pgno)
 {
 	sm_cursor_t *cur;
 
-	for (cur = bt->cursors; cur != NULL; cur = cur->next)
-		if (cur->pgno == pgno && cur->incrblob)
-			cur->state = CURSOR_INVALID;	/* blob handle: gone */
-		else if (cur->pgno == pgno && cur->state != CURSOR_FAULT) {
-			if (cur->dbc != NULL) {
-				(void)cur->dbc->close(cur->dbc);
-				cur->dbc = NULL;
-				cur->dbc_txn = NULL;
-			}
-			if (cur->state == CURSOR_VALID ||
-			    cur->state == CURSOR_SKIPNEXT) {
-				cur->state = CURSOR_REQUIRESEEK;
-				cur->saved = 1;
-			}
+	for (cur = bt->cursors; cur != NULL; cur = cur->next) {
+		if (cur->pgno != pgno || cur->state == CURSOR_FAULT)
+			continue;
+		/* DB->truncate refuses while any DBC is open on the table. */
+		if (cur->dbc != NULL) {
+			(void)cur->dbc->close(cur->dbc);
+			cur->dbc = NULL;
+			cur->dbc_txn = NULL;
 		}
+		if (cur->incrblob)
+			cur->state = CURSOR_INVALID;	/* blob handle: gone */
+		else if (cur->state == CURSOR_VALID ||
+		    cur->state == CURSOR_SKIPNEXT) {
+			cur->state = CURSOR_REQUIRESEEK;
+			cur->saved = 1;
+		}
+	}
 }
 
 /*
