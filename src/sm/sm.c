@@ -801,7 +801,7 @@ __sm_savepoint(sm_t *p, int op, int i_savepoint)
 {
 	sm_shared_t *bt;
 	sm_txn_t *t;
-	int rc, keep;
+	int rc, keep, reopen;
 
 	if (p == NULL)
 		return (DBSQL_OK);
@@ -818,6 +818,7 @@ __sm_savepoint(sm_t *p, int op, int i_savepoint)
 	if (keep < 1)
 		keep = 1;
 	rc = DBSQL_OK;
+	reopen = 0;
 	if (op == SAVEPOINT_RELEASE) {
 		/* Commit savepoint i and everything above into its parent. */
 		while (rc == DBSQL_OK && t->depth > keep)
@@ -830,15 +831,26 @@ __sm_savepoint(sm_t *p, int op, int i_savepoint)
 	 * open.
 	 */
 	if (bt->meta != NULL && bt->meta_level >= keep) {
-		/* Meta opened in a level being aborted: reopen lazily. */
+		/* Meta opened in a level being aborted dies with it. */
 		(void)bt->meta->close(bt->meta, DB_NOSYNC);
 		bt->meta = NULL;
+		reopen = 1;
 	}
 	while (rc == DBSQL_OK && t->depth > keep)
 		rc = __sm_txn_pop(bt, 0);
 	if (rc == DBSQL_OK)
 		rc = __sm_txn_push(t, (bt->flags & SM_MEMORY) ?
 		    0 : DB_TXN_SNAPSHOT);
+	/*
+	 * The transaction stays open, so no __sm_begin_trans will reopen
+	 * meta: do it now.  Schema reads (LARGEST_ROOT_PAGE) and table
+	 * opens in the rest of the transaction need it (savepoint7-2.2).
+	 * A new database whose meta was created in the aborted level is
+	 * empty again (DBSQL_EMPTY).
+	 */
+	if (rc == DBSQL_OK && reopen && (rc = __sm_meta_open(bt, 0)) ==
+	    DBSQL_EMPTY)
+		rc = DBSQL_OK;
 	return (rc);
 }
 
