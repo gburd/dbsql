@@ -20,6 +20,7 @@ libdb programs with controls.
 | R4 | crash (environment panic) | Abort of a txn that did `dbremove` of one sub-database then `DB->compact(DB_FREE_SPACE)` of another in the same file: assertion `old_lp->gen == old_lock->gen` in `__lock_change` during undo | r4_compact_abort.c |
 | R5 | crash (environment panic) | With `DB_MULTIVERSION` + `DB_TXN_SNAPSHOT`, a txn whose put fails with `ENOMEM` (cache / mutex region exhausted) cannot be aborted: undo panics (`BDB0057 unable to create/retrieve page`, `BDB0061 PANIC: Cannot allocate memory`) | r5_abort_after_enomem.c |
 | R6 | crash (environment panic) | With `DB_REGISTER \| DB_RECOVER` (the documented multi-process recipe), a process that exits without closing the environment makes the next opener recover the environment out from under every live process: their next operation fails with `DB_RUNRECOVERY` / PANIC.  The documented hybrid (`DB_FAILCHK` + `is_alive`) avoids that but trips diagnostic assertions in single-process use | r6_register.c |
+| R9 | crash (process abort) | `DB_REGISTER \| DB_RECOVER` open that must recover (a registrant died) meets a log record for a file that is now a non-libdb (e.g. empty) file: recovery fails, and `__env_attach_regions` **panics and aborts the process** instead of returning an error | r9_recover_foreign_file.c |
 | R7 | memory leak | `DB_ENV->dbremove` of an in-memory named database inside a txn that is then **aborted** leaks the txn event `__db_inmem_remove` queued with `__txn_remevent` (249 bytes, 6 allocations, per remove) | r7_inmem_remove_leak.c |
 
 Details follow.  "Expected" is quoted from libdb's own documentation
@@ -346,4 +347,37 @@ does).
 **dbsql impact.**  `SAVEPOINT x; DROP TABLE t; ROLLBACK` on a
 `:memory:` database leaks ~250 bytes per drop.  Found by dbsql's
 libFuzzer target.  Listed as a known leak; not worked around.
+
+---
+
+## R9 — recovery that meets a foreign file aborts the process
+
+**Observed.**  A writes `f.db` in an environment opened with
+`DB_REGISTER | DB_RECOVER`; child B joins, begins a write txn on `f.db`
+and is SIGKILLed.  A closes, replaces `f.db` with a zero-length file,
+and reopens the environment.  The open runs recovery (B is dead),
+recovery cannot read `f.db`, and the process aborts:
+
+```
+$ ./r9 keep     # control
+keep: reopen: ok
+$ ./r9 delete   # f.db removed: recovery copes
+delete: reopen: ok
+$ ./r9 empty    # f.db replaced by an empty file
+BDB0004 fop_read_meta: /tmp/r9.../f.db: unexpected file type or format
+BDB1521 Recovery function for LSN 1 8589 failed
+BDB0061 PANIC: Invalid argument
+(abort)
+```
+
+**Expected.**  `DB_ENV->open` returns an error (`DB_RUNRECOVERY` or
+`EINVAL`) to the caller.  `__env_attach_regions`'s error path calls
+`__env_panic`, which aborts under `DB_ENV->set_flags(DB_PANIC_ENVIRONMENT)`
+semantics even though the application never asked for that.
+
+**dbsql impact.**  dbsql created an empty placeholder file at open
+before opening the environment, so a reopen after a crashed writer and
+a deleted database aborted (SQLite's crash8, ioerr, malloc).  dbsql now
+creates the placeholder only after the environment is open, which is
+correct regardless; the libdb defect remains for any foreign file.
 

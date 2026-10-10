@@ -1,14 +1,39 @@
 # Divergences from SQLite 3.53.4
 
-Every intentional behavioural difference is listed here with its reason and
-the test that pins it. Anything not listed is a bug.
+Every intentional behavioural difference is listed here with its reason
+and the test that pins it.  Anything not listed is a bug.  Each SQLite
+test file that fails because of a row here is listed in
+`test/tcl/known-failures.txt` with that row's tag (`[tag]`).
 
-| Area | SQLite | dbsql | Why | Test |
-|---|---|---|---|---|
-| File format | SQLite b-tree file | libdb file with sub-databases | libdb is the storage engine | test/bdb/layout.sh |
-| `PRAGMA journal_mode`, `wal_*`, `mmap_size`, `locking_mode`, `page_count`, `freelist_count` | supported | accepted; report fixed values; no effect | libdb's log and mpool replace them | test/tcl/known-failures.txt |
-| Lock conflicts | file locks, BUSY at statement start | page locks plus the deadlock detector; BUSY may arrive mid-statement, and the statement is rolled back | libdb locking | test/bdb/busy.sh |
-| `sqlite_dbpage`, `sqlite_offset()`, the RBU and recover extensions | present | absent | page-level access means nothing on libdb | — |
+| Tag | Area | SQLite | dbsql | Why | Test |
+|---|---|---|---|---|---|
+| fileformat | File format | SQLite b-tree file with a 100-byte header | a libdb btree file with one sub-database per table and index | libdb is the storage engine | test/bdb, `hexio`/`dbpage`-based SQLite tests |
+| journal | Rollback journal and WAL | `-journal`, `-wal`, `-shm` files; `PRAGMA journal_mode`, `wal_checkpoint`, `wal_autocheckpoint`, `locking_mode`, `journal_size_limit` | no such files; the pragmas are accepted and report `delete` / fixed values, with no effect.  Concurrency is always WAL mode's (below) | libdb's log, mpool and recovery replace them | test/bdb/snapshot.test |
+| concurrency | Readers and writers | rollback-journal mode: a writer cannot commit while a reader is open (`database is locked`) | always WAL-mode semantics: readers see the snapshot their read transaction started with and never block a commit; one writer per database; a stale snapshot cannot upgrade to write (`BUSY`) | libdb MVCC (`DB_MULTIVERSION` + `DB_TXN_SNAPSHOT`) | test/bdb/snapshot.test (checked against SQLite in `journal_mode=WAL`) |
+| pager | Page-level pragmas and counters | `page_count`, `freelist_count`, `page_size` changes, `cache_size`/`cache_spill`, `mmap_size`, `dbstat`, `PRAGMA shrink_memory` effects, `sqlite3_db_status` cache counters | accepted; report what libdb provides (page size is libdb's, 4096 by default here) | no SQLite pager | — |
+| vfs | Custom VFSes for database files | test VFSes (`testvfs`, `crash`, `devsym`, `multiplex`, `quota`, `cksumvfs`) and fault injection see every database read and write | database files are read and written by libdb, not through the VFS; the VFS still serves temp files, time, randomness and sleep | libdb does its own I/O | — |
+| memdb | `sqlite3_serialize` / `deserialize`, `memdb` VFS | present | not built (`DBSQL_OMIT_DESERIALIZE`) | page-image API over SQLite's format | — |
+| lockstatus | `sqlite3_file_control(LOCK_STATUS)`, `db_lock_status` | unlocked / shared / reserved / exclusive | `unknown` | libdb page and database locks have no SQLite lock levels | — |
+| offset | `sqlite_offset()` | byte offset of a record in the file | NULL | no page offsets | — |
+| droptable | `DROP TABLE` while another connection has the table open | the b-tree pages are freed at once | the table is emptied and retired at once; its empty libdb sub-database is removed when no handle is open on it, else at the next `VACUUM` | libdb `dbremove` needs every handle closed | sm.c `__sm_drop_table` |
+| autovacuum | `auto_vacuum` | moves pages; `incremental_vacuum(N)` frees N pages | the mode is fixed at creation as upstream; FULL compacts at commit and INCREMENTAL on request, through `DB->compact`; page counts reported are libdb's | libdb compaction | autovacuum*.test results |
+| peerexit | A process exits without closing a database another process has open | no effect on the other process | the next process to open it runs libdb recovery, and connections open elsewhere then fail (`database disk image is malformed`) until reopened | libdb `DB_REGISTER` (.agent/libdb-bugs R6) | test/bdb/snapshot.test (`KNOWN`) |
+| attach | A transaction spanning databases in different directories | atomic (super-journal) | each directory is its own libdb environment; the commit is not atomic across them | one environment per directory | — |
 | C API | `sqlite3_*` | `DBSQL` method tables and `dbsql_*` functions | project decision 5 | test/api |
-| Shell `--append` / appendvfs, `.archive` on SQLite-format files | operate on SQLite file images | compiled in, but they only apply to SQLite-format files; a dbsql database is a libdb file | file format | — |
-| `.recover`, `.dbinfo` page-level details | read SQLite pages | `.recover` is not built (DBSQL_SHELL_HAVE_RECOVER undefined); `.dbinfo` reports what the storage manager provides | file format | test/shell |
+| shell | `--append`/appendvfs, `.archive` on SQLite files, `.recover`, `.dbinfo` | operate on SQLite file images | `.archive`/`--append` only apply to SQLite-format (zip) files; `.recover` is not built; `.dbinfo` reports what the storage manager provides | file format | test/shell |
+
+## Known libdb defects
+
+These are not divergences; they are libdb bugs, reported upstream with
+reproducers in `.agent/libdb-bugs/`, and **not worked around**.  Tests
+they break are listed in `test/tcl/known-failures.txt` as `[libdb-Rn]`.
+
+| # | Effect on dbsql |
+|---|---|
+| R1 | after a delete, an insert of an equal key through another cursor can keep the old key bytes (WITHOUT ROWID; `without_rowid1-2.1.2`, `upfrom2-1.2.13`) |
+| R2 | sized around: `set_tx_max`, as libdb documents for MVCC |
+| R3 | small write transactions cost ~200 µs extra (checkpoint threshold test) |
+| R4 | abort after `DROP TABLE` + compaction in one transaction panics the environment (VACUUM in a rolled-back transaction) |
+| R5 | a write that fails with ENOMEM under MVCC cannot be rolled back (OOM tests) |
+| R6 | see `peerexit` above |
+| R7 | `SAVEPOINT; DROP TABLE; ROLLBACK` on `:memory:` leaks ~250 bytes |

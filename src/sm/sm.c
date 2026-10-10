@@ -455,7 +455,7 @@ __sm_open(dbsql_vfs_t *vfs, const char *filename, DBSQL *db, sm_t **btp,
 	sm_t *p;
 	sm_shared_t *bt;
 	char *dir, *base, *full;
-	int rc, is_temp, is_mem;
+	int rc, is_temp, is_mem, missing;
 
 	(void)vfs;
 	*btp = NULL;
@@ -513,23 +513,12 @@ __sm_open(dbsql_vfs_t *vfs, const char *filename, DBSQL *db, sm_t **btp,
 		}
 		if (rc != DBSQL_OK)
 			goto err;
-		/*
-		 * Without DBSQL_OPEN_CREATE the file must exist.  With it,
-		 * create it empty now, as upstream does at open: libdb
-		 * creates the real file only at the first write, and a
-		 * database opened and closed unwritten must still exist.
-		 */
-		if (access(filename, F_OK) != 0) {
-			int fd;
-
-			if (!(vfs_flags & DBSQL_OPEN_CREATE) ||
-			    (vfs_flags & DBSQL_OPEN_READONLY) ||
-			    (fd = open(filename, O_WRONLY | O_CREAT | O_EXCL,
-			    0644)) < 0) {
-				rc = DBSQL_CANTOPEN;
-				goto err;
-			}
-			(void)close(fd);
+		/* Without DBSQL_OPEN_CREATE the file must exist. */
+		missing = access(filename, F_OK) != 0;
+		if (missing && (!(vfs_flags & DBSQL_OPEN_CREATE) ||
+		    (vfs_flags & DBSQL_OPEN_READONLY))) {
+			rc = DBSQL_CANTOPEN;
+			goto err;
 		}
 		if ((rc = __sm_path_split(filename, &dir, &base)) != DBSQL_OK)
 			goto err;
@@ -537,6 +526,22 @@ __sm_open(dbsql_vfs_t *vfs, const char *filename, DBSQL *db, sm_t **btp,
 		rc = full == NULL ? DBSQL_NOMEM :
 		    __sm_env_open_persistent(dir, &bt->env, NULL);
 		dbsql_free(dir);
+		/*
+		 * Create the file empty, as upstream does at open: libdb
+		 * creates the real file only at the first write, and a
+		 * database opened and closed unwritten must still exist.
+		 * Only after the environment is open: its recovery must not
+		 * meet the placeholder (it is not a libdb file).
+		 */
+		if (rc == DBSQL_OK && missing) {
+			int fd;
+
+			if ((fd = open(full, O_WRONLY | O_CREAT | O_EXCL,
+			    0644)) >= 0)
+				(void)close(fd);
+			else if (errno != EEXIST)
+				rc = DBSQL_CANTOPEN;
+		}
 		bt->path = base;
 		if (rc != DBSQL_OK) {
 			dbsql_free(full);
