@@ -59,3 +59,4 @@ __pycache__/
 # Validation-only transform of SQLite storage (dist/transpile/run --native)
 /native/
 build_asan/
+build_fuzz/

@@ -1,10 +1,16 @@
 #!/bin/sh -
-# test/fuzz/run.sh BUILD_ASAN SECONDS
-#	Build and run the libFuzzer targets against the ASan+UBSan library
-#	in BUILD_ASAN (a build_unix configured with -fsanitize=address,
-#	undefined --disable-shared).  Each target runs for SECONDS with one
-#	job per CPU; any crash, sanitizer report or leak fails the run.  The
-#	SQL corpus is seeded from SQLite's test SQL if SQLITE_SRC is set.
+# test/fuzz/run.sh BUILD SECONDS
+#	Build and run the libFuzzer targets against the library in BUILD, a
+#	build directory configured for coverage-guided fuzzing:
+#	  CC=clang CFLAGS="-O1 -g -fsanitize=address,undefined,fuzzer-no-link
+#	      -fno-omit-frame-pointer -fno-sanitize-recover=undefined"
+#	  LDFLAGS="-fsanitize=address,undefined" ../dist/configure
+#	      --enable-test --enable-diagnostic --disable-shared ...
+#	  make libdbsql-1.0.la
+#	(without fuzzer-no-link the library is uninstrumented and libFuzzer
+#	sees almost no coverage).  Each target runs for SECONDS with one job
+#	per CPU; any crash, sanitizer report or leak fails the run.  The SQL
+#	corpus is seeded from SQLite's test SQL if SQLITE_SRC is set.
 set -u
 b=$(cd "$1" && pwd)
 secs=${2:-1800}
