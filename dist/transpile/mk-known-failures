@@ -36,6 +36,8 @@ MANUAL = {
 	'tempdb': 'pager', 'stmt': 'journal', 'backup2': 'concurrency',
 	'symlink': 'fileformat', 'shell2': 'fileformat', 'shellA': 'fileformat',
 	'strict2': 'droptable',
+	'alterfault': 'filecopy', 'fuzz3': 'fileformat',
+	'swarmvtab': 'vfs',
 }
 NOTES = {
 	'naming': 'dbsql_autoindex_* sorts before user names (sqlite_* after)',
@@ -47,6 +49,7 @@ NOTES = {
 	'vfs': 'database I/O through a test VFS or fault injector expected',
 	'memdb': 'serialize/deserialize/memdb not built',
 	'droptable': 'dropped table numbers are retired, not reused',
+	'filecopy': 'restores a database by copying test.db*; a libdb database is its file plus the environment log',
 }
 
 
