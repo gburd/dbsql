@@ -192,6 +192,7 @@ check: all
 	@fail=0; for t in $(UNIT_PROGS); do \
 	    echo "== $$t"; ./$$t || fail=1; done; \
 	    sh $(testdir)/shell/run.sh ./dbsql || fail=1; \
+	    sh $(testdir)/bdb/run.sh ./testfixture ./dbsql-static || fail=1; \
 	    sh $(testdir)/tcl/run.sh ./testfixture $(topdir) || fail=1; \
 	    exit $$fail
 

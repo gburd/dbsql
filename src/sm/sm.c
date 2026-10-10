@@ -606,7 +606,7 @@ __sm_begin_trans(sm_t *p, int wrflag, int *schema_version)
 	sm_shared_t *bt;
 	sm_txn_t *t;
 	u_int32_t v;
-	int rc, created;
+	int rc, created, meta_was_open;
 
 	bt = p->bt;
 	t = bt->txn;
@@ -619,6 +619,7 @@ __sm_begin_trans(sm_t *p, int wrflag, int *schema_version)
 	do {
 		rc = DBSQL_OK;
 		created = 0;
+		meta_was_open = bt->meta != NULL;
 		if (t->depth == 0) {
 			/* Top-level txn (snapshot reads) + level-0 child. */
 			rc = __sm_txn_push(t, (bt->flags & SM_MEMORY) ?
@@ -630,17 +631,32 @@ __sm_begin_trans(sm_t *p, int wrflag, int *schema_version)
 			}
 			t->state = DBSQL_TXN_READ;
 		}
+		/*
+		 * A writer takes the database write lock before its first
+		 * read: a snapshot txn fixes its snapshot at that read, so it
+		 * then sees every commit made before the lock was granted.
+		 * (Locking after the read let a commit slip in between, and
+		 * the writer's first put failed with an update conflict.)
+		 */
+		if (rc == DBSQL_OK && wrflag)
+			rc = __sm_wrlock(bt);
 		if (rc == DBSQL_OK && bt->meta == NULL)
 			rc = __sm_meta_open(bt, wrflag);
 		if (rc == DBSQL_EMPTY)		/* new file, read only */
 			rc = DBSQL_OK;
-		if (rc == DBSQL_OK && wrflag)
-			rc = __sm_wrlock(bt);
 		if (rc == DBSQL_OK && wrflag && bt->meta == NULL)
 			rc = __sm_meta_open(bt, 1);
 		if (rc == DBSQL_OK && wrflag && bt->snapshot_stale)
 			rc = DBSQL_BUSY_SNAPSHOT;
 		if (rc != DBSQL_OK && created) {
+			/*
+			 * A handle opened in a txn that is aborted dies with
+			 * it: close meta if this attempt opened it.
+			 */
+			if (!meta_was_open && bt->meta != NULL) {
+				(void)bt->meta->close(bt->meta, DB_NOSYNC);
+				bt->meta = NULL;
+			}
 			while (t->depth > 0)
 				(void)__sm_txn_pop(bt, 0);
 			t->state = DBSQL_TXN_NONE;

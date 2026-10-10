@@ -1,0 +1,49 @@
+# test/bdb/snapshot.test --
+#	dbsql's concurrency is SQLite WAL mode's, on libdb MVCC: readers
+#	never block a writer's commit and see the snapshot their read
+#	transaction started with; one writer at a time per database.
+#	Every expected value here is what stock SQLite 3.53.4 returns with
+#	PRAGMA journal_mode=WAL (checked against the native build).
+#	Run: testfixture test/bdb/snapshot.test
+proc check {name got want} {
+	if {$got ne $want} {
+		puts "FAIL $name: got {$got} want {$want}"
+		incr ::fail
+	} else {
+		puts "ok $name"
+	}
+}
+set fail 0
+set dir [file join [pwd] snapshot-test.[pid]]
+file delete -force $dir
+file mkdir $dir
+cd $dir
+dbsql db test.db
+dbsql db2 test.db
+db eval {CREATE TABLE t1(x); INSERT INTO t1 VALUES(1)}
+
+db eval {BEGIN; INSERT INTO t1 VALUES(5)}
+db2 eval {BEGIN; SELECT * FROM t1}
+check commit-with-reader [catch {db eval COMMIT} msg]$msg 0
+check reader-keeps-snapshot [db2 eval {SELECT * FROM t1}] 1
+db2 eval COMMIT
+check reader-new-snapshot [db2 eval {SELECT * FROM t1}] {1 5}
+
+db2 eval {BEGIN; SELECT * FROM t1}
+db eval {BEGIN; INSERT INTO t1 VALUES(6)}
+check second-writer-busy [catch {db2 eval {INSERT INTO t1 VALUES(7)}} msg]$msg \
+    {1database is locked}
+db eval COMMIT
+# db2's snapshot predates db's commit: it cannot upgrade to write.
+check stale-snapshot-busy [catch {db2 eval {INSERT INTO t1 VALUES(7)}} msg]$msg \
+    {1database is locked}
+db2 eval ROLLBACK
+check after-rollback [db2 eval {INSERT INTO t1 VALUES(7); SELECT * FROM t1}] \
+    {1 5 6 7}
+
+db close
+db2 close
+cd ..
+file delete -force $dir
+if {$fail} { puts "snapshot: $fail failed"; exit 1 }
+puts "snapshot: ok"
