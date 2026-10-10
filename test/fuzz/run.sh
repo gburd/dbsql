@@ -47,7 +47,10 @@ for t in sql cmp; do
 	    -max_len=8192 -timeout=30 -rss_limit_mb=4096 -report_slow_units=20 \
 	    -artifact_prefix="$w/artifacts/${t}-" "$w/corpus-$t" \
 	    > "$w/$t.log" 2>&1
-	if ls "$w/artifacts/${t}-"* > /dev/null 2>&1; then
+	# Crashes, leaks, timeouts and OOMs fail the gate; slow units are
+	# kept for performance triage but are not failures (the budget is
+	# 2 s of planning-heavy SQL under ASan).
+	if ls "$w/artifacts/${t}-"* 2>/dev/null | grep -qv -- '-slow-unit-'; then
 		echo "fuzz: $t: FAILED, artifacts in $w/artifacts"
 		fail=1
 	else
