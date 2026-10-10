@@ -19,6 +19,7 @@ LIBDB = {
 	'shell1': 'R6', 'savepoint4': 'R6', 'crash': 'R6', 'crash2': 'R6',
 	'crash3': 'R6', 'crash4': 'R6', 'crash5': 'R6', 'crash6': 'R6',
 	'crash7': 'R6', 'crash8': 'R6',
+	'misc7': 'R10',
 }
 # Files whose failures were read and traced to a divergence, where the
 # classifier's API scan does not see it.

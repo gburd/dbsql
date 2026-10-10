@@ -21,6 +21,7 @@ libdb programs with controls.
 | R5 | crash (environment panic) | With `DB_MULTIVERSION` + `DB_TXN_SNAPSHOT`, a txn whose put fails with `ENOMEM` (cache / mutex region exhausted) cannot be aborted: undo panics (`BDB0057 unable to create/retrieve page`, `BDB0061 PANIC: Cannot allocate memory`) | r5_abort_after_enomem.c |
 | R6 | crash (environment panic) | With `DB_REGISTER \| DB_RECOVER` (the documented multi-process recipe), a process that exits without closing the environment makes the next opener recover the environment out from under every live process: their next operation fails with `DB_RUNRECOVERY` / PANIC.  The documented hybrid (`DB_FAILCHK` + `is_alive`) avoids that but trips diagnostic assertions in single-process use | r6_register.c |
 | R9 | crash (process abort) | `DB_REGISTER \| DB_RECOVER` open that must recover (a registrant died) meets a log record for a file that is now a non-libdb (e.g. empty) file: recovery fails, and `__env_attach_regions` **panics and aborts the process** instead of returning an error | r9_recover_foreign_file.c |
+| R10 | crash (environment panic) | Out of file descriptors (`EMFILE`) when a log write must (re)open the log file panics the environment: `__log_name` treats any open error other than `ENOENT` as fatal (`"log file unreadable"` -> `__env_panic`) | r10_log_emfile.c (partial) |
 | R7 | memory leak | `DB_ENV->dbremove` of an in-memory named database inside a txn that is then **aborted** leaks the txn event `__db_inmem_remove` queued with `__txn_remevent` (249 bytes, 6 allocations, per remove) | r7_inmem_remove_leak.c |
 
 Details follow.  "Expected" is quoted from libdb's own documentation
@@ -380,4 +381,50 @@ before opening the environment, so a reopen after a crashed writer and
 a deleted database aborted (SQLite's crash8, ioerr, malloc).  dbsql now
 creates the placeholder only after the environment is open, which is
 correct regardless; the libdb defect remains for any foreign file.
+
+---
+
+## R10 — EMFILE while (re)opening the log panics the environment
+
+**Observed (dbsql).**  SQLite's misc7.test exhausts the process's file
+descriptors (`do_fileopen_test`) and runs a write transaction.  When the
+commit's log flush needs to open a log file, libdb aborts the process:
+
+```
+#5 __env_panic (errval=24 /* EMFILE */)
+#6 __log_name (...) log_put.c:1794
+#7 __log_valid
+#8 __log_newfh (create=0)
+#9 __log_write
+#10 __log_flush_int
+...  __txn_commit
+```
+
+**Cause (source).**  `src/log/log_put.c`, `__log_name`:
+
+```c
+	if ((ret = __os_open(env, *namep, 0, flags, mode, fhpp)) == 0)
+		return (0);
+	/* If the open failed for reason other than the file not being
+	 * there, complain loudly, the wrong user probably started up the
+	 * application. */
+	if (ret != ENOENT) {
+		__db_err(env, ret, DB_STR_A("2520", "%s: log file unreadable", ...));
+		return (__env_panic(env, ret));
+	}
+```
+
+`EMFILE`/`ENFILE` (and `ENOMEM`) are transient resource errors, not a
+permission problem; they should fail the operation (`ENOMEM`/`EMFILE`
+to the caller) and leave the environment usable.
+
+**Reproducer.**  `r10_log_emfile.c` exhausts descriptors before a commit
+that writes a full log file's worth; on 2026.10.3 the commit still
+succeeds because the open log handle is reused, so the standalone
+program does not yet reach `__log_name` (the dbsql path does: misc7
+closes the handle by reopening the environment while out of fds).
+Marked *partial*: the source path above is the evidence.
+
+**dbsql impact.**  misc7 (out-of-descriptors tests) aborts; listed in
+known-failures against R10.
 
