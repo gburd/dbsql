@@ -428,3 +428,23 @@ Marked *partial*: the source path above is the evidence.
 **dbsql impact.**  misc7 (out-of-descriptors tests) aborts; listed in
 known-failures against R10.
 
+---
+
+## Unreduced: crashes on deliberately corrupted files
+
+SQLite's corruption tests overwrite bytes of the database file
+(`corruptC`, `pagerfault`, `fuzz3`).  dbsql's file is a libdb file, so
+these test libdb's own robustness against corrupt pages.  Two of them
+abort inside libdb instead of returning `DB_RUNRECOVERY` / an error.
+Recorded here for libdb; not reduced to standalone programs.
+
+```
+corruptC-3.5.(0).502.6  (ASan, --enable-diagnostic)
+  SEGV in lo_alloc_id mut_order.c:272   (fname->mutex = 0xdbdb... freed)
+  <- __db_lo_check <- __txn_dref_fname txn_util.c:492
+  <- __txn_end <- __txn_abort <- DB_TXN->abort
+pagerfault
+  __os_abort <- __db_goff <- __db_moff <- __bam_cmp <- __bam_search
+  (an overflow item on a corrupted page)
+```
+

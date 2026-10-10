@@ -38,6 +38,7 @@ MANUAL = {
 	'symlink': 'fileformat', 'shell2': 'fileformat', 'shellA': 'fileformat',
 	'strict2': 'droptable',
 	'alterfault': 'filecopy', 'fuzz3': 'fileformat',
+	'corruptC': 'fileformat', 'pagerfault': 'fileformat',
 	'swarmvtab': 'vfs',
 }
 NOTES = {
