@@ -41,6 +41,15 @@ db2 eval ROLLBACK
 check after-rollback [db2 eval {INSERT INTO t1 VALUES(7); SELECT * FROM t1}] \
     {1 5 6 7}
 
+# Another process that opens the environment and exits without closing
+# it must not break this one's connection (libdb-bugs R6: DB_REGISTER
+# alone would recover the environment under us; DB_FAILCHK cleans up).
+if {[info exists ::env(DBSQL_CLI)]} {
+	catch {exec $::env(DBSQL_CLI) -help test.db}
+	catch {exec $::env(DBSQL_CLI) test.db {SELECT 1}}
+	check peer-exit-without-close [catch {db eval {SELECT count(*) FROM t1}} msg]$msg 04
+}
+
 db close
 db2 close
 cd ..

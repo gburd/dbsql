@@ -31,6 +31,8 @@
 #include <unistd.h>
 
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 
 /*
@@ -287,11 +289,24 @@ __sm_meta_open(sm_shared_t *bt, int create)
 {
 	DB *dbp;
 	DBT key, data;
+	struct stat sb;
 	char buf[32];
 	int rc, ret;
 
 	if (bt->meta != NULL)
 		return (DBSQL_OK);
+	/*
+	 * __sm_open leaves a zero-length placeholder for a new database (the
+	 * file exists from open, as upstream).  libdb cannot open that, so
+	 * readers see an empty database and the first writer removes the
+	 * placeholder and lets libdb create the file.
+	 */
+	if (!(bt->flags & (SM_MEMORY | SM_EPHEMERAL)) && bt->filename != NULL &&
+	    stat(bt->filename, &sb) == 0 && sb.st_size == 0) {
+		if (!create)
+			return (DBSQL_EMPTY);
+		(void)unlink(bt->filename);
+	}
 	if ((rc = __sm_db_create(bt, &dbp)) != DBSQL_OK)
 		return (rc);
 	rc = __sm_db_open(bt, dbp, SM_META_DB, create ? DB_CREATE : 0);
@@ -480,6 +495,8 @@ __sm_open(dbsql_vfs_t *vfs, const char *filename, DBSQL *db, sm_t **btp,
 		 * are SM_MEMORY: private, no write lock, no file name.
 		 */
 		bt->flags |= SM_MEMORY;
+		if (vfs_flags & DBSQL_OPEN_READONLY)
+			bt->read_only = 1;	/* pointless, but honoured */
 		if ((rc = __sm_env_open_private(is_temp ? SM_PRIV_TEMP :
 		    SM_PRIV_MEMORY, &bt->env)) != DBSQL_OK)
 			goto err;
@@ -496,6 +513,24 @@ __sm_open(dbsql_vfs_t *vfs, const char *filename, DBSQL *db, sm_t **btp,
 		}
 		if (rc != DBSQL_OK)
 			goto err;
+		/*
+		 * Without DBSQL_OPEN_CREATE the file must exist.  With it,
+		 * create it empty now, as upstream does at open: libdb
+		 * creates the real file only at the first write, and a
+		 * database opened and closed unwritten must still exist.
+		 */
+		if (access(filename, F_OK) != 0) {
+			int fd;
+
+			if (!(vfs_flags & DBSQL_OPEN_CREATE) ||
+			    (vfs_flags & DBSQL_OPEN_READONLY) ||
+			    (fd = open(filename, O_WRONLY | O_CREAT | O_EXCL,
+			    0644)) < 0) {
+				rc = DBSQL_CANTOPEN;
+				goto err;
+			}
+			(void)close(fd);
+		}
 		if ((rc = __sm_path_split(filename, &dir, &base)) != DBSQL_OK)
 			goto err;
 		full = dbsql_mprintf("%s/%s", dir, base);

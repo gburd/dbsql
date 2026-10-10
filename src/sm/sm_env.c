@@ -32,6 +32,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 
@@ -132,6 +133,21 @@ __sm_env_configure(sm_env_t *env)
 }
 
 /*
+ * __sm_is_alive --
+ *	DB_ENV->set_isalive for DB_FAILCHK: is process 'pid' still running?
+ *	dbsql registers one thread of control per process (it sets no
+ *	thread id function), so process granularity is all libdb asks.
+ */
+static int
+__sm_is_alive(DB_ENV *dbenv, pid_t pid, db_threadid_t tid, u_int32_t flags)
+{
+	(void)dbenv;
+	(void)tid;
+	(void)flags;
+	return (kill(pid, 0) == 0 || errno == EPERM);
+}
+
+/*
  * __sm_env_size_regions --
  *	A transaction holds a lock on every page it touches until it ends,
  *	and SQL transactions can touch many pages (one statement can write
@@ -213,8 +229,18 @@ __sm_env_open_persistent(const char *dir, sm_env_t **envp, char **errp)
 	(void)env->dbenv->log_set_config(env->dbenv, DB_LOG_AUTO_REMOVE, 1);
 	(void)env->dbenv->set_cachesize(env->dbenv, 0, SM_ENV_CACHE, 1);
 	__sm_env_size_regions(env);
+	/*
+	 * Multi-process: DB_REGISTER alone recovers the environment from
+	 * under every live process whenever one exits without closing it
+	 * (.agent/libdb-bugs R6).  The documented hybrid (transapp_app.md),
+	 * DB_REGISTER | DB_FAILCHK with an is-alive function, first cleans
+	 * up after the dead process and runs full recovery only if that
+	 * fails.
+	 */
+	(void)env->dbenv->set_thread_count(env->dbenv, SM_THREAD_COUNT);
+	(void)env->dbenv->set_isalive(env->dbenv, __sm_is_alive);
 	flags = DB_CREATE | DB_INIT_LOCK | DB_INIT_LOG | DB_INIT_MPOOL |
-	    DB_INIT_TXN | DB_THREAD | DB_REGISTER | DB_RECOVER;
+	    DB_INIT_TXN | DB_THREAD | DB_REGISTER | DB_RECOVER | DB_FAILCHK;
 	if ((ret = env->dbenv->open(env->dbenv, dir, flags, 0644)) != 0) {
 		rc = ret == DB_VERSION_MISMATCH ? DBSQL_CANTOPEN :
 		    __sm_errmap(ret);

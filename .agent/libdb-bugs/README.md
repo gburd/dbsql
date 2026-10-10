@@ -19,6 +19,8 @@ libdb programs with controls.
 | R3 | performance | `txn_checkpoint(kbytes)` below its threshold costs ~210 µs/call (47x a one-row write txn): `__lock_sicleanup` runs before the threshold test | r3_ckpt_cost.c |
 | R4 | crash (environment panic) | Abort of a txn that did `dbremove` of one sub-database then `DB->compact(DB_FREE_SPACE)` of another in the same file: assertion `old_lp->gen == old_lock->gen` in `__lock_change` during undo | r4_compact_abort.c |
 | R5 | crash (environment panic) | With `DB_MULTIVERSION` + `DB_TXN_SNAPSHOT`, a txn whose put fails with `ENOMEM` (cache / mutex region exhausted) cannot be aborted: undo panics (`BDB0057 unable to create/retrieve page`, `BDB0061 PANIC: Cannot allocate memory`) | r5_abort_after_enomem.c |
+| R6 | crash (environment panic) | With `DB_REGISTER \| DB_RECOVER` (the documented multi-process recipe), a process that exits without closing the environment makes the next opener recover the environment out from under every live process: their next operation fails with `DB_RUNRECOVERY` / PANIC.  Adding `DB_FAILCHK` + `is_alive` (the documented hybrid) avoids it | r6_register.c |
+| R7 | memory leak | `DB_ENV->dbremove` of an in-memory named database inside a txn that is then **aborted** leaks the txn event `__db_inmem_remove` queued with `__txn_remevent` (249 bytes, 6 allocations, per remove) | r7_inmem_remove_leak.c |
 
 Details follow.  "Expected" is quoted from libdb's own documentation
 where it says so (docs_src/api/c/*.md in the release tree).
@@ -246,3 +248,80 @@ whole environment (every connection, `DB_RUNRECOVERY`) instead of
 failing the statement.  Before dbsql sized its regions, SQLite's
 index4.test (a 64k-row INSERT…SELECT) and closure01 hit this; with larger
 regions the threshold moves but the failure mode remains.
+
+---
+
+## R6 — DB_REGISTER recovery runs under live processes
+
+**Observed.**  Process A opens an environment with `DB_CREATE |
+DB_INIT_* | DB_THREAD | DB_REGISTER | DB_RECOVER`, creates a database and
+writes a record, and keeps the environment open.  Process B opens the
+same environment and exits *without* `DB_ENV->close` (an ordinary
+`exit(0)`; the same happens on SIGKILL).  Process C then opens it: its
+registry scan finds B's slot unlocked, so it runs recovery.  A's next
+`DB->get` returns `DB_RUNRECOVERY` and the environment panics.
+
+```
+$ ./r6 noclose          # B exits without close
+noclose: A get after B,C: -30973 (BDB0087 DB_RUNRECOVERY: Fatal error, run database recovery)
+BDB0060 PANIC: fatal region error detected; run recovery
+$ ./r6 close            # control: B closes the env
+close: A get after B,C: 0 (ok)
+$ ./r6 noclose hybrid   # DB_FAILCHK + set_isalive + set_thread_count
+noclose: A get after B,C: 0 (ok)          (6/6 runs)
+```
+
+**Expected.**  `transapp_app.md` describes `DB_REGISTER` as the
+built-in way for groups of unrelated processes to share an environment
+and recover after one dies.  It says recovery discards the environment
+"from underneath" live processes and that they should notice and exit
+(`DB_EVENT_REG_PANIC`).  So this may be working as documented, but the
+consequence is severe: any process that exits without closing (a shell
+`exit()` with the handle still open, a crash) makes every other
+process's open handles unusable.  The documented hybrid
+(`DB_REGISTER | DB_FAILCHK` with `is_alive`) avoids the full recovery.
+Two questions for libdb:
+1. Is it intended that a *clean* `exit()` (no crash, no held locks, no
+   active transactions) of a registered process forces full recovery
+   under live peers?  `__envreg_register` could tell a dead process with
+   no outstanding state (failchk-able) from one that needs recovery.
+2. If yes, the docs for `DB_REGISTER` should say plainly that it is
+   only safe when every process always closes the environment, and point
+   to the hybrid.
+
+**dbsql impact.**  dbsql uses `DB_REGISTER | DB_RECOVER`.  The `dbsql`
+shell's `-help` and `usage()` paths call `exit()` with the environment
+open; the next opener (any other process) recovers, and a connection
+that was open in a third process then reports "database disk image is
+malformed".  SQLite's shell1.test hits this (shell1-1.2.1 then 1.3.1).
+dbsql's fix, which uses libdb as documented, is to take the hybrid
+approach (`DB_FAILCHK` + `is_alive`).
+
+---
+
+## R7 — dbremove of an in-memory database in an aborted txn leaks
+
+**Observed.**  In a private environment with an in-memory log, create
+an in-memory named database (`DB->open(..., NULL, "sub", ...)`) and
+commit.  Begin a txn, begin a child, `DB_ENV->dbremove(child, NULL,
+"sub")`, then abort the parent.  LeakSanitizer reports the event
+allocated by `__txn_remevent` (from `__db_inmem_remove`):
+
+```
+$ ./r7 top            # dbremove in the top txn, commit: no leak
+$ ./r7 child-commit   # child, commit both: no leak
+$ ./r7 child-abort    # child, abort parent:
+Direct leak of 73 byte(s) in 1 object(s) allocated from:
+    #3 __txn_remevent txn/txn_util.c:98
+    #4 __db_inmem_remove db/db_remove.c:371
+    #5 __fop_inmem_swap fileops/fop_util.c:1852
+SUMMARY: AddressSanitizer: 249 byte(s) leaked in 6 allocation(s).
+```
+
+**Expected.**  An aborted txn frees its queued events (the commit path
+does).
+
+**dbsql impact.**  `SAVEPOINT x; DROP TABLE t; ROLLBACK` on a
+`:memory:` database leaks ~250 bytes per drop.  Found by dbsql's
+libFuzzer target.  Listed as a known leak; not worked around.
+
