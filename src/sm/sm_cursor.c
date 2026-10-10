@@ -1385,6 +1385,9 @@ __sm_integrity_check(DBSQL *db, sm_t *p, pgno_t *roots, dbsql_value_t *cnts,
 	nerr = 0;
 	__str_accum_init(&acc, 0, 0, 0, DBSQL_MAX_LENGTH);
 	for (i = 0; i < n_root && nerr < mx_err; i++) {
+		/* As upstream: every slot gets a count, 0 for root 0 (a
+		 * virtual table's declared index has no b-tree). */
+		__vdbe_mem_set_int64(&cnts[i], 0);
 		if (roots[i] == 0)
 			continue;
 		if ((rc = __sm_cursor_open(p, roots[i], 0, NULL, &cur, 0)) !=

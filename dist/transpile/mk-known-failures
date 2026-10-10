@@ -35,6 +35,7 @@ MANUAL = {
 	'savepoint': 'lockstatus', 'capi3': 'fileformat',
 	'tempdb': 'pager', 'stmt': 'journal', 'backup2': 'concurrency',
 	'symlink': 'fileformat', 'shell2': 'fileformat', 'shellA': 'fileformat',
+	'strict2': 'droptable',
 }
 NOTES = {
 	'naming': 'dbsql_autoindex_* sorts before user names (sqlite_* after)',
@@ -45,6 +46,7 @@ NOTES = {
 	'pager': 'SQLite pager pages or counters expected',
 	'vfs': 'database I/O through a test VFS or fault injector expected',
 	'memdb': 'serialize/deserialize/memdb not built',
+	'droptable': 'dropped table numbers are retired, not reused',
 }
 
 
