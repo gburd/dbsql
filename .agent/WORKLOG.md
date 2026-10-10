@@ -42,7 +42,13 @@ classifier output, the prepared SQLite source tarball).  Plan:
 - Full suites: make8 uses the stale config; make9 uses fresh config,
   relocated testfixture + dbsql-static, and the current fixes. Results
   `~/w/tp/make{8,9}.txt`; logs `/tmp/suite-make{8,9}.log`. make9 started
-  about 01:45 UTC. Do not count untriaged failures as divergences.
+  about 01:43 UTC. Completed: make9 PASS=935, FAIL=197, CRASH=7,
+  TIMEOUT=5, NORESULT=37 (1181 files). Shell8 still reports only 1 test;
+  investigate that skip before claiming shell coverage. vtab_err is the
+  only formerly passing file now nonpassing, but OOM iteration counts
+  differ between suite and isolated runs; retain the baseline control
+  above and investigate rather than calling it fixed or a regression.
+  Do not count untriaged failures as divergences.
 - libdb v2026.10.4 is still absent from origin, github.com/gburd/libdb,
   and the FreeBSD bare repo's tags; pin remains v2026.10.3, pending the
   requested release becoming available.
