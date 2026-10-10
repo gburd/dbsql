@@ -510,7 +510,9 @@ __sm_open(dbsql_vfs_t *vfs, const char *filename, DBSQL *db, sm_t **btp,
 		if ((vfs_flags & DBSQL_OPEN_READONLY) ||
 		    (access(full, F_OK) == 0 && access(full, W_OK) != 0))
 			bt->read_only = 1;
-		dbsql_free(full);
+		/* As upstream, the reported file name is the full path. */
+		dbsql_free(bt->filename);
+		bt->filename = full;
 		if ((rc = __sm_txn_for(db, bt->env, &bt->txn)) != DBSQL_OK)
 			goto err;
 	}
@@ -794,6 +796,12 @@ __sm_end_trans(sm_t *p, int commit)
 	bt = p->bt;
 	t = bt->txn;
 	rc = DBSQL_OK;
+	/* An interrupted nested reader must not end the outer reader's
+	 * snapshot.  Test the shared txn, not just this database: another
+	 * attached database in the environment may have written to it. */
+	if (t != NULL && t->state == DBSQL_TXN_READ &&
+	    p->db->n_vdbe_read > 1)
+		return (DBSQL_OK);
 	if (t != NULL && t->depth > 0) {
 		/* Commit (or abort) every level, innermost first. */
 		while (t->depth > 0) {
@@ -839,6 +847,17 @@ __sm_end_trans(sm_t *p, int commit)
 		bt->wrote = 0;
 		(void)bt->env->dbenv->txn_checkpoint(bt->env->dbenv,
 		    SM_CKPT_KBYTES, 0, 0);
+	}
+	/* After a write rollback/commit, surviving readers need a new
+	 * read txn and meta handles before their saved cursors can seek. */
+	if (rc == DBSQL_OK && t != NULL && p->db->n_vdbe_read > 1) {
+		db = p->db;
+		for (i = 0; i < db->n_db && rc == DBSQL_OK; i++) {
+			sm_t *q = db->dbs[i].bt;
+			if (q != NULL && q->bt->txn == t &&
+			    q->bt->cursors != NULL)
+				rc = __sm_begin_trans(q, 0, NULL);
+		}
 	}
 	return (rc);
 }

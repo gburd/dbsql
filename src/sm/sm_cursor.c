@@ -119,6 +119,7 @@ __sm_cursor_set_current(sm_cursor_t *cur)
 {
 	cur->generation++;
 	cur->state = CURSOR_VALID;
+	cur->skip_next = 0;
 	cur->at_eof = 0;
 	cur->saved = 0;
 	if (cur->dbh->is_intkey && cur->key.size == SM_ROWID_KEYLEN)
@@ -172,7 +173,8 @@ __sm_cursors_save(sm_shared_t *bt, DB_TXN *txn)
 		cur->dbc = NULL;
 		cur->dbc_txn = NULL;
 		cur->dbh = NULL;	/* handle may be discarded too */
-		if (cur->state == CURSOR_VALID) {
+		if (cur->state == CURSOR_VALID ||
+		    cur->state == CURSOR_SKIPNEXT) {
 			cur->state = CURSOR_REQUIRESEEK;
 			cur->saved = 1;
 		}
@@ -399,7 +401,7 @@ __sm_cursor_restore_position(sm_cursor_t *cur, int *different)
 {
 	u_int8_t *saved;
 	u_int32_t n;
-	int rc, found;
+	int rc, found, skip;
 
 	*different = 0;
 	if (cur->state == CURSOR_FAULT)
@@ -418,12 +420,17 @@ __sm_cursor_restore_position(sm_cursor_t *cur, int *different)
 	if ((saved = malloc(n == 0 ? 1 : n)) == NULL)
 		return (DBSQL_NOMEM);
 	memcpy(saved, cur->key.data, n);
+	skip = cur->skip_next;
 	rc = __sm_dbc_get(cur, DB_SET_RANGE, &found);
 	if (rc == DBSQL_OK && found) {
 		if (cur->key.size != n || memcmp(cur->key.data, saved, n) != 0) {
 			cur->state = CURSOR_SKIPNEXT;
 			cur->skip_next = 1;
 			*different = 1;
+		} else if (skip != 0) {
+			/* A txn boundary closed a SKIPNEXT cursor's DBC. */
+			cur->state = CURSOR_SKIPNEXT;
+			cur->skip_next = skip;
 		}
 	} else if (rc == DBSQL_OK) {
 		*different = 1;
