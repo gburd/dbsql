@@ -584,10 +584,25 @@ __sm_wrlock(sm_shared_t *bt)
 	DB_ENV *dbenv;
 	DB_LOCK lock;
 	DBT obj;
-	int ret;
+	int i, ret;
 
 	if ((bt->flags & (SM_WRLOCKED | SM_MEMORY | SM_EPHEMERAL)) != 0)
 		return (DBSQL_OK);
+	/*
+	 * The same file attached twice in one connection has two sm_shared_t
+	 * on the one shared txn: as upstream (WAL mode), only one of them may
+	 * write in a transaction.  libdb would grant the second request
+	 * (same locker), so check the connection's other handles.
+	 */
+	for (i = 0; i < bt->db->n_db; i++) {
+		sm_t *q = bt->db->dbs[i].bt;
+		if (q != NULL && q->bt != bt && q->bt->txn == bt->txn &&
+		    (q->bt->flags & SM_WRLOCKED) &&
+		    q->bt->lock_obj_len == bt->lock_obj_len &&
+		    memcmp(q->bt->lock_obj, bt->lock_obj,
+		    bt->lock_obj_len) == 0)
+			return (DBSQL_BUSY);
+	}
 	dbenv = bt->env->dbenv;
 	memset(&obj, 0, sizeof(obj));
 	obj.data = bt->lock_obj;

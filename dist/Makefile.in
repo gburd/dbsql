@@ -130,7 +130,11 @@ dbsql.h: $(srcdir)/inc/dbsql_api_ref.h $(distdir)/RELEASE
 dbsql_ext.h: $(srcdir)/dbsql_ext.h
 	cp $(srcdir)/dbsql_ext.h $@
 
-$(LIB_LOBJS): dbsql_config.h dbsql.h sql_parser.h $(if $(filter yes,$(ENABLE_FTS5)),fts5_parser.c)
+# Every object depends on every header: coarse, but a struct change in
+# a private header (sm_int.h, dbsql_int.h) can never leave stale objects.
+LIB_HDRS=	$(wildcard $(srcdir)/inc/*.h $(srcdir)/sm/*.h $(srcdir)/ext/*/*.h)
+$(LIB_LOBJS): dbsql_config.h dbsql.h sql_parser.h $(LIB_HDRS) \
+	    $(if $(filter yes,$(ENABLE_FTS5)),fts5_parser.c)
 
 %.lo: %.c
 	$(LTCOMPILE) -c $< -o $@
@@ -174,7 +178,7 @@ TF_EXCLUDE=	%/test_btree.c %/ext/base64.c %/ext/base85.c \
 		$(if $(filter native,$(STORAGE)),%/tf_stubs.c,)
 TF_SRCS=	$(LIB_SRCS) $(filter-out $(TF_EXCLUDE),$(TCL_SRCS))
 # mem2.c (DBSQL_MEMDEBUG builds) is compiled into the testfixture only.
-testfixture: $(TF_SRCS) dbsql.h dbsql_config.h sql_parser.c fts5_parser.c
+testfixture: $(TF_SRCS) $(LIB_HDRS) dbsql.h dbsql_config.h sql_parser.c fts5_parser.c
 	$(COMPILE) $(TF_DEFS) -I$(testdir)/tcl -I$(testdir)/tcl/ext \
 	    $(TCL_CPPFLAGS) -o $@ $(TF_SRCS) $(srcdir)/common/mem2.c \
 	    sql_parser.c $(DB_LIBS) $(ICU_LIBS) $(TCL_LIBS) -lz -lm $(LIBS)
