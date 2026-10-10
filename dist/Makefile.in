@@ -87,7 +87,7 @@ libdbsql=	libdbsql-$(LIBVERSION).la
 
 PROGS=		dbsql
 ifeq ($(ENABLE_TEST),yes)
-PROGS+=		testfixture $(UNIT_PROGS)
+PROGS+=		testfixture dbsql-static $(UNIT_PROGS)
 endif
 ifeq ($(ENABLE_TCL),yes)
 PROGS+=		libdbsql_tcl.la
@@ -130,7 +130,7 @@ dbsql.h: $(srcdir)/inc/dbsql_api_ref.h $(distdir)/RELEASE
 dbsql_ext.h: $(srcdir)/dbsql_ext.h
 	cp $(srcdir)/dbsql_ext.h $@
 
-$(LIB_LOBJS): dbsql.h sql_parser.h $(if $(filter yes,$(ENABLE_FTS5)),fts5_parser.c)
+$(LIB_LOBJS): dbsql_config.h dbsql.h sql_parser.h $(if $(filter yes,$(ENABLE_FTS5)),fts5_parser.c)
 
 %.lo: %.c
 	$(LTCOMPILE) -c $< -o $@
@@ -139,8 +139,14 @@ $(libdbsql): $(LIB_LOBJS)
 	$(LTLINK) -o $@ $(LIB_LOBJS) -rpath $(libdir) \
 	    -version-info 1:0:0 $(DB_LIBS) $(ICU_LIBS) $(LIBS)
 
-dbsql: $(srcdir)/shell/dbsql.c $(libdbsql) dbsql.h
+dbsql: $(srcdir)/shell/dbsql.c $(libdbsql) dbsql.h dbsql_config.h
 	$(LTLINK) $(DEFS) $(CPPFLAGS) $(SHELL_CPPFLAGS) -o $@ \
+	    $(srcdir)/shell/dbsql.c $(libdbsql) $(SHELL_LIBS) $(LIBS)
+
+# The shell linked against libdbsql's static archive, so Tcl shell tests
+# can copy it next to the testfixture without a libtool wrapper.
+dbsql-static: $(srcdir)/shell/dbsql.c $(libdbsql) dbsql.h dbsql_config.h
+	$(LTLINK) -static $(DEFS) $(CPPFLAGS) $(SHELL_CPPFLAGS) -o $@ \
 	    $(srcdir)/shell/dbsql.c $(libdbsql) $(SHELL_LIBS) $(LIBS)
 
 # Tcl package "dbsql" (load libdbsql_tcl.so Dbsql).
@@ -168,7 +174,7 @@ TF_EXCLUDE=	%/test_btree.c %/ext/base64.c %/ext/base85.c \
 		$(if $(filter native,$(STORAGE)),%/tf_stubs.c,)
 TF_SRCS=	$(LIB_SRCS) $(filter-out $(TF_EXCLUDE),$(TCL_SRCS))
 # mem2.c (DBSQL_MEMDEBUG builds) is compiled into the testfixture only.
-testfixture: $(TF_SRCS) dbsql.h sql_parser.c fts5_parser.c
+testfixture: $(TF_SRCS) dbsql.h dbsql_config.h sql_parser.c fts5_parser.c
 	$(COMPILE) $(TF_DEFS) -I$(testdir)/tcl -I$(testdir)/tcl/ext \
 	    $(TCL_CPPFLAGS) -o $@ $(TF_SRCS) $(srcdir)/common/mem2.c \
 	    sql_parser.c $(DB_LIBS) $(ICU_LIBS) $(TCL_LIBS) -lz -lm $(LIBS)
@@ -217,7 +223,7 @@ uninstall:
 clean:
 	$(LIBTOOL) --mode=clean rm -f $(LIB_LOBJS) $(libdbsql) dbsql \
 	    libdbsql_tcl.la
-	rm -f testfixture $(UNIT_PROGS) lemon lempar.c sql_parser.* \
+	rm -f testfixture dbsql-static $(UNIT_PROGS) lemon lempar.c sql_parser.* \
 	    fts5_parser.* dbsql.h dbsql_ext.h *.o
 	rm -rf .libs
 

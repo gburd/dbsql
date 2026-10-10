@@ -9,7 +9,7 @@
 #	testfixture per file); a file listed in test/tcl/known-failures.txt
 #	may fail, any other non-passing file fails the run, and a listed file
 #	that now passes is reported so the list only shrinks.
-set -u
+set -eu
 tf=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 top=$(cd "$2" && pwd)
 jobs=${3:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
@@ -21,6 +21,12 @@ here=$top/test/tcl
 }
 w=$(mktemp -d "${TMPDIR:-/tmp}/dbsql-tcl.XXXXXX")
 trap 'rm -r -f "$w"' EXIT
+# shell*.test run the CLI found next to the testfixture: give them a
+# one without a libtool wrapper (dbsql-static, built with --enable-test).
+mkdir "$w/bin"
+cp "$tf" "$w/bin/testfixture"
+cp "$(dirname "$tf")/dbsql-static" "$w/bin/dbsql"
+tf=$w/bin/testfixture
 mkdir "$w/tst"
 python3 "$top/dist/transpile/tests" "$sqlite" "$w/tst/test" >/dev/null ||
 	exit 1
