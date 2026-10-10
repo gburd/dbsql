@@ -1394,6 +1394,11 @@ __sm_integrity_check(DBSQL *db, sm_t *p, pgno_t *roots, dbsql_value_t *cnts,
 			continue;
 		if ((rc = __sm_cursor_open(p, roots[i], 0, NULL, &cur, 0)) !=
 		    DBSQL_OK) {
+			/* Out of memory is an error, not a finding. */
+			if ((rc & 0xff) == DBSQL_NOMEM) {
+				dbsql_str_reset(&acc);
+				return (rc);
+			}
 			dbsql_str_appendf(&acc, "%stable %u: cannot open",
 			    nerr++ ? "\n" : "", (unsigned)roots[i]);
 			continue;

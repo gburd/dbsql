@@ -264,7 +264,7 @@ err:	if (env != NULL) {
  *
  * PUBLIC: int __sm_env_open_private __P((int, sm_env_t **));
  */
-static char *__sm_mktempdir(void);
+static char *__sm_mktempdir(int *);
 static void __sm_rmtempdir(char *);
 
 int
@@ -277,8 +277,8 @@ __sm_env_open_private(int kind, sm_env_t **envp)
 
 	*envp = NULL;
 	home = NULL;
-	if (kind == SM_PRIV_TEMP && (home = __sm_mktempdir()) == NULL)
-		return (DBSQL_CANTOPEN);
+	if (kind == SM_PRIV_TEMP && (home = __sm_mktempdir(&ret)) == NULL)
+		return (ret);
 	if ((env = dbsql_malloc(sizeof(*env))) == NULL) {
 		__sm_rmtempdir(home);
 		return (DBSQL_NOMEM);
@@ -334,7 +334,7 @@ __sm_env_open_private(int kind, sm_env_t **envp)
  *	dbsql_temp_directory, $TMPDIR or /tmp.
  */
 static char *
-__sm_mktempdir(void)
+__sm_mktempdir(int *rcp)
 {
 	const char *base;
 	char *dir;
@@ -342,10 +342,14 @@ __sm_mktempdir(void)
 	if ((base = dbsql_temp_directory) == NULL &&
 	    (base = getenv("TMPDIR")) == NULL)
 		base = "/tmp";
-	if ((dir = dbsql_mprintf("%s/dbsql_tmp.XXXXXX", base)) == NULL)
+	/* Out of memory is NOMEM, as upstream, not CANTOPEN. */
+	if ((dir = dbsql_mprintf("%s/dbsql_tmp.XXXXXX", base)) == NULL) {
+		*rcp = DBSQL_NOMEM;
 		return (NULL);
+	}
 	if (mkdtemp(dir) == NULL) {
 		dbsql_free(dir);
+		*rcp = DBSQL_CANTOPEN;
 		return (NULL);
 	}
 	return (dir);
