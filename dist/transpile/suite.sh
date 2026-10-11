@@ -41,7 +41,7 @@ known=$(printf '%s\n' "$out" | grep -E '^[0-9]+ new errors and [0-9]+ known erro
 line=$(printf '%s\n' "$out" | grep -E '^[0-9]+ errors out of [0-9]+ tests' | tail -1)
 if [ $rc -eq 124 ]; then r=TIMEOUT
 elif [ -n "$known" ]; then
-	e=$(echo "$known" | awk '{print $1}'); n=$(echo "$known" | awk '{print $9}')
+	e=$(echo "$known" | awk '{print $1}'); n=$(echo "$known" | awk '{print $10}')
 	k=$(echo "$known" | awk '{print $5}')
 	if [ "$e" = 0 ]; then r="PASS $n ($k known)"; else r="FAIL $e/$n ($k known)"; fi
 elif [ -n "$line" ]; then
