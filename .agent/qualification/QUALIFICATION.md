@@ -26,26 +26,35 @@ on the patched diagnostic build:
 
 | | files |
 |---|---|
-| PASS | **1075** of 1181 (was 957 before per-case conversion; +118) |
-| FAIL | 67 |
+| PASS | **1099** of 1181 (was 957 before per-case conversion; +142) |
+| FAIL | 45 |
 | NORESULT | 31 |
 | CRASH | 4 (crash-VFS tests; the crash never reaches libdb) |
+| TIMEOUT | 2 (unenforced max_page_count loop; cross-process wait on a -journal) |
 | **unexpected** (not in known-failures.txt) | **0** |
 
-The 106 files that still do not pass as a whole are each in
+The 82 files that still do not pass as a whole are each in
 `test/tcl/known-failures.txt` with a reason; none is `[triage]`:
 
 | Reason | Files |
 |---|---|
-| journal (rollback journal / WAL files and modes) | 33 |
-| fileformat (SQLite file format, page images, corrupted-file tests) | 23 |
 | native (also fails on stock SQLite / fault-injection) | 20 |
-| vfs (test VFS / fault injector sees libdb I/O) | 10 |
-| pager (page counts and page-level pragmas) | 7 |
-| concurrency (WAL-mode: a reader does not block a commit) | 5 |
+| journal (rollback journal / WAL files and modes) | 20 |
+| fileformat (SQLite file format, page images, corrupted-file tests) | 17 |
+| vfs (test VFS / fault injector sees libdb I/O) | 9 |
+| pager (page counts and page-level pragmas) | 6 |
 | memdb (serialize/deserialize not built) | 4 |
-| lockstatus | 1 |
+| concurrency (WAL-mode: a reader does not block a commit) | 3 |
 | droptable | 1 |
+
+The per-case conversion (`known-problems.txt`, 3492 by-design divergent
+case names) and a triage of every remaining failure flipped 142 files
+from whole-file skips to passing, verifying their other cases.  The
+triage also surfaced one genuine dbsql bug (`vacuum-11.3`: a repeated
+`PRAGMA page_size=N; VACUUM` wrongly flipped the database read-only),
+now fixed in `__sm_set_page_size`; the two documented unreduced libdb
+crashes on corrupt pages (corruptC, pagerfault) were confirmed unchanged
+and no new libdb defect was found.
 
 The R11 fix removed three former hangs: autovacuum_ioerr2 now passes,
 and autovacuum / avtrans run to completion (their remaining failures are
