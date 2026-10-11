@@ -56,6 +56,21 @@ classifier output, the prepared SQLite source tarball).  Plan:
   never discard differences without checking them against laptop HEAD.
   All temporary ERRDBG instrumentation was removed before validation.
 
+## 2026-10-11 — 1.0.0 released
+
+- Tag `v1.0.0` (annotated, signed) on 4676583, pushed to origin
+  (Codeberg) with branch `rebuild/3.53`.  Local `master` fast-forwarded
+  to it.  origin's `master` (4e2cd21) is a rewritten copy of the same
+  2026-03-31 history as the old local master (34f4153; same 99 commits,
+  messages and dates, unsigned, plus the removal of two stray log
+  files); it is not an ancestor of the release, so origin/master was
+  **not** moved.  Moving it is the maintainer's call (force-push, or
+  make `rebuild/3.53` the default branch).
+- EC2: `dbsql-kiwi` terminated, its key pair and security group deleted,
+  ssh config cleaned; no dbsql instances remain in `kiwi`.  `hotdog`
+  credentials are gone (account expired); its resources were removed
+  before expiry.  Host results: `~/backups/dbsql-kiwi-20261011/`.
+
 ## 2026-10-11 — 1.0.0 qualified
 
 - AWS: `hotdog` torn down 14:25 UTC Oct 10 (both instances terminated,
