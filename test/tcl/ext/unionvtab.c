@@ -1035,7 +1035,7 @@ static int __union_open(dbsql_vtab_t *p, dbsql_vtab_cursor_t **cursor){
   int rc = DBSQL_OK;
   (void)p;  /* Suppress harmless warning */
   csr = (union_csr_t*)__union_malloc(&rc, sizeof(union_csr_t));
-  *cursor = &csr->base;
+  *cursor = csr ? &csr->base : 0;
   return rc;
 }
 

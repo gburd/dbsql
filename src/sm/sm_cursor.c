@@ -34,6 +34,8 @@
 #include "vdbe_int.h"
 #include "sm_int.h"
 
+#include <errno.h>
+
 static void __sm_invalidate_incrblob(sm_cursor_t *, int64_t, int);
 static void __sm_cursors_save_others_keep_incrblob(sm_cursor_t *);
 
@@ -127,6 +129,54 @@ __sm_cursor_set_current(sm_cursor_t *cur)
 }
 
 /*
+ * __sm_dbt_get --
+ *	The libdb get into the cursor's key/data buffers.  As upstream's page
+ *	buffers, each buffer has SM_DBT_PAD readable bytes past the item:
+ *	the VDBE's record decoding may overread a short or corrupt record by
+ *	a few bytes (vdbe.c OP_Column, "this overread is harmless").  Buffers
+ *	are DB_DBT_USERMEM, grown on DB_BUFFER_SMALL.
+ */
+static int
+__sm_dbt_get(sm_cursor_t *cur, u_int32_t op)
+{
+	DBT *d[2];
+	void *p;
+	int i, ret;
+
+	d[0] = &cur->key;
+	d[1] = &cur->data;
+	for (;;) {
+		for (i = 0; i < 2; i++) {
+			d[i]->flags = DB_DBT_USERMEM;
+			/* ulen excludes the pad; the allocation has it. */
+			if (d[i]->data == NULL) {
+				if ((d[i]->data = calloc(1,
+				    SM_DBT_INIT + SM_DBT_PAD)) == NULL)
+					return (ENOMEM);
+				d[i]->ulen = SM_DBT_INIT;
+			}
+		}
+		ret = cur->dbc->get(cur->dbc, &cur->key, &cur->data, op);
+		if (ret != DB_BUFFER_SMALL)
+			break;
+		for (i = 0; i < 2; i++)
+			if (d[i]->size > d[i]->ulen) {
+				if ((p = realloc(d[i]->data,
+				    d[i]->size + SM_DBT_PAD)) == NULL)
+					return (ENOMEM);
+				d[i]->data = p;
+				d[i]->ulen = d[i]->size;
+			}
+	}
+	/* Zero the pad so an overread sees no stale bytes. */
+	if (ret == 0)
+		for (i = 0; i < 2; i++)
+			memset((u_int8_t *)d[i]->data + d[i]->size, 0,
+			    SM_DBT_PAD);
+	return (ret);
+}
+
+/*
  * __sm_dbc_get --
  *	One DBC get into the cursor's buffers.  DB_NOTFOUND leaves the
  *	cursor CURSOR_INVALID and returns DBSQL_OK with *found = 0.
@@ -136,9 +186,7 @@ __sm_dbc_get(sm_cursor_t *cur, u_int32_t op, int *found)
 {
 	int ret;
 
-	cur->key.flags = DB_DBT_REALLOC;
-	cur->data.flags = DB_DBT_REALLOC;
-	ret = cur->dbc->get(cur->dbc, &cur->key, &cur->data, op);
+	ret = __sm_dbt_get(cur, op);
 	if (ret == DB_NOTFOUND || ret == DB_KEYEMPTY) {
 		cur->state = CURSOR_INVALID;
 		*found = 0;
@@ -658,12 +706,13 @@ __sm_table_moveto(sm_cursor_t *cur, int64_t int_key, int bias, int *res)
 	if (rc != DBSQL_OK)
 		return (rc);
 	__sm_rowid_to_key(int_key, cur->rowid_key);
-	if (cur->key.ulen < SM_ROWID_KEYLEN) {
-		void *k = realloc(cur->key.data, SM_ROWID_KEYLEN);
+	if (cur->key.data == NULL || cur->key.ulen < SM_ROWID_KEYLEN) {
+		void *k = realloc(cur->key.data,
+		    SM_DBT_INIT + SM_DBT_PAD);
 		if (k == NULL)
 			return (DBSQL_NOMEM);
 		cur->key.data = k;
-		cur->key.ulen = SM_ROWID_KEYLEN;
+		cur->key.ulen = SM_DBT_INIT;
 	}
 	memcpy(cur->key.data, cur->rowid_key, SM_ROWID_KEYLEN);
 	cur->key.size = SM_ROWID_KEYLEN;
@@ -709,19 +758,18 @@ __sm_index_moveto(sm_cursor_t *cur, unpacked_record_t *un_key, int *res)
 	 * DB_SET_RANGE with the probe: the comparator orders by the
 	 * unpacked record in app_data and never reads the probe's bytes.
 	 * libdb overwrites the key DBT with the found key, so the probe is
-	 * the cursor's own key buffer (DB_DBT_REALLOC), emptied first.
+	 * the cursor's own (padded) key buffer, emptied first.
 	 */
-	cur->key.flags = DB_DBT_REALLOC;
-	cur->data.flags = DB_DBT_REALLOC;
 	if (cur->key.data == NULL) {
-		if ((cur->key.data = malloc(SM_ROWID_KEYLEN)) == NULL)
+		if ((cur->key.data = calloc(1, SM_DBT_INIT + SM_DBT_PAD)) ==
+		    NULL)
 			return (DBSQL_NOMEM);
-		cur->key.ulen = SM_ROWID_KEYLEN;
+		cur->key.ulen = SM_DBT_INIT;
 	}
 	((u_int8_t *)cur->key.data)[0] = 0;
 	cur->key.size = 1;
 	cur->key.app_data = un_key;
-	ret = cur->dbc->get(cur->dbc, &cur->key, &cur->data, DB_SET_RANGE);
+	ret = __sm_dbt_get(cur, DB_SET_RANGE);
 	cur->key.app_data = NULL;
 	/*
 	 * The record compare sets un_key->eq_seen whenever an entry equals
@@ -945,9 +993,9 @@ __sm_put_data(sm_cursor_t *cur, u_int32_t offset, u_int32_t amt, void *z)
 	/* Other blob handles on this row stay valid (upstream). */
 	__sm_cursors_save_others_keep_incrblob(cur);
 	memcpy((u_int8_t *)cur->data.data + offset, z, amt);
-	cur->data.flags = 0;
+	cur->key.flags = cur->data.flags = 0;	/* put: data/size only */
 	ret = cur->dbc->put(cur->dbc, &cur->key, &cur->data, DB_CURRENT);
-	cur->data.flags = DB_DBT_REALLOC;
+	cur->key.flags = cur->data.flags = DB_DBT_USERMEM;
 	return (__sm_errmap(ret));
 }
 

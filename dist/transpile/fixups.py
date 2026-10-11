@@ -140,6 +140,15 @@ FIXUPS = [
 	 r'^#include "btree_int\.h"\n',
 	 r'#ifdef DBSQL_SM_LIBDB\n#include "sm_int.h"\n#else\n#include "btree_int.h"\n#endif\n',
 	 'test3.c: sm_int.h instead of btree_int.h on libdb'),
+	# --- test extensions -------------------------------------------------
+	# Upstream bug (UBSan): unionOpen takes &pCsr->base of a NULL pCsr
+	# when the allocation fails.  Harmless as base is at offset 0, but
+	# undefined behaviour; return a NULL cursor instead.
+	(r'(^|/)test/tcl/ext/unionvtab\.c$',
+	 r'(  csr = \(union_csr_t\*\)__union_malloc\(&rc, sizeof\(union_csr_t\)\);\n)'
+	 r'  \*cursor = &csr->base;',
+	 r'\1  *cursor = csr ? &csr->base : 0;',
+	 'unionvtab: no member access through a NULL cursor on OOM'),
 	# --- ICU --------------------------------------------------------------
 	# Upstream bug: icu_load_collation() with an unknown strength returns
 	# without closing the collator it opened (found by test/fuzz).

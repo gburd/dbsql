@@ -38,6 +38,13 @@
 #define	SM_META_AUTOVAC		13
 /* Meta slot counting committed write transactions (PRAGMA data_version). */
 #define	SM_META_COMMITS		14
+/*
+ * Cursor key/data buffers: initial size, and readable zero bytes kept
+ * past every item (the VDBE may overread a short or corrupt record by a
+ * few bytes, as upstream's page buffers allow).
+ */
+#define	SM_DBT_INIT		256
+#define	SM_DBT_PAD		64
 /* __sm_row_count_est counts at most this many entries. */
 #define	SM_ROW_EST_MAX		100000
 
