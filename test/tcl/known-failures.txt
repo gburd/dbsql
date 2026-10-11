@@ -10,7 +10,6 @@ altermalloc2	[vfs] FAIL 27/2835: database I/O through a test VFS or fault inject
 avfs	[native] FAIL 13/17: also fails on stock SQLite: FAIL 3/17
 avtrans	[concurrency] NORESULT: WAL-mode self-reparse hits "database is locked"; libdb-R11 hang fixed (120 tests pass first)
 backup	[journal] NORESULT: rollback journal / WAL / statement journal expected
-backup5	[pager] FAIL 3/14 (2 known): SQLite pager pages or counters expected
 bigfile	[fileformat] FAIL 15/17: SQLite file format / header expected
 bigfile2	[fileformat] FAIL 1/4: SQLite file format / header expected
 bitvec	[native] FAIL 1000/1001: also fails on stock SQLite: FAIL 1000/1001
@@ -30,19 +29,13 @@ dbpagefault	[fileformat] NORESULT: SQLite file format / header expected
 delete_db	[journal] NORESULT: rollback journal / WAL / statement journal expected
 e_walauto	[journal] NORESULT: rollback journal / WAL / statement journal expected
 fallocate	[fileformat] NORESULT: SQLite file format / header expected
-filectrl	[pager] FAIL 1/7 (1 known): SQLite pager pages or counters expected
 fuzz3	[fileformat] FAIL 97/45003: SQLite file format / header expected
 gencol1	[memdb] FAIL 2/176: serialize/deserialize/memdb not built
 init	[native] FAIL 12/45: also fails on stock SQLite: FAIL 4/45
 io	[fileformat] FAIL 2/29 (16 known): SQLite file format / header expected
-ioerr	[journal] FAIL 3/80: rollback journal / WAL / statement journal expected
-journal2	[journal] FAIL 1/20 (11 known): rollback journal / WAL / statement journal expected
-journal3	[journal] FAIL 4/22 (4 known): rollback journal / WAL / statement journal expected
-jrnlmode2	[journal] FAIL 1/14 (5 known): rollback journal / WAL / statement journal expected
-lock2	[concurrency] FAIL 1/12 (5 known): WAL-mode concurrency: a reader does not block commit
 lock4	[journal] TIMEOUT: rollback journal / WAL / statement journal expected
 lock5	[journal] NORESULT: rollback journal / WAL / statement journal expected
-malloc	[journal] FAIL 1000/10096: rollback journal / WAL / statement journal expected
+malloc	[journal] FAIL 1000/10097: rollback journal / WAL / statement journal expected
 malloc3	[journal] NORESULT: rollback journal / WAL / statement journal expected
 memleak	[native] NORESULT: also fails on stock SQLite: NORESULT
 misc7	[libdb-R10] CRASH: .agent/libdb-bugs R10 (also a 2nd EMFILE panic in __env_attach_regions on temp-env open, not yet fixed)
@@ -71,16 +64,11 @@ sqllimits1	[journal] FAIL 18/3117: rollback journal / WAL / statement journal ex
 statfault	[vfs] FAIL 21/72: database I/O through a test VFS or fault injector expected
 strict2	[droptable] FAIL 1/26: dropped table numbers are retired, not reused
 sysfault	[journal] NORESULT: rollback journal / WAL / statement journal expected
-temptable2	[journal] FAIL 2/257 (8 known): rollback journal / WAL / statement journal expected
-tkt-f3e5abed55	[journal] FAIL 3/12 (2 known): rollback journal / WAL / statement journal expected
 tkt2565	[pager] CRASH: SQLite pager pages or counters expected
 tkt2686	[pager] TIMEOUT: SQLite pager pages or counters expected
-tkt4018	[concurrency] FAIL 3/8 (1 known): WAL-mode concurrency: a reader does not block commit
 trans	[journal] NORESULT: rollback journal / WAL / statement journal expected
 upfromfault	[vfs] FAIL 18/1299: database I/O through a test VFS or fault injector expected
-vacuum3	[pager] FAIL 8/2650 (19 known): SQLite pager pages or counters expected
 vacuummem	[vacuumoom] FAIL 1/7: in-place VACUUM copies the whole database in one libdb write transaction; a ~90 MB VACUUM under a small cache exhausts memory (vacuummem-1.2)
-wal9	[journal] FAIL 3/9 (2 known): rollback journal / WAL / statement journal expected
 win32heap	[native] NORESULT: also fails on stock SQLite: NORESULT
 win32lock	[native] NORESULT: also fails on stock SQLite: NORESULT
 win32longpath	[native] NORESULT: also fails on stock SQLite: NORESULT
