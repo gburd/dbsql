@@ -26,7 +26,8 @@ test file that fails because of a row here is listed in
 ## Known libdb defects
 
 These are not divergences; they are libdb bugs, reported upstream with
-reproducers in `.agent/libdb-bugs/`, and **not worked around**.  Tests
+reproducers in `.agent/libdb-bugs/`.  Four now have source fixes carried
+in `deps/patches/` (R7, R9, R10, R11); the rest are reported only.  Tests
 they break are listed in `test/tcl/known-failures.txt` as `[libdb-Rn]`.
 
 | # | Effect on dbsql |
@@ -37,4 +38,22 @@ they break are listed in `test/tcl/known-failures.txt` as `[libdb-Rn]`.
 | R4 | abort after `DROP TABLE` + compaction in one transaction panics the environment (VACUUM in a rolled-back transaction) |
 | R5 | a write that fails with ENOMEM under MVCC cannot be rolled back (OOM tests) |
 | R6 | see `peerexit` above |
-| R7 | `SAVEPOINT; DROP TABLE; ROLLBACK` on `:memory:` leaks ~250 bytes |
+| R7 | `SAVEPOINT; DROP TABLE; ROLLBACK` on `:memory:` leaks ~250 bytes (fixed, deps/patches) |
+| R9 | recovery meeting a foreign/empty data file panics/aborts (fixed, deps/patches) |
+| R10 | out of file descriptors (EMFILE) opening a log file panics the environment (misc7; fixed in `__log_name`, deps/patches -- a second EMFILE site in temp-env open remains) |
+| R11 | compact after a sibling `dbremove` in one transaction hangs (autovacuum FULL / VACUUM after DROP; fixed, deps/patches) |
+
+## Running the SQLite suite per test case
+
+The SQLite test files mix cases that apply to dbsql with cases that
+exercise a divergence above (the SQLite file format, a test VFS, pager
+page counts, rollback-journal concurrency).  Rather than skip a whole
+file for a handful of divergent cases, `test/tcl/known-problems.txt`
+lists the individual case names that fail by design.  The transpiled
+`tester.tcl` reads it from the test directory and counts those as "known
+errors", so a file whose only failures are listed cases passes and its
+other cases are actually run and verified (`dist/transpile/suite.sh`
+reports `PASS n (k known)`).  Files that fail on stock SQLite too
+(`[native]`) and fault-injection files whose failing set is
+nondeterministic (malloc/ioerr/*fault) stay whole-file entries in
+`known-failures.txt` instead.
