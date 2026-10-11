@@ -4,6 +4,36 @@ This is the operational state for agents working unsupervised on the build
 host. Design lives in NORTH_STAR.md and steering/. This file records **where
 things are and how to run them**. Append to it, and keep it accurate.
 
+## 2026-10-11 — 1.1.0: libdb fixes integrated, per-case tests, release prep
+
+Four post-1.0.0 items addressed on `rebuild/3.53`:
+
+1. **libdb fixes integrated.**  `deps/patches/` carries four source-only
+   patches (R7, R9, R10, R11) applied idempotently by
+   `deps/build_libdb.sh` to the v2026.10.5 submodule.  Built + installed
+   to `~/w/inst/libdb-patched`; dbsql in `~/w/dbsql/build_patched`.
+   A/B: autovacuum_ioerr2 now PASSES (R11 hang gone), autovacuum/avtrans
+   run to completion, misc7 still fails (R10 __log_name fixed, but a 2nd
+   EMFILE panic in __env_attach_regions on temp-env open remains),
+   savepoint4 stays R6.  No regression on core tests.
+2. **Per-case test conversion.**  tester.tcl reads known-problems.txt and
+   counts listed cases as "known errors".  suite.sh accepts KNOWN_PROBLEMS
+   and parses "N new errors and K known errors"; run.sh passes it.
+   `test/tcl/known-problems.txt` = 2990 by-design divergent case names.
+   Result: **1075/1181 files pass** (was 957), **0 unexpected**;
+   known-failures.txt 224 -> 106.
+3. **Semver 1.1.0.**  dist/RELEASE bumped; README/man/STEERING/QUALIFICATION
+   updated; README "Upgrading to 1.1.0" note.  Tag + force-push pending
+   final run.sh verify.
+4. **Force-push origin/master.**  PI_ALLOW_FORCE_PUSH set; origin/master
+   at 4e2cd21 (lease target valid).  At release: ff master to the tagged
+   1.1.0 commit, then push --force-with-lease=master:4e2cd21... origin master.
+
+Host: `~/w/inst/libdb-patched`, `~/w/dbsql/build_patched`,
+`~/w/binp/{testfixture,dbsql,dbsql-static}`, `/tmp/tst/test`,
+`/tmp/kprun2.txt`.  `~/w/chk1.sh TF TESTDIR TEST...` runs one test;
+`~/w/cleanup.sh` kills stalled jobs.
+
 ## 2026-10-11 — libdb defect fixes R7, R9, R10, R11 (on 2026.10.5)
 
 Worked in `~/w/libdb-fix` on host `dbsql-kiwi`, branch `fixes` off tag
