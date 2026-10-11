@@ -79,7 +79,7 @@ tkt4018	[concurrency] FAIL 3/8 (1 known): WAL-mode concurrency: a reader does no
 trans	[journal] NORESULT: rollback journal / WAL / statement journal expected
 upfromfault	[vfs] FAIL 18/1299: database I/O through a test VFS or fault injector expected
 vacuum3	[pager] FAIL 8/2650 (19 known): SQLite pager pages or counters expected
-vacuummem	[pager] FAIL 1/7: SQLite pager pages or counters expected
+vacuummem	[vacuumoom] FAIL 1/7: in-place VACUUM copies the whole database in one libdb write transaction; a ~90 MB VACUUM under a small cache exhausts memory (vacuummem-1.2)
 wal9	[journal] FAIL 3/9 (2 known): rollback journal / WAL / statement journal expected
 win32heap	[native] NORESULT: also fails on stock SQLite: NORESULT
 win32lock	[native] NORESULT: also fails on stock SQLite: NORESULT

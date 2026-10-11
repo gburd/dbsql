@@ -50,6 +50,7 @@ MANUAL = {
 	'crash': 'vfs', 'crash2': 'vfs', 'crash3': 'vfs', 'crash4': 'vfs',
 	'crash5': 'vfs', 'crash6': 'vfs', 'crash7': 'vfs', 'crash8': 'vfs',
 	'swarmvtab': 'vfs',
+	'vacuummem': 'vacuumoom',
 }
 NOTES = {
 	'naming': 'dbsql_autoindex_* sorts before user names (sqlite_* after)',
@@ -62,6 +63,7 @@ NOTES = {
 	'memdb': 'serialize/deserialize/memdb not built',
 	'droptable': 'dropped table numbers are retired, not reused',
 	'filecopy': 'restores a database by copying test.db*; a libdb database is its file plus the environment log',
+	'vacuumoom': 'in-place VACUUM copies the whole database in one libdb write transaction; a large VACUUM under a small cache can exhaust memory',
 }
 
 
