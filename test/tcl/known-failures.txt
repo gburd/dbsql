@@ -14,11 +14,10 @@ attach	[concurrency] FAIL 3/113: WAL-mode concurrency: a reader does not block c
 attach2	[lockstatus] FAIL 31/71: lock_status reports "unknown"
 attach3	[journal] FAIL 1/46: rollback journal / WAL / statement journal expected
 auth	[naming] FAIL 1/377: dbsql_autoindex_* sorts before user names (sqlite_* after)
-autovacuum	[libdb-R11] TIMEOUT: .agent/libdb-bugs R11
+autovacuum	[pager] FAIL 37/339: SQLite pager page counts (file_pages) expected; libdb-R11 hang fixed
 autovacuum2	[pager] FAIL 5/9: SQLite pager pages or counters expected
-autovacuum_ioerr2	[libdb-R11] TIMEOUT: .agent/libdb-bugs R11
 avfs	[native] FAIL 13/17: also fails on stock SQLite: FAIL 3/17
-avtrans	[libdb-R11] TIMEOUT: .agent/libdb-bugs R11
+avtrans	[concurrency] NORESULT: WAL-mode self-reparse hits "database is locked"; libdb-R11 hang fixed (120 tests pass first)
 backup	[journal] NORESULT: rollback journal / WAL / statement journal expected
 backup2	[concurrency] FAIL 7/16: WAL-mode concurrency: a reader does not block commit
 backup4	[pager] FAIL 4/12: SQLite pager pages or counters expected
@@ -126,7 +125,7 @@ memjournal2	[journal] FAIL 1/407: rollback journal / WAL / statement journal exp
 memleak	[native] NORESULT: also fails on stock SQLite: NORESULT
 memsubsys1	[journal] FAIL 3/24: rollback journal / WAL / statement journal expected
 misc1	[journal] FAIL 1/94: rollback journal / WAL / statement journal expected
-misc7	[libdb-R10] CRASH: .agent/libdb-bugs R10
+misc7	[libdb-R10] CRASH: .agent/libdb-bugs R10 (also a 2nd EMFILE panic in __env_attach_regions on temp-env open, not yet fixed)
 mjournal	[fileformat] FAIL 29/69: SQLite file format / header expected
 mmap1	[fileformat] FAIL 61/81: SQLite file format / header expected
 mmap3	[pager] FAIL 8/9: SQLite pager pages or counters expected
