@@ -48,14 +48,19 @@ libdb 2026.10.4: api (391 checks), shell smoke, bdb multiproc (4
 processes) and snapshot: 9 processes, **0 errors, 0 definitely lost
 bytes**.  `valgrind-20261010.txt`.
 
-## Gate 3: fuzzing — see FUZZ section
+## Gate 3: fuzzing — PASS
 
 Coverage-guided libFuzzer, library built with
 `-fsanitize=address,undefined,fuzzer-no-link` (build_fuzz), on libdb
-2026.10.4.  `fuzz-20261010.txt` holds the final run.  The run on libdb
-2026.10.3 (40 jobs x 1800 s): sql_fuzz 607,705 executions, 21,758
-coverage edges, 0 crashes / sanitizer reports / leaks; cmp_fuzz 0
-crashes.
+2026.10.4, 60 jobs x 1800 s per target (`fuzz-20261010.txt`):
+
+- sql_fuzz (each input on `:memory:` and on a file database): 810,274
+  executions, 21,767 coverage edges, **0 crashes, 0 ASan/UBSan reports,
+  0 leaks** (libdb R7 suppressed by test/fuzz/lsan.supp).  3 slow inputs,
+  all planning-heavy SQL (512-way nested UNION views): 1.28 s on the
+  release build vs 0.94 s for stock sqlite3.
+- cmp_fuzz (the libdb comparator on raw bytes): 1,727,926,631
+  executions, **0 crashes**.
 
 ## Gate 4: reproducible transform — PASS
 

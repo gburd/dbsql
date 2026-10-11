@@ -1,8 +1,10 @@
-sql_fuzz: 40 jobs, -max_total_time=1800, coverage-instrumented ASan+UBSan library (build_fuzz)
-  executions: 607705
-  max cov: 21758
-  crashes/leaks/sanitizer reports: 0
-  slow units / timeouts: 3 (planning-heavy SQL: 512-way nested UNION views; stock sqlite3 0.76 s vs dbsql 1.10 s on the release build)
-cmp_fuzz: 40 jobs, 1800 s
-  executions: 
+Final fuzz gate, libdb 2026.10.4, commit aa90cb6+ (build_fuzz: -fsanitize=address,undefined,fuzzer-no-link)
+sql_fuzz: 60 jobs x 1800 s
+  executions: 810274
+  max cov: 21767
+  crashes / ASan / UBSan / leak reports: 0
+  artifacts other than slow/timeout: 0
+  slow/timeout inputs: 3, all planning-heavy SQL (512-way nested UNION views): release dbsql 1283 ms vs stock sqlite3 3.46 941 ms on the timeout input
+cmp_fuzz: 60 jobs x 1800 s
+  executions: 1727926631
   crashes: 0
