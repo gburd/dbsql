@@ -1,0 +1,447 @@
+From 078056988388fa0a37d2fad5580b65c82ecf9903 Mon Sep 17 00:00:00 2001
+From: Greg Burd <greg@burd.me>
+Date: Sun, 11 Oct 2026 16:41:22 +0000
+Subject: [PATCH 4/4] fix(recover): tolerate a foreign/empty data file during
+ recovery
+
+Recovery that must (re)open a data file referenced in the log fails with
+EINVAL when that file still exists but is no longer a usable Berkeley DB
+file -- empty, truncated, or replaced by a foreign file
+(__fop_read_meta: "unexpected file type or format").  __dbreg_open_file
+returned that EINVAL and __dbreg_register_recover mapped only ENOENT (a
+missing file) to success, so the foreign-file EINVAL failed the whole
+recovery.  __env_attach_regions then called __env_panic, which aborts
+the process in diagnostic builds -- for a condition an application can
+reach simply by leaving such a file behind.
+
+A missing file is already tolerated: recovery records the failed open
+and marks the fileid deleted so later log records for it are skipped.
+Treat a foreign file (EINVAL) the same way.  Two sites:
+
+  * __dbreg_do_open (src/dbreg/dbreg_util.c): on EINVAL, skip the
+    in-memory-database retry (a foreign on-disk file is not an in-memory
+    db) and record the failed open / mark the fileid deleted, exactly as
+    for ENOENT.
+  * __dbreg_register_recover (src/dbreg/dbreg_rec.c): map EINVAL, like
+    ENOENT, to ret = 0 so recovery continues.
+
+Everything else in the environment still recovers; only the foreign
+file is skipped.
+
+Test: test/db/recover_foreign_file.c creates two databases, SIGKILLs a
+registered peer so the next open runs recovery, replaces one database
+file with an empty file, reopens, and checks that the reopen succeeds,
+the untouched second database keeps its committed record, and the
+environment was not panicked.  The unpatched library aborts (DIAGNOSTIC)
+or returns DB_RUNRECOVERY; the patched one recovers.
+
+Found by dbsql (SQLite crash8 / ioerr / malloc, where a crashed writer
+leaves a placeholder or deleted database behind).
+---
+ src/dbreg/dbreg_rec.c               |  14 +-
+ src/dbreg/dbreg_util.c              |  26 +++-
+ test/MANIFEST                       |   1 +
+ test/db/recover_foreign_file.c      | 196 ++++++++++++++++++++++++++++
+ test/db/run_recover_foreign_file.sh |  94 +++++++++++++
+ 5 files changed, 325 insertions(+), 6 deletions(-)
+ create mode 100644 test/db/recover_foreign_file.c
+ create mode 100755 test/db/run_recover_foreign_file.sh
+
+diff --git a/src/dbreg/dbreg_rec.c b/src/dbreg/dbreg_rec.c
+index e18f18e6e..2e8e4771d 100644
+--- a/src/dbreg/dbreg_rec.c
++++ b/src/dbreg/dbreg_rec.c
+@@ -160,10 +160,20 @@ __dbreg_register_recover(env, dbtp, lsnp, op, info)
+ 			}
+ 			/*
+ 			 * We treat ENOENT as OK since it's possible that
+-			 * the file was renamed or deleted.
++			 * the file was renamed or deleted.  EINVAL means the
++			 * file still exists but is no longer a usable Berkeley
++			 * DB file (empty, truncated, or replaced by a foreign
++			 * file).  Recovery cannot restore logged state into it
++			 * and, like a missing file, must not fail the whole
++			 * recovery (which the environment-open path turns into
++			 * a panic, and a process abort in diagnostic builds)
++			 * for a condition an application can reach by leaving
++			 * such a file behind.  __dbreg_open_file has already
++			 * recorded the failed open and marked the fileid
++			 * deleted, so later records for it are skipped.
+ 			 * All other errors, we return.
+ 			 */
+-			if (ret == ENOENT)
++			if (ret == ENOENT || ret == EINVAL)
+ 				ret = 0;
+ 		}
+ 		F_CLR(dblp, DBLOG_FORCE_OPEN);
+diff --git a/src/dbreg/dbreg_util.c b/src/dbreg/dbreg_util.c
+index 859b81bc5..fe9fdf097 100644
+--- a/src/dbreg/dbreg_util.c
++++ b/src/dbreg/dbreg_util.c
+@@ -741,8 +741,20 @@ skip_open:
+ err:		if (cstat == TXN_UNEXPECTED)
+ 			goto not_right;
+ 		return (ret);
+-	} else if (ret == ENOENT) {
++	} else if (ret == ENOENT || ret == EINVAL) {
+ 		/*
++		 * ENOENT: the file is missing.  EINVAL: the file exists but is
++		 * no longer a usable Berkeley DB file (empty, truncated, or
++		 * replaced by a foreign file -- __fop_read_meta reports
++		 * "unexpected file type or format").  Recovery cannot restore
++		 * logged state into either, and must not fail the whole
++		 * recovery (which the environment-open path turns into a panic
++		 * and, in diagnostic builds, a process abort) for a condition
++		 * an application can reach by leaving such a file behind.
++		 * Treat EINVAL exactly like ENOENT: record the open as failed
++		 * and mark the fileid deleted so later records for it are
++		 * skipped.
++		 *
+ 		 * If the open failed with ENOENT, retry it as a named in-mem
+ 		 * database.  Some record types do not distinguish between a
+ 		 * named in-memory database and one on-disk.  Therefore, an
+@@ -750,8 +762,12 @@ err:		if (cstat == TXN_UNEXPECTED)
+ 		 * access this as a named in-mem database will not find it
+ 		 * on-disk, and we need to try to open it in-memory too.
+ 		 *     But don't do this for [P]REOPEN, since we're already
+-		 * handling those cases specially, above.
++		 * handling those cases specially, above.  Only ENOENT (truly
++		 * absent) is worth an in-memory retry; a foreign on-disk file
++		 * is not an in-memory database.
+ 		 */
++		if (ret == EINVAL)
++			goto skip_inmem;
+ 		if (try_inmem == 0 &&
+ 		    opcode != DBREG_PREOPEN && opcode != DBREG_REOPEN && 
+ 		    opcode != DBREG_XREOPEN) {
+@@ -762,9 +778,11 @@ err:		if (cstat == TXN_UNEXPECTED)
+ 		} else if (try_inmem != 0)
+ 			CLR_INMEM(dbp);
+ 
++skip_inmem:
+ 		/*
+-		 * If it exists neither on disk nor in memory
+-		 * record that the open failed in the txnlist.
++		 * If it exists neither on disk nor in memory, or exists as a
++		 * foreign file (EINVAL), record that the open failed in the
++		 * txnlist.
+ 		 */
+ 		if (id != TXN_INVALID && (ret = __db_txnlist_update(env,
+ 		    info, id, TXN_UNEXPECTED, NULL, &ret_stat, 1)) != 0)
+diff --git a/test/MANIFEST b/test/MANIFEST
+index 6c3672c8a..f9d030a68 100644
+--- a/test/MANIFEST
++++ b/test/MANIFEST
+@@ -469,6 +469,7 @@ db	run_lock_priority_nullderef
+ db	run_txn_remevent_leak
+ db	run_compact_subdb_remove
+ db	run_log_emfile_nopanic
++db	run_recover_foreign_file
+ db	run_null_method_slots
+ db	run_qam_extent_vrfy
+ db	run_qam_inorder_consume
+diff --git a/test/db/recover_foreign_file.c b/test/db/recover_foreign_file.c
+new file mode 100644
+index 000000000..fa9536389
+--- /dev/null
++++ b/test/db/recover_foreign_file.c
+@@ -0,0 +1,196 @@
++/*-
++ * See the file LICENSE for redistribution information.
++ *
++ * SPDX-License-Identifier: Sleepycat
++ *
++ * $Id$
++ *
++ * recover_foreign_file -- regression test for recovery meeting a data file
++ * that is referenced in the log but is now a non-Berkeley DB file (empty,
++ * truncated, or foreign).  __dbreg_open_file / __dbreg_register_recover
++ * (src/dbreg) treated the resulting EINVAL from __fop_read_meta as fatal,
++ * failing the whole recovery; the environment-open path turned that into
++ * __env_panic, and a process abort in diagnostic builds.  A missing file
++ * (ENOENT) was already tolerated.  A foreign file must be tolerated the
++ * same way: skip it and recover everything else.
++ *
++ * The test uses a child that writes an uncommitted record and is SIGKILLed
++ * so the next open must run recovery; it then replaces one database file
++ * with an empty file and reopens.  Recovery must succeed, a second,
++ * untouched database must keep its committed data, and the foreign file
++ * must simply be gone/unusable -- not panic the environment.
++ */
++#include <sys/types.h>
++#include <sys/wait.h>
++
++#include <errno.h>
++#include <signal.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include "db.h"
++
++static int fails;
++
++#define	CHECK(cond, ...)						\
++	do {								\
++		if (!(cond)) {						\
++			printf("  FAIL: ");				\
++			printf(__VA_ARGS__);				\
++			printf("\n");					\
++			fails++;					\
++		}							\
++	} while (0)
++
++static DB_ENV *
++env_open(const char *home, int *rp)
++{
++	DB_ENV *e;
++
++	if ((*rp = db_env_create(&e, 0)) != 0)
++		return (NULL);
++	e->set_errpfx(e, "recover_foreign_file");
++	if ((*rp = e->open(e, home, DB_CREATE | DB_INIT_LOCK | DB_INIT_LOG |
++	    DB_INIT_MPOOL | DB_INIT_TXN | DB_REGISTER | DB_RECOVER |
++	    DB_THREAD, 0644)) != 0) {
++		(void)e->close(e, 0);
++		return (NULL);
++	}
++	return (e);
++}
++
++static DB *
++db_open(DB_ENV *e, const char *file, int *rp)
++{
++	DB *d;
++
++	if ((*rp = db_create(&d, e, 0)) != 0)
++		return (NULL);
++	if ((*rp = d->open(d, NULL, file, NULL, DB_BTREE,
++	    DB_CREATE | DB_AUTO_COMMIT | DB_THREAD, 0644)) != 0) {
++		(void)d->close(d, 0);
++		return (NULL);
++	}
++	return (d);
++}
++
++static void
++put1(DB *d, DB_TXN *t, const char *key, const char *val, int autocommit)
++{
++	DBT k, v;
++
++	memset(&k, 0, sizeof(k));
++	memset(&v, 0, sizeof(v));
++	k.data = (void *)key;
++	k.size = (u_int32_t)strlen(key);
++	v.data = (void *)val;
++	v.size = (u_int32_t)strlen(val);
++	(void)d->put(d, t, &k, &v, autocommit ? DB_AUTO_COMMIT : 0);
++}
++
++static int
++get1(DB *d, const char *key, char *out, size_t outsz)
++{
++	DBT k, v;
++	int r;
++
++	memset(&k, 0, sizeof(k));
++	memset(&v, 0, sizeof(v));
++	k.data = (void *)key;
++	k.size = (u_int32_t)strlen(key);
++	v.data = out;
++	v.ulen = (u_int32_t)outsz;
++	v.flags = DB_DBT_USERMEM;
++	if ((r = d->get(d, NULL, &k, &v, 0)) == 0)
++		out[v.size < outsz ? v.size : outsz - 1] = '\0';
++	return (r);
++}
++
++int
++main(int argc, char *argv[])
++{
++	char home[] = "/tmp/RECOVER_FOREIGN_FILE.XXXXXX";
++	char path[256], out[64];
++	DB_ENV *e;
++	DB *d1, *d2;
++	pid_t p;
++	int r, st;
++	FILE *fp;
++
++	(void)argc;
++	(void)argv;
++
++	printf("recover_foreign_file: %s\n", db_version(NULL, NULL, NULL));
++
++	if (mkdtemp(home) == NULL)
++		return (printf("mkdtemp\n"), 99);
++
++	/* A: create two databases, commit one record in each. */
++	if ((e = env_open(home, &r)) == NULL)
++		return (printf("A env open: %s\n", db_strerror(r)), 2);
++	if ((d1 = db_open(e, "f.db", &r)) == NULL ||
++	    (d2 = db_open(e, "keep.db", &r)) == NULL)
++		return (printf("A db open: %s\n", db_strerror(r)), 2);
++	put1(d1, NULL, "k", "v", 1);
++	put1(d2, NULL, "keep", "survive", 1);
++
++	/* B: a registered peer that writes uncommitted and is SIGKILLed. */
++	if ((p = fork()) == 0) {
++		int cr;
++		DB_ENV *be;
++		DB *bd;
++		DB_TXN *t;
++		be = env_open(home, &cr);
++		if (be != NULL && (bd = db_open(be, "f.db", &cr)) != NULL) {
++			be->txn_begin(be, NULL, &t, 0);
++			put1(bd, t, "dirty", "uncommitted", 0);
++		}
++		kill(getpid(), SIGKILL);
++		_exit(0);
++	}
++	(void)waitpid(p, &st, 0);
++
++	(void)d1->close(d1, 0);
++	(void)d2->close(d2, 0);
++	(void)e->close(e, 0);
++
++	/* Replace f.db with an empty (foreign) file. */
++	snprintf(path, sizeof(path), "%s/f.db", home);
++	(void)unlink(path);
++	if ((fp = fopen(path, "w")) != NULL)
++		(void)fclose(fp);
++
++	/* Reopen: recovery must cope with the foreign file, not panic. */
++	if ((e = env_open(home, &r)) == NULL) {
++		CHECK(0, "reopen after foreign f.db: %s", db_strerror(r));
++		printf("recover_foreign_file: %d failure%s\n",
++		    fails, fails == 1 ? "" : "s");
++		return (1);
++	}
++
++	/* keep.db must still have its committed record. */
++	if ((d2 = db_open(e, "keep.db", &r)) == NULL)
++		CHECK(0, "reopen keep.db: %s", db_strerror(r));
++	else {
++		r = get1(d2, "keep", out, sizeof(out));
++		CHECK(r == 0 && strcmp(out, "survive") == 0,
++		    "keep.db lost its record: r=%d out=\"%s\"",
++		    r, r == 0 ? out : "");
++		(void)d2->close(d2, 0);
++	}
++
++	/*
++	 * f.db is now the empty foreign file.  Recovery left it alone; what
++	 * matters is that the environment survived.  (Opening it with
++	 * DB_CREATE would simply make a fresh empty database, which is fine
++	 * and not part of what we are testing, so we do not open it here.)
++	 */
++
++	(void)e->close(e, 0);
++
++	printf("recover_foreign_file: %d failure%s\n",
++	    fails, fails == 1 ? "" : "s");
++	return (fails == 0 ? 0 : 1);
++}
+diff --git a/test/db/run_recover_foreign_file.sh b/test/db/run_recover_foreign_file.sh
+new file mode 100755
+index 000000000..81140e9ce
+--- /dev/null
++++ b/test/db/run_recover_foreign_file.sh
+@@ -0,0 +1,94 @@
++#!/bin/sh -
++#
++# $Id$
++#
++# run_recover_foreign_file.sh --
++#	Build and run recover_foreign_file.c, the regression test for recovery
++#	meeting a data file referenced in the log that is now a non-Berkeley
++#	DB file (empty/foreign).  __dbreg_open_file / __dbreg_register_recover
++#	(src/dbreg) failed all of recovery on the resulting EINVAL; the
++#	environment-open path turned that into a panic (abort, in diagnostic
++#	builds).  A missing file was already tolerated; a foreign one must be
++#	too.  The test kills a registered peer so recovery runs, replaces one
++#	database with an empty file, reopens, and checks a second database
++#	kept its committed record and the environment was not panicked.
++#
++# Exits non-zero on failure or hang.
++
++set -e
++
++BUILD=${BUILD:-.}
++# Anchor to THIS script's directory, not the caller's cwd.  ../test/db/X.c
++# only resolves when the build dir sits INSIDE the source tree; with a build
++# dir that is a sibling of the source tree -- the layout run_all.sh itself
++# documents, and the one the workflows use -- it resolved to nothing and the
++# compile failed with "no such file or directory".
++_HERE=$(cd "$(dirname "$0")" && pwd)
++SRC=${SRC:-$_HERE/recover_foreign_file.c}
++HOME_DIR=${HOME_DIR:-RECOVER_FOREIGN_FILE}
++TIMEOUT=${TIMEOUT:-180}
++
++# Prefer the STATIC library: on macOS the .dylib carries a baked-in install name
++# (/usr/local/BerkeleyDB.5.3/lib/...) which takes precedence over -rpath, so a
++# shared link runs against an uninstalled path and dyld aborts.  Static linking
++# avoids the dynamic loader entirely, which is what the other CI-wired suites
++# (e.g. test/fuzz) already do.  Fall back to the shared library if no static one
++# was built.
++LIB=""
++LIBRPATH=""
++for cand in "$BUILD"/libdb.a "$BUILD"/.libs/libdb-5.3.a "$BUILD"/.libs/libdb-*.a; do
++	if [ -f "$cand" ]; then LIB="$cand"; break; fi
++done
++if [ -z "$LIB" ]; then
++	for cand in "$BUILD"/.libs/libdb-5.3.so "$BUILD"/.libs/libdb-5.3.dylib \
++	    "$BUILD"/.libs/libdb-*.so "$BUILD"/.libs/libdb-*.dylib; do
++		if [ -f "$cand" ]; then LIB="$cand"; break; fi
++	done
++	[ -n "$LIB" ] && LIBRPATH="-Wl,-rpath,$(cd "$BUILD/.libs" && pwd)"
++fi
++[ -n "$LIB" ] || { echo "FAIL: no libdb library (static or shared) found under $BUILD"; exit 1; }
++
++# A static libdb needs its transitive deps named explicitly.
++EXTRALIBS=""
++for l in $(pkg-config --libs liburing 2>/dev/null); do EXTRALIBS="$EXTRALIBS $l"; done
++
++echo "Compiling recover_foreign_file against $LIB"
++"${CC:-cc}" -g -O1 ${CFLAGS:-} -I"$BUILD" "$SRC" "$LIB" \
++    -lpthread $LIBRPATH $EXTRALIBS \
++    -o "$BUILD/recover_foreign_file"
++
++# Start from an EMPTY home, regions included. Removing only *.db left the
++# previous run's __db.00N region files behind, so a second run (another arm,
++# another build) attached a region it did not create: on FreeBSD that is a
++# PANIC (a pshared mutex whose initialiser has exited, tracker row B3), and
++# between builds it is a DB_VERSION_MISMATCH. Either way a false red.
++[ -d "$HOME_DIR" ] && find "$HOME_DIR" -mindepth 1 -delete 2>/dev/null
++mkdir -p "$HOME_DIR"
++
++# `timeout` is GNU coreutils: present on Linux, absent on stock macOS (where it
++# is `gtimeout` if coreutils is installed).  Resolve it once; if neither exists,
++# run without a timeout rather than failing with rc=127.
++if command -v timeout >/dev/null 2>&1; then
++	TIMEOUT_CMD="timeout"
++elif command -v gtimeout >/dev/null 2>&1; then
++	TIMEOUT_CMD="gtimeout"
++else
++	TIMEOUT_CMD=""
++fi
++run_with_timeout() {
++	if [ -n "$TIMEOUT_CMD" ]; then
++		"$TIMEOUT_CMD" "$@"
++	else
++		shift	# drop the seconds argument
++		"$@"
++	fi
++}
++echo "Running recover_foreign_file (timeout ${TIMEOUT}s)"
++if run_with_timeout "$TIMEOUT" "$BUILD/recover_foreign_file"; then
++	echo "run_recover_foreign_file.sh: PASS"
++	exit 0
++else
++	rc=$?
++	echo "run_recover_foreign_file.sh: FAIL (rc=$rc)"
++	exit $rc
++fi
+-- 
+2.47.3
+

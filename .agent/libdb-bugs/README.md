@@ -10,6 +10,17 @@ libdb programs with controls.
   669f7ec31, same build: R1, R2, R3, R4, R5, R6, R7, R9 and R11
   reproduce unchanged, and every control still passes.  R10 has no
   standalone reproducer yet (source path documented).
+* **Re-verified and fixed on 2026.10.5 (October 10, 2026)**, tag
+  `v2026.10.5` = 553b649a1.  R1, R6, R7, R9, R10 and R11 all reproduce.
+  R10 now has a deterministic standalone reproducer (EMFILE injected
+  through `db_env_set_func_open`).  **Fixes for R7, R9, R10 and R11** are
+  in `patches/` (git-format-patch, branch `fixes` off `v2026.10.5`),
+  each with a self-checking regression test under `test/db/` and a
+  runner registered in `test/MANIFEST`; each "Fix" subsection below
+  gives the detail.  R6 is a documented design behavior (see its Fix
+  note).  Verified with an A/B of unpatched vs patched, diagnostic and
+  release builds, and a txn/fop/recd/sdb/compact suite slice shows no
+  regression.
 * Host: Debian 13 (trixie) amd64, clang 19.1.7, glibc 2.41,
   Linux 6.12.111.  Also seen on FreeBSD 15.1 with v2026.10.2 (R4, R5).
 * Every reproducer is a single C file in this directory.  Build line is
@@ -354,6 +365,19 @@ does).
 `:memory:` database leaks ~250 bytes per drop.  Found by dbsql's
 libFuzzer target.  Listed as a known leak; not worked around.
 
+**Fix** (`patches/0001-fix-txn-*.patch`).  `__txn_doevents`, at the
+`dofree:` label (`src/txn/txn_util.c`), kept a child transaction's
+`TXN_REMOVE` event "for the parent" on abort as well as on commit, but
+only a commit hands the event over.  On abort the event, its name and
+file id were in no list and leaked.  Keep the event only when a
+committing child hands it to its parent; free it on abort.  Regression
+test `test/db/txn_remevent_leak.c` counts every libdb allocation
+through `db_env_set_func_malloc/realloc/free` (no leak detector
+needed): in-memory and on-disk removes in a child, aborted via the
+parent or the child, leak nothing; controls (commit through child and
+parent, top-level abort, no remove) are unchanged and a committed
+remove still removes.
+
 ---
 
 ## R9 — recovery that meets a foreign file aborts the process
@@ -386,6 +410,23 @@ before opening the environment, so a reopen after a crashed writer and
 a deleted database aborted (SQLite's crash8, ioerr, malloc).  dbsql now
 creates the placeholder only after the environment is open, which is
 correct regardless; the libdb defect remains for any foreign file.
+
+**Fix** (`patches/0004-fix-recover-*.patch`).  Recovery already
+tolerates a *missing* referenced file (ENOENT): `__dbreg_open_file`
+records the failed open and marks the fileid deleted so later records
+for it are skipped, and `__dbreg_register_recover` maps ENOENT to
+success.  A file that still exists but is foreign/empty surfaces as
+EINVAL from `__fop_read_meta` and was *not* tolerated, so it failed all
+of recovery and the environment-open path panicked (abort, in
+diagnostic builds).  Treat EINVAL exactly like ENOENT in both places:
+`__dbreg_do_open` (`src/dbreg/dbreg_util.c`) skips the in-memory retry
+and records the failed open / marks the fileid deleted; and
+`__dbreg_register_recover` (`src/dbreg/dbreg_rec.c`) maps EINVAL to
+`ret = 0`.  Everything else recovers; only the foreign file is skipped.
+Regression test `test/db/recover_foreign_file.c` SIGKILLs a registered
+peer so recovery runs, replaces one database with an empty file,
+reopens, and checks the reopen succeeds, a second untouched database
+kept its committed record, and the environment was not panicked.
 
 ---
 
@@ -423,15 +464,29 @@ commit's log flush needs to open a log file, libdb aborts the process:
 permission problem; they should fail the operation (`ENOMEM`/`EMFILE`
 to the caller) and leave the environment usable.
 
-**Reproducer.**  `r10_log_emfile.c` exhausts descriptors before a commit
-that writes a full log file's worth; on 2026.10.3 the commit still
-succeeds because the open log handle is reused, so the standalone
-program does not yet reach `__log_name` (the dbsql path does: misc7
-closes the handle by reopening the environment while out of fds).
-Marked *partial*: the source path above is the evidence.
+**Reproducer.**  `r10_log_emfile.c` now injects the condition
+deterministically with `db_env_set_func_open`: the installed open
+returns `EMFILE` for log files only, so no real descriptor exhaustion
+is needed and the test harness is not perturbed.  It forces a log roll
+and confirms the write returns `EMFILE` and a subsequent read does not
+return `DB_RUNRECOVERY` (the environment survived).  On 2026.10.5 the
+unpatched library panics the environment (aborts, under DIAGNOSTIC);
+the control (`fdok`) is clean.
 
 **dbsql impact.**  misc7 (out-of-descriptors tests) aborts; listed in
 known-failures against R10.
+
+**Fix** (`patches/0003-fix-log-*.patch`).  In `__log_name`, return
+`EMFILE`/`ENFILE` to the caller (as the enclosing commit / log-flush
+error) instead of panicking: `__os_open` already retries these three
+times, and when one finally surfaces it is a transient, process-local
+descriptor shortage, not corruption and not a wrong-user mistake.
+Panicking would take down every thread and process sharing the
+environment.  Genuine "wrong user / corruption" opens (any other
+non-ENOENT error) still panic as before.  Regression test
+`test/db/log_emfile_nopanic.c` injects EMFILE through
+`db_env_set_func_open`, forces a log roll, and checks the write returns
+EMFILE and the environment is not panicked.
 
 ---
 
@@ -488,4 +543,47 @@ hold its handle lock.
 **dbsql impact.**  `auto_vacuum=FULL` compacts at commit, so dropping a
 table while another connection has the database open hangs
 (autovacuum.test 2.5.4).  Listed against R11.
+
+**Fix** (`patches/0002-fix-compact-*.patch`).  Root cause: when
+`__db_move_metadata` moves a sub-database's metadata page to a lower
+page number and the compact runs inside a transaction but the dbp was
+opened in an *earlier* transaction (`dbp->cur_txn == NULL`), it
+re-acquired the handle lock keyed on the new page under the dbp's own
+handle locker as `DB_LOCK_READ`.  That self-deadlocks when the new
+(lower) page is one this same transaction already WRITE-holds the
+handle lock on -- e.g. a page freed by a `dbremove` of a sibling
+sub-database earlier in the same transaction, whose WRITE handle lock
+the transaction holds until commit (`TXN_REMOVE` is deferred).  The
+READ get then blocks the one thread against a lock it already owns
+under a different locker id; it is not a cycle, so neither
+`DB_TXN_NOWAIT` nor the deadlock detector breaks it.  Acquire the lock
+under the transaction locker (WRITE) whenever a transaction is in
+effect (`dbp->cur_txn` if the dbp is still in its opening txn, else
+`dbc->txn`) and register a lock event so it is traded to the handle
+locker at txn end, mirroring the `cur_txn != NULL` path; only the
+no-transaction case keeps READ-under-handle-locker.  Regression test
+`test/db/compact_subdb_remove.c` removes one sub-database and compacts
+the survivors in one transaction (with a second handle open) and
+verifies every survivor reads back and the removed one is gone; it is
+SIGALRM-guarded so a regression is a reported failure, not a hung
+suite.  Control: compaction with no prior remove.
+
+---
+
+## R6 status — documented behavior; no code fix
+
+R6 is `DB_REGISTER` recovery discarding the environment from under live
+processes when a registrant is found gone.  `transapp_app.md` describes
+this as the intended mechanism (peers get `DB_EVENT_REG_PANIC` and are
+expected to exit), so it is **working as documented** rather than a
+discrete bug with a safe, localized fix.  The two actionable items --
+(1) distinguishing a clean `exit()` of a registrant with no outstanding
+state from one that truly needs recovery, and (2) the
+`DB_REGISTER | DB_FAILCHK` + `is_alive` hybrid tripping diagnostic
+assertions in ordinary single-process use -- are a design change to the
+register/failchk interaction, not a surgical patch, and carry
+regression risk across the replication and failchk suites.  No patch is
+included; this is a consultation item for the libdb team (docs plus the
+failchk interaction).  dbsql keeps the affected tests in
+known-failures under `libdb-R6`.
 
