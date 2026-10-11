@@ -1,7 +1,7 @@
 # Project instructions — dbsql
 
 dbsql is SQLite 3.53.4's SQL language running on Berkeley DB (libdb
-v2026.10.3) storage, written in Berkeley DB style.
+v2026.10.4) storage, written in Berkeley DB style.
 
 ## Read first
 

@@ -153,7 +153,7 @@ if test "$with_storage" = libdb; then
 	save_CPPFLAGS="$CPPFLAGS"
 	CPPFLAGS="$CPPFLAGS $DB_CPPFLAGS"
 	# libdb's numeric version is its format/ABI level and stays put across
-	# releases; DB_CALVER ("2026.10.3") names the release.
+	# releases; DB_CALVER ("2026.10.4") names the release.
 	AC_PROG_CPP
 	AC_MSG_CHECKING([libdb release >= $DBSQL_LIBDB_VERSION])
 	db_calver=`printf '#include <db.h>\nDB_CALVER\n' |

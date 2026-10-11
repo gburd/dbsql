@@ -15,7 +15,7 @@ this file whenever a phase lands.
    SQLite's Hungarian (see TRANSFORM.md).
 3. **One libdb file per SQL database**, with tables and indexes as
    sub-databases.
-4. **libdb pinned to `v2026.10.3`** (v2026.10.1 -> .2 on 2026-10-08 and .2 -> .3 on 2026-10-09, each at the maintainer's request when released; .3 carries the FreeBSD shared-library fix upstream, so deps/patches is empty).
+4. **libdb pinned to `v2026.10.4`** (v2026.10.1 -> .2 on 2026-10-08, .2 -> .3 on 2026-10-09, .3 -> .4 on 2026-10-10, each at the maintainer's request when released; deps/patches is empty).
 5. **No sqlite3 API**, not even a compatibility shim.
 6. `.agent/` is tracked except `.agent/archive/` (old reports).
 7. **Scope**: core SQL (3.53.4), FTS5, ICU, and the full shell as `dbsql`.
@@ -39,7 +39,7 @@ lifetimes) is not a workaround.
 ## Status
 
 - [x] Phase 0: cleanup, `.agent/` layout, north star and steering.
-- [x] Phase 1: libdb v2026.10.3 submodule and build glue.
+- [x] Phase 1: libdb submodule (now v2026.10.4) and build glue.
 - [x] Phase 2: transform pipeline (dist/transpile) and vendored lemon.
 - [ ] Phase 3: storage manager (src/sm/).
 - [ ] Phase 4: public API, TCL testfixture, SQLite test-suite runner.

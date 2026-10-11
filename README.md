@@ -6,7 +6,7 @@ in Berkeley DB's coding style.
 
 - **SQL:** every SQL feature of SQLite 3.53.4, plus the FTS5 and ICU
   extensions and the full interactive shell, as `dbsql`.
-- **Storage:** libdb v2026.10.3 provides storage, transactions, logging
+- **Storage:** libdb v2026.10.4 provides storage, transactions, logging
   and crash recovery.  Each SQL database is one libdb file, with tables and
   indexes as sub-databases; the directory is the libdb environment.
 - **Concurrency:** SQLite WAL-mode semantics on libdb MVCC: readers see a
