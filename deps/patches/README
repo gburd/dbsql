@@ -1,15 +1,42 @@
 Patches applied to the deps/libdb submodule before building it.
 
-None at present.  The libtool FreeBSD host-pattern fix this directory
-carried for v2026.10.1/.2 (freebsd1* matching FreeBSD 10-19, so no
-shared library was built) is upstream as of libdb v2026.10.3
-(6e1f1c86a).
+Named libdb-<pinned tag>-<topic>.patch, applied with "cd deps/libdb &&
+patch -p1" idempotently by deps/build_libdb.sh.  Drop a patch when the
+pin moves past the upstream commit that carries the same fix.
 
-A patch here is named libdb-<pinned tag>-<topic>.patch, applies with
-"cd deps/libdb && patch -p1", and is applied idempotently by
-deps/build_libdb.sh.  Drop it when the pin moves past the upstream fix.
+## Current patches (pin v2026.10.5 = 553b649a1)
 
-Note: in v2026.10.3 five build_windows/*.sln/*.vcproj files are stored
+Four libdb defects dbsql found and fixed; source-only here (the matching
+regression tests live in the libdb tree and in .agent/libdb-bugs/tests/,
+and the full git-format-patch set with those tests is in
+.agent/libdb-bugs/patches/).  See .agent/libdb-bugs/README.md for the
+analysis of each.
+
+- libdb-v2026.10.5-r7-txn-remevent-abort-leak.patch
+    R7.  __txn_doevents freed a child txn's TXN_REMOVE event only on
+    commit; on abort it leaked.  src/txn/txn_util.c.
+- libdb-v2026.10.5-r9-recover-foreign-file.patch
+    R9.  Recovery meeting a referenced file that is now foreign/empty
+    (EINVAL) failed all of recovery and panicked (abort, under
+    DIAGNOSTIC).  Treat EINVAL like the already-tolerated ENOENT.
+    src/dbreg/dbreg_util.c, src/dbreg/dbreg_rec.c.
+- libdb-v2026.10.5-r10-log-emfile-nopanic.patch
+    R10.  __log_name panicked the environment on any non-ENOENT open
+    error; EMFILE/ENFILE are transient and are now returned to the
+    caller.  src/log/log_put.c.
+- libdb-v2026.10.5-r11-compact-move-metadata-handle-lock.patch
+    R11.  __db_move_metadata took the moved-page handle lock under the
+    dbp's own handle locker while inside a txn that already WRITE-held it
+    from a sibling dbremove, self-deadlocking compaction.  Acquire under
+    the txn locker instead.  src/db/db_compact.c.
+
+## History
+
+The libtool FreeBSD host-pattern fix this directory carried for
+v2026.10.1/.2 (freebsd1* matching FreeBSD 10-19, so no shared library
+was built) is upstream as of libdb v2026.10.3 (6e1f1c86a).
+
+Note: in v2026.10.3+ five build_windows/*.sln/*.vcproj files are stored
 with CRLF line endings against .gitattributes' "* text=auto", so
 "git status" in the submodule lists them as modified on a fresh
 checkout.  Cosmetic; the build does not use them.
