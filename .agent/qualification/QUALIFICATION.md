@@ -26,35 +26,38 @@ on the patched diagnostic build:
 
 | | files |
 |---|---|
-| PASS | **1099** of 1181 (was 957 before per-case conversion; +142) |
-| FAIL | 45 |
+| PASS | **1111** of 1181 (was 957 before per-case conversion; +154) |
+| FAIL | 33 |
 | NORESULT | 31 |
 | CRASH | 4 (crash-VFS tests; the crash never reaches libdb) |
 | TIMEOUT | 2 (unenforced max_page_count loop; cross-process wait on a -journal) |
 | **unexpected** (not in known-failures.txt) | **0** |
 
-The 82 files that still do not pass as a whole are each in
+The 70 files that still do not pass as a whole are each in
 `test/tcl/known-failures.txt` with a reason; none is `[triage]`:
 
 | Reason | Files |
 |---|---|
 | native (also fails on stock SQLite / fault-injection) | 20 |
-| journal (rollback journal / WAL files and modes) | 20 |
 | fileformat (SQLite file format, page images, corrupted-file tests) | 17 |
+| journal (rollback journal / WAL sidecar files, hot-journal rollback) | 13 |
 | vfs (test VFS / fault injector sees libdb I/O) | 9 |
-| pager (page counts and page-level pragmas) | 6 |
 | memdb (serialize/deserialize not built) | 4 |
-| concurrency (WAL-mode: a reader does not block a commit) | 3 |
-| droptable | 1 |
+| pager (page counts and page-level pragmas) | 2 |
+| concurrency (WAL-mode: a reader does not block a commit) | 1 |
+| droptable (retired table numbers) | 1 |
+| vacuumoom (in-place VACUUM memory ceiling) | 1 |
 
-The per-case conversion (`known-problems.txt`, 3492 by-design divergent
-case names) and a triage of every remaining failure flipped 142 files
-from whole-file skips to passing, verifying their other cases.  The
-triage also surfaced one genuine dbsql bug (`vacuum-11.3`: a repeated
+The per-case conversion (`known-problems.txt`, 3525 by-design divergent
+case names) plus three rounds of per-file triage flipped 154 files from
+whole-file skips to passing, verifying their other cases.  The triage
+also surfaced one genuine dbsql bug (`vacuum-11.3`: a repeated
 `PRAGMA page_size=N; VACUUM` wrongly flipped the database read-only),
-now fixed in `__sm_set_page_size`; the two documented unreduced libdb
-crashes on corrupt pages (corruptC, pagerfault) were confirmed unchanged
-and no new libdb defect was found.
+now fixed in `__sm_set_page_size`, and one documented limitation
+(`vacuummem-1.2`: in-place VACUUM of a very large database under a small
+cache can exhaust memory, tagged `[vacuumoom]`).  No new libdb defect
+was found; the two documented unreduced libdb crashes on corrupt pages
+(corruptC, pagerfault) were confirmed unchanged.
 
 The R11 fix removed three former hangs: autovacuum_ioerr2 now passes,
 and autovacuum / avtrans run to completion (their remaining failures are
