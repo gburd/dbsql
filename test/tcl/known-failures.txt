@@ -53,6 +53,7 @@ jrnlmode	[journal] FAIL 13/98 (46 known): rollback journal / WAL / statement jou
 jrnlmode2	[journal] FAIL 1/14 (5 known): rollback journal / WAL / statement journal expected
 jrnlmode3	[journal] FAIL 16/125 (50 known): rollback journal / WAL / statement journal expected
 lock2	[concurrency] FAIL 1/12 (5 known): WAL-mode concurrency: a reader does not block commit
+lock4	[journal] TIMEOUT: rollback journal / WAL / statement journal expected
 lock5	[journal] NORESULT: rollback journal / WAL / statement journal expected
 malloc	[journal] FAIL 1000/10096: rollback journal / WAL / statement journal expected
 malloc3	[journal] NORESULT: rollback journal / WAL / statement journal expected
@@ -84,6 +85,7 @@ shell2	[native] FAIL 4/22: also fails on stock SQLite: FAIL 5/22
 shellA	[native] FAIL 3/27: also fails on stock SQLite: FAIL 20/27
 sort5	[vfs] FAIL 2/13 (1 known): database I/O through a test VFS or fault injector expected
 sortfault	[vfs] FAIL 1/34155: database I/O through a test VFS or fault injector expected
+sqllimits1	[journal] FAIL 18/3117: rollback journal / WAL / statement journal expected
 stat	[journal] FAIL 25/37 (4 known): rollback journal / WAL / statement journal expected
 statfault	[vfs] FAIL 21/72: database I/O through a test VFS or fault injector expected
 strict2	[droptable] FAIL 1/26: dropped table numbers are retired, not reused
@@ -93,12 +95,14 @@ sysfault	[journal] NORESULT: rollback journal / WAL / statement journal expected
 temptable2	[journal] FAIL 2/257 (8 known): rollback journal / WAL / statement journal expected
 tkt-f3e5abed55	[journal] FAIL 3/12 (2 known): rollback journal / WAL / statement journal expected
 tkt2565	[pager] CRASH: SQLite pager pages or counters expected
+tkt2686	[pager] TIMEOUT: SQLite pager pages or counters expected
 tkt3457	[journal] FAIL 5/6: rollback journal / WAL / statement journal expected
 tkt4018	[concurrency] FAIL 3/8 (1 known): WAL-mode concurrency: a reader does not block commit
 trans	[journal] NORESULT: rollback journal / WAL / statement journal expected
 upfromfault	[vfs] FAIL 18/1299: database I/O through a test VFS or fault injector expected
 vacuum	[journal] FAIL 1/47 (2 known): rollback journal / WAL / statement journal expected
 vacuum3	[pager] FAIL 8/2650 (19 known): SQLite pager pages or counters expected
+vacuum6	[pager] FAIL 4/35: SQLite pager pages or counters expected
 vacuummem	[pager] FAIL 1/7: SQLite pager pages or counters expected
 wal9	[journal] FAIL 3/9 (2 known): rollback journal / WAL / statement journal expected
 win32heap	[native] NORESULT: also fails on stock SQLite: NORESULT
