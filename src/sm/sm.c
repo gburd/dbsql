@@ -1566,8 +1566,26 @@ __sm_set_page_size(sm_t *p, int page_size, int n_reserve, int fix)
 	/* As upstream: no change requested is not an error when fixed. */
 	if (page_size <= 0 || (u_int32_t)page_size == bt->page_size)
 		return (DBSQL_OK);
-	if (bt->page_size_fixed)
-		return (DBSQL_READONLY);
+	/*
+	 * The page size is fixed (set at creation, or pinned by a prior
+	 * VACUUM).  Upstream SQLite returns DBSQL_READONLY here, but it only
+	 * reaches this point when a real change is still possible; its VACUUM
+	 * always rebuilds the temp at the main's page size, so the main's
+	 * final set-and-fix sees an equal size and returns OK.  dbsql cannot
+	 * change a database's page size at all -- it is libdb's, fixed at
+	 * environment creation (the documented `pager` divergence) -- so once
+	 * one VACUUM fixes the main at libdb's size, the temp (built at the
+	 * pragma's requested size) differs, and the main's set-and-fix would
+	 * wrongly fail the whole VACUUM with "attempt to write a readonly
+	 * database" (vacuum-11.3: a second `PRAGMA page_size=N; VACUUM`).
+	 * Since the effective page size never changes, a fixed size is a
+	 * silent no-op, not an error: keep the current size and succeed.
+	 */
+	if (bt->page_size_fixed) {
+		if (fix)
+			bt->page_size_fixed = 1;
+		return (DBSQL_OK);
+	}
 	if (page_size >= 512 && page_size <= 65536 &&
 	    (page_size & (page_size - 1)) == 0) {
 		largest = 0;
