@@ -15,20 +15,40 @@ in Berkeley DB's coding style.
   functions, `DBSQL_*` constants).  There is no `sqlite3_*` API.
 
 dbsql began in 2007 as a fork of SQLite 2.8 with the b-tree and pager
-replaced by Berkeley DB.  Release 1.0.0 is a rebuild on SQLite 3.53.4: the
+replaced by Berkeley DB.  Release 1.1.0 is a rebuild on SQLite 3.53.4: the
 SQL layer is produced from the SQLite release by a repeatable transform
 (`dist/transpile`), and the storage manager (`src/sm`) maps SQLite's
 b-tree interface onto libdb's public API.
 
 ## Status
 
-**1.0.0**, October 2026.  Qualified on Debian 13 amd64; see
+**1.1.0**, October 2026.  Qualified on Debian 13 amd64; see
 `.agent/qualification/QUALIFICATION.md` for what was measured.
 Differences from SQLite are listed in `.agent/steering/DIVERGENCES.md`:
 there is no SQLite file format, rollback journal or WAL file, and
 page-level pragmas report what libdb provides.  Known libdb defects that
 affect dbsql are reported upstream with reproducers in
-`.agent/libdb-bugs/`.
+`.agent/libdb-bugs/`; 1.1.0 carries source fixes for four of them (R7,
+R9, R10, R11) in `deps/patches/`.
+
+### Upgrading to 1.1.0
+
+1.1.0 moves the libdb pin from v2026.10.4 to v2026.10.5.  Your SQL
+databases and their logs are **unchanged** -- 1.1.0 reads databases
+written by 1.0.0.  libdb v2026.10.5 did change its internal *region*
+format (the shared-memory `__db.NNN` files), so you cannot run a v2026.10.5
+binary against an environment left open/live by a v2026.10.4 one and vice
+versa: a mixed-version attach returns `DB_VERSION_MISMATCH` (surfaced as
+"unable to open database file").  To upgrade cleanly, with no dbsql
+process running against the directory:
+
+1. close every connection (or run `db_recover` with the old version);
+2. delete the region files: `rm __db.0*` in the database directory;
+3. reopen with the 1.1.0 binary -- it recreates the regions and recovers
+   from the (unchanged) log.
+
+The region files are rebuilt automatically on the next open; only a
+*concurrent* mixed-version attach is the error.
 
 The previous code (the SQLite 2.8 derivative, and a 2026-03 hybrid) is
 preserved at the git tags `archive/sqlite28-2024` and
@@ -61,7 +81,7 @@ SQLite release; failures that follow from a listed divergence are in
 
 ```sh
 $ dbsql ex1.db
-dbsql version 1.0.0 (SQL 3.53.4, libdb storage)
+dbsql version 1.1.0 (SQL 3.53.4, libdb storage)
 dbsql> CREATE TABLE t(x); INSERT INTO t VALUES(1); SELECT * FROM t;
 1
 ```
