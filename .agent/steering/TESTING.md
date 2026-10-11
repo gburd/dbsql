@@ -20,7 +20,8 @@ needs a clang build configured as in test/fuzz/run.sh's header.
 
 ## How a failure is classified
 
-`dist/transpile/mk-known-failures RESULTS NATIVE CLASSIFIED` builds the
+`dist/transpile/mk-known-failures RESULTS NATIVE CLASSIFIED` (CLASSIFIED
+from `dist/transpile/classify.sh`) builds the
 known-failures list.  NATIVE is the same suite on stock SQLite storage
 (`dist/transpile/native-testfixture.sh`), the control: a file that fails
 there too is `[native]` (platform or harness).  Otherwise a file is
