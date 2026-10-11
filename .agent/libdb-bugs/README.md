@@ -6,6 +6,10 @@ libdb programs with controls.
 
 * libdb: **2026.10.3 (October 9, 2026)**, tag `v2026.10.3` = 98749ce0c,
   built `--enable-debug --enable-diagnostic`.
+* **Re-verified on 2026.10.4 (October 10, 2026)**, tag `v2026.10.4` =
+  669f7ec31, same build: R1, R2, R3, R4, R5, R6, R7, R9 and R11
+  reproduce unchanged, and every control still passes.  R10 has no
+  standalone reproducer yet (source path documented).
 * Host: Debian 13 (trixie) amd64, clang 19.1.7, glibc 2.41,
   Linux 6.12.111.  Also seen on FreeBSD 15.1 with v2026.10.2 (R4, R5).
 * Every reproducer is a single C file in this directory.  Build line is
