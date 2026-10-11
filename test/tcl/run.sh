@@ -30,6 +30,12 @@ tf=$w/bin/testfixture
 mkdir "$w/tst"
 python3 "$top/dist/transpile/tests" "$sqlite" "$w/tst/test" >/dev/null ||
 	exit 1
+# Per-test-case expected failures: cases that diverge by design (see
+# known-problems.txt) are counted as "known errors" by the transpiled
+# tester.tcl, so a file whose only failures are listed divergences PASSes
+# here and its other cases are actually run and verified.
+KP=$here/known-problems.txt
+[ -f "$KP" ] && export KNOWN_PROBLEMS="$KP"
 sh "$top/dist/transpile/suite.sh" "$tf" "$w/tst/test" "$w/results.txt" \
 	"$jobs" >/dev/null
 cp "$w/results.txt" "${RESULTS:-./tcl-results.txt}"

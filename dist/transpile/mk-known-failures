@@ -18,7 +18,6 @@ LIBDB = {
 	'without_rowid1': 'R1', 'upfrom2': 'R1',
 	'shell1': 'R6', 'savepoint4': 'R6',
 	'misc7': 'R10',
-	'autovacuum': 'R11', 'autovacuum_ioerr2': 'R11', 'avtrans': 'R11',
 }
 # Files whose failures were read and traced to a divergence, where the
 # classifier's API scan does not see it.
@@ -39,6 +38,12 @@ MANUAL = {
 	'alterfault': 'filecopy', 'fuzz3': 'fileformat',
 	'corruptC': 'fileformat', 'pagerfault': 'fileformat',
 	'tkt2686': 'pager', 'tkt2565': 'pager', 'lock4': 'journal',
+	# autovacuum/avtrans no longer hang (libdb R11 fixed in deps/patches):
+	# autovacuum's remaining fails are file_pages page-count checks, and
+	# avtrans reaches a WAL self-reparse section that hits "database is
+	# locked" after 120 passing tests.  autovacuum_ioerr2 now passes and
+	# is not listed at all.
+	'autovacuum': 'pager', 'avtrans': 'concurrency',
 	# crashsql's crash VFS never sees libdb's writes: the "crash" never
 	# happens, so the child commits everything (durability under a real
 	# SIGKILL is test/bdb/crash.sh).
