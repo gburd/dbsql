@@ -1,0 +1,8 @@
+sql_fuzz: 40 jobs, -max_total_time=1800, coverage-instrumented ASan+UBSan library (build_fuzz)
+  executions: 607705
+  max cov: 21758
+  crashes/leaks/sanitizer reports: 0
+  slow units / timeouts: 3 (planning-heavy SQL: 512-way nested UNION views; stock sqlite3 0.76 s vs dbsql 1.10 s on the release build)
+cmp_fuzz: 40 jobs, 1800 s
+  executions: 
+  crashes: 0

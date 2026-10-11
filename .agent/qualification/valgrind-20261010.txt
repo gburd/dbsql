@@ -1,0 +1,30 @@
+==992322== 
+==992322== LEAK SUMMARY:
+==992322==    definitely lost: 0 bytes in 0 blocks
+==992322==    indirectly lost: 0 bytes in 0 blocks
+==992322==      possibly lost: 0 bytes in 0 blocks
+==992322==    still reachable: 21,369 bytes in 38 blocks
+==992322==                       of which reachable via heuristic:
+==992322==                         newarray           : 4,264 bytes in 1 blocks
+==992322==         suppressed: 0 bytes in 0 blocks
+==992322== Reachable blocks (those to which a pointer was found) are not shown.
+==992322== To see them, rerun with: --leak-check=full --show-leak-kinds=all
+==992322== 
+==992322== For lists of detected and suppressed errors, rerun with: -s
+==992322== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+
+==1061471== Command: /home/admin/w/dbsql/build_unix/dbsql-static /tmp/dbsql-mp.yXeAmm/mp.db CREATE\ TABLE\ c(id\ INTEGER\ PRIMARY\ KEY,\ n\ INTEGER);_\ \ \ \ INSERT\ INTO\ c\ VALUES(1,\ 0);_\ \ \ \ CREATE\ TABLE\ log(p\ INTEGER,\ k\ INTEGER,\ PRIMARY\ KEY(p,\ k));
+==1061471== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==1061714== Command: /home/admin/w/dbsql/build_unix/dbsql-static -bail /tmp/dbsql-mp.yXeAmm/mp.db
+==1061714== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==1061715== Command: /home/admin/w/dbsql/build_unix/dbsql-static -bail /tmp/dbsql-mp.yXeAmm/mp.db
+==1061715== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==1061716== Command: /home/admin/w/dbsql/build_unix/dbsql-static -bail /tmp/dbsql-mp.yXeAmm/mp.db
+==1061716== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==1061717== Command: /home/admin/w/dbsql/build_unix/dbsql-static -bail /tmp/dbsql-mp.yXeAmm/mp.db
+==1061717== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==1062186== Command: /home/admin/w/dbsql/build_unix/dbsql-static /tmp/dbsql-mp.yXeAmm/mp.db PRAGMA\ integrity_check;_\ \ \ \ SELECT\ n\ FROM\ c;\ SELECT\ count(*)\ FROM\ log;
+==1062186== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==1062231== Command: /home/admin/w/dbsql/build_unix/testfixture /home/admin/w/dbsql/test/bdb/snapshot.test
+==1062231==    definitely lost: 0 bytes in 0 blocks
+==1062231== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
