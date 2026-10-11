@@ -56,6 +56,32 @@ classifier output, the prepared SQLite source tarball).  Plan:
   never discard differences without checking them against laptop HEAD.
   All temporary ERRDBG instrumentation was removed before validation.
 
+## 2026-10-11 — 1.0.0 qualified
+
+- AWS: `hotdog` torn down 14:25 UTC Oct 10 (both instances terminated,
+  key pairs and security group deleted, ssh config cleaned); work moved
+  to `kiwi`, us-west-2 (us-east-2's vCPU quota there was 32):
+  instance in `~/.ssh/ec2/dbsql-kiwi.env`, `ssh dbsql-kiwi`.
+- libdb pinned to v2026.10.4 (released Oct 10); all reproducible defect
+  reports re-verified on it.
+- New tiers: test/api (391 checks), test/bdb (snapshot, SIGKILL crash
+  recovery, multi-process), test/fuzz (libFuzzer, coverage-instrumented
+  ASan+UBSan library).  test/tcl/known-failures.txt: 225 files, every
+  one with a reason, none [triage].
+- Gates (QUALIFICATION.md): make check exit 0 on release and ASan+UBSan
+  builds (956/1181 SQLite files, 0 unexpected); valgrind 0 errors, 0
+  definite leaks; fuzz; transform reproducible; no sqlite3 symbols.
+- libdb defects R6 (DB_REGISTER recovery under live processes), R7
+  (inmem dbremove leak), R9 (recovery meeting a foreign file aborts),
+  R10 (EMFILE on log reopen panics), R11 (compact after dbremove hangs)
+  added; the DB_FAILCHK hybrid tried for R6 was reverted (libdb
+  diagnostic aborts).
+- Host workflow traps hit again: pkill/pgrep patterns in an ssh command
+  line match that ssh command itself (use ~/w/stopsuite.sh,
+  ~/w/stopall.sh); rsync'd untracked files block `git pull` (sync code
+  only through git); force-pushes need `git reset --hard origin/...` on
+  the host; a stale generated config.hin silently disabled zlib.
+
 ## Hosts and paths
 
 - **Build host:** `ssh dbsql-deb` -- Debian 13 amd64, c7i.16xlarge

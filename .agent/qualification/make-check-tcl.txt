@@ -20,8 +20,8 @@ alterdropcol	PASS 103
 alterdropcol2	PASS 24
 alterfault	FAIL 8/3803
 alterlegacy	PASS 64
-altermalloc	PASS 4843
-altermalloc2	FAIL 28/2835
+altermalloc	PASS 4845
+altermalloc2	FAIL 28/2837
 altermalloc3	FAIL 17/324
 alterqf	PASS 15
 altertab	PASS 123
@@ -403,7 +403,7 @@ fuzz4	PASS 10
 fuzz_malloc	PASS 9107
 fuzzer1	PASS 86
 fuzzer2	PASS 6
-fuzzerfault	FAIL 16/1166
+fuzzerfault	FAIL 16/1167
 gcfault	PASS 421
 gencol1	FAIL 2/176
 having	PASS 22
@@ -411,7 +411,7 @@ hexlit	PASS 133
 hidden	PASS 1
 hook	PASS 34
 hook2	PASS 1
-icu	PASS 276
+icu	PASS 277
 ieee754	PASS 36
 imposter1	PASS 12
 in	PASS 124
@@ -524,7 +524,7 @@ lock5	NORESULT
 lock6	PASS 1
 lock7	FAIL 4/9
 lookaside	PASS 21
-malloc	FAIL 1000/10096
+malloc	FAIL 1000/10097
 malloc3	NORESULT
 malloc4	PASS 15
 malloc5	PASS 1
@@ -539,7 +539,7 @@ mallocD	PASS 737
 mallocE	PASS 383
 mallocF	PASS 485
 mallocG	PASS 653
-mallocH	PASS 989
+mallocH	PASS 988
 mallocI	PASS 1269
 mallocJ	PASS 709
 mallocK	PASS 3582
@@ -779,7 +779,7 @@ spellfix2	PASS 9
 spellfix3	PASS 11
 spellfix4	PASS 22
 sqldiff1	PASS 1
-sqllimits1	FAIL 15/3117
+sqllimits1	TIMEOUT
 sqllog	PASS 1
 starschema1	PASS 10
 stat	FAIL 29/37
@@ -1005,7 +1005,7 @@ unionall	PASS 46
 unionall2	PASS 5
 unionallfault	PASS 249
 unionvtab	PASS 118
-unionvtabfault	PASS 2120
+unionvtabfault	PASS 2124
 unique	PASS 47
 unique2	PASS 27
 unixexcl	FAIL 6/27
@@ -1061,7 +1061,7 @@ vtabJ	PASS 20
 vtabK	PASS 1
 vtabL	PASS 15
 vtab_alter	PASS 14
-vtab_err	FAIL 1/2938
+vtab_err	FAIL 1/2937
 vtab_shared	PASS 1
 vtabdistinct	PASS 5
 vtabdrop	PASS 5

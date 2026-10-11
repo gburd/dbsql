@@ -39,20 +39,20 @@ lifetimes) is not a workaround.
 ## Status
 
 - [x] Phase 0: cleanup, `.agent/` layout, north star and steering.
-- [x] Phase 1: libdb submodule (now v2026.10.4) and build glue.
+- [x] Phase 1: libdb submodule (v2026.10.4) and build glue.
 - [x] Phase 2: transform pipeline (dist/transpile) and vendored lemon.
-- [ ] Phase 3: storage manager (src/sm/).
-- [ ] Phase 4: public API, TCL testfixture, SQLite test-suite runner.
-- [ ] Phase 5: storage-dependent features (VACUUM, backup, blob, integrity).
-- [ ] Phase 6: FTS5, ICU, `dbsql` shell.
-- [ ] Phase 7: docs, packaging, qualification, tag, release.
+- [x] Phase 3: storage manager (src/sm/).
+- [x] Phase 4: public API, Tcl testfixture, SQLite test-suite runner.
+- [x] Phase 5: storage-dependent features (VACUUM, backup, blob, integrity).
+- [x] Phase 6: FTS5, ICU, `dbsql` shell.
+- [x] Phase 7: docs, packaging, qualification (.agent/qualification/),
+      tag v1.0.0, release.
 
 ## Build host
 
-Debian 13 (trixie) amd64, c7i.16xlarge (64 vCPU, 123 GB, 400 GB gp3),
-us-east-2, account `hotdog`, instance `i-0950a15f95412ede7`.  Tagged Owner=gburd,
-Purpose=dbsql-rebuild, Expires=2026-10-16.  Access: `ssh dbsql-deb`
-(config `~/.ssh/ec2/dbsql-deb.conf`).  It replaced the FreeBSD 15.1
-host (`i-025a08857fb2c27b8`, `ssh dbsql-fbsd`) on 2026-10-09 when that
-host's disk filled.  **Terminate both when the release is done.**
-Details (paths, sync flow) are in WORKLOG.md.
+The build hosts are short-lived EC2 instances in burner AWS accounts;
+nothing lives only on them.  The 1.0.0 qualification ran on
+`dbsql-kiwi` (account `kiwi`, us-west-2, c7i.16xlarge, Debian 13).  The
+earlier hosts (`dbsql-deb`, `dbsql-fbsd`, account `hotdog`) were
+terminated on 2026-10-10 before that account expired.  **Terminate the
+host when work is done** (WORKLOG.md has the IDs).
