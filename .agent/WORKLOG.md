@@ -4,6 +4,49 @@ This is the operational state for agents working unsupervised on the build
 host. Design lives in NORTH_STAR.md and steering/. This file records **where
 things are and how to run them**. Append to it, and keep it accurate.
 
+## 2026-10-11 — libdb defect fixes R7, R9, R10, R11 (on 2026.10.5)
+
+Worked in `~/w/libdb-fix` on host `dbsql-kiwi`, branch `fixes` off tag
+`v2026.10.5` (553b649a1).  Four fixes committed, each with a self-checking
+regression test under `test/db/` and a `test/MANIFEST` runner, verified A/B
+on diagnostic (`build_unix`) and release (`build_rel`) builds:
+
+| Commit | Defect | File | Test |
+|---|---|---|---|
+| a258ae7e8 | R7 leak | src/txn/txn_util.c | txn_remevent_leak.c |
+| 61fd2a246 | R11 hang | src/db/db_compact.c | compact_subdb_remove.c |
+| c889266d8 | R10 panic | src/log/log_put.c | log_emfile_nopanic.c |
+| 078056988 | R9 panic/abort | src/dbreg/dbreg_{util,rec}.c | recover_foreign_file.c |
+
+- R7: on abort, free a child txn's TXN_REMOVE event (only a commit hands it
+  to the parent).  Counted with db_env_set_func_malloc/realloc/free.
+- R11: __db_move_metadata took the moved-page handle lock under the dbp's
+  own handle locker (READ) while inside a txn; when the lower page was one
+  the same txn WRITE-held from a sibling dbremove, it self-deadlocked.
+  Acquire under the txn locker (WRITE) + lockevent instead.
+- R10: __log_name panicked on any non-ENOENT open error; EMFILE/ENFILE are
+  transient, return them.  R10 now has a deterministic standalone repro
+  (EMFILE injected via db_env_set_func_open).
+- R9: recovery meeting a foreign/empty referenced file (EINVAL) failed all
+  of recovery -> __env_panic (abort under DIAGNOSTIC).  Treat EINVAL like
+  the already-tolerated ENOENT in __dbreg_do_open and
+  __dbreg_register_recover.
+- R6 is documented DB_REGISTER behavior (recovery discards the env under
+  live peers); no safe surgical code fix.  Consultation item, left in
+  known-failures under libdb-R6.
+
+Patches (git-format-patch) and test sources mirrored to
+`.agent/libdb-bugs/patches/` and `.agent/libdb-bugs/tests/` (and
+`/tmp/libdb-bugs/`); README.md updated with a "Fix" subsection per defect.
+Suite slice (txn, fop, recd001-024, sdb001-012, test001-062, test111-117,
+compact) shows no base-vs-fix difference; the one FAIL (recd015, out of
+lockers) is pre-existing and identical on both.
+
+Still open: consume these in dbsql (deps/patches applied by
+build_libdb.sh, or an upstream libdb release) and retest the affected
+known-failures (savepoint4, misc7, autovacuum*, avtrans); force-push
+origin/master; convert the 225 known-failure tests; semver release.
+
 ## Deadline: AWS account `hotdog` expires 2026-10-10 14:43:47 UTC
 
 Everything on the hosts is disposable: commits live on the laptop
