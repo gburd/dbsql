@@ -17,7 +17,7 @@ Every number here was measured on that host from the commit named.
 | api | 391 checks, 0 failures |
 | shell | smoke ok |
 | bdb | snapshot: 6/6 ok (+ peer-exit-without-close KNOWN, libdb R6); crash: 10 SIGKILL rounds, 0 lost commits, 0 torn rows, integrity ok; multiproc: 8 processes x 200 transactions, no lost update |
-| sqlite-tcl | see `make-check-tcl.txt` |
+| sqlite-tcl | 956 of 1181 files pass; 0 unexpected failures, 0 listed files now passing (`make-check-tcl.txt`); `make check` exit 0 (`make-check-20261010.log`) |
 
 SQLite test suite, 1181 files (run k12 at 5693092, then make check):
 956 pass.  The other 225 are each in test/tcl/known-failures.txt with a
