@@ -1,3 +1,77 @@
+# Qualification: dbsql 1.1.0 (2026-10-11)
+
+Host: EC2 (64 vCPU), Debian 13 (trixie) amd64, clang 19.1.7, Tcl 8.6,
+account `kiwi`, us-west-2.  **libdb v2026.10.5** (553b649a1) **plus the
+four `deps/patches` fixes** (R7, R9, R10, R11), built `--enable-diagnostic`.
+SQLite 3.53.4 source for the transform and tests.  Measured on
+`rebuild/3.53` at the 1.1.0 commits, dbsql built against the patched
+libdb (`~/w/inst/libdb-patched`).
+
+## What changed since 1.0.0
+
+- libdb pin v2026.10.4 -> v2026.10.5; four libdb defect fixes carried as
+  source patches in `deps/patches/` (see `.agent/libdb-bugs/`): R7
+  (remove-event leak on abort), R9 (recovery panic on a foreign file),
+  R10 (env panic on EMFILE opening a log file), R11 (compact hang after a
+  sibling dbremove).  Each has a self-checking regression test and an A/B
+  against stock v2026.10.5.
+- The SQLite suite is now run **per test case**: `known-problems.txt`
+  lists 2990 by-design divergent case names, so files that formerly were
+  skipped whole now pass and their other cases are verified.
+
+## Gate 1: SQLite tcl suite (patched libdb) — measured
+
+`dist/transpile/suite.sh` with `KNOWN_PROBLEMS=test/tcl/known-problems.txt`
+on the patched diagnostic build:
+
+| | files |
+|---|---|
+| PASS | **1075** of 1181 (was 957 before per-case conversion; +118) |
+| FAIL | 67 |
+| NORESULT | 31 |
+| CRASH | 4 (crash-VFS tests; the crash never reaches libdb) |
+| **unexpected** (not in known-failures.txt) | **0** |
+
+The 106 files that still do not pass as a whole are each in
+`test/tcl/known-failures.txt` with a reason; none is `[triage]`:
+
+| Reason | Files |
+|---|---|
+| journal (rollback journal / WAL files and modes) | 33 |
+| fileformat (SQLite file format, page images, corrupted-file tests) | 23 |
+| native (also fails on stock SQLite / fault-injection) | 20 |
+| vfs (test VFS / fault injector sees libdb I/O) | 10 |
+| pager (page counts and page-level pragmas) | 7 |
+| concurrency (WAL-mode: a reader does not block a commit) | 5 |
+| memdb (serialize/deserialize not built) | 4 |
+| lockstatus | 1 |
+| droptable | 1 |
+
+The R11 fix removed three former hangs: autovacuum_ioerr2 now passes,
+and autovacuum / avtrans run to completion (their remaining failures are
+pager page-counts and a WAL self-reparse lock, not the hang).
+
+## libdb defect fixes verified (A/B, patched vs stock v2026.10.5)
+
+| # | unpatched v2026.10.5 | patched |
+|---|---|---|
+| R7  | leaks 6 blocks (in-memory) / 5 (disk) per child-abort remove | no leak |
+| R9  | recovery aborts (DIAGNOSTIC) / DB_RUNRECOVERY on a foreign file | recovers; a second database keeps its committed record |
+| R10 | EMFILE opening a log file panics the environment (aborts) | returns EMFILE; environment stays alive |
+| R11 | compact after a sibling dbremove hangs forever | commits; survivors read back, removed db is gone |
+
+Each has a regression test under the libdb `test/db/` (and
+`.agent/libdb-bugs/tests/`) that passes on diagnostic and release builds;
+a txn/fop/recd/sdb/compact suite slice shows no regression.
+
+## Regressions against 1.0.0 — none observed
+
+Core tests pass identically on patched and stock v2026.10.5 (select1
+192, insert 84, trans2 408, rollback2 138, dataversion1 9; savepoint
+31/140 and incrvacuum 1000/1053 unchanged on both).
+
+---
+
 # Qualification: dbsql 1.0.0 (2026-10-11)
 
 Host: EC2 c7i.16xlarge (64 vCPU, 123 GB), Debian 13 (trixie) amd64,
