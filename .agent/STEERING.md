@@ -27,12 +27,14 @@ this file whenever a phase lands.
 10. Work happens unsupervised on a short-lived EC2 host. When qualified:
     package, clean up, tag, and release.
 11. **Versioning is semver**, not calver: tags are `vMAJOR.MINOR.PATCH`,
-    annotated and signed (`v1.0.0`, `v1.1.0`, ...).  The release-tagging
-    skill's date-based `vYYYY.MM.DD` format is for the maintainer's other
-    repos and does not apply here.  A libdb-pin bump plus the per-case
-    test conversion and the four libdb fixes is a MINOR release (1.1.0):
-    dbsql's own on-disk format (databases, logs) is unchanged; only
-    libdb's internal region format changed, which an upgrade note covers.
+    annotated and signed (`v1.0.0`, `v1.1.0`, `v1.2.0`, ...).  The
+    release-tagging skill's date-based `vYYYY.MM.DD` format is for the
+    maintainer's other repos and does not apply here.  1.1.0 was a MINOR
+    release (libdb pin v2026.10.4 -> .5, four libdb fixes, the start of
+    per-case test conversion).  1.2.0 is a MINOR release: a VACUUM
+    page-size bug fix and the full per-case suite conversion (1111 of
+    1181 files pass, known-failures 224 -> 70).  dbsql's on-disk format
+    is unchanged across 1.0.0/1.1.0/1.2.0.
 
 ## libdb defects
 
@@ -64,9 +66,11 @@ only.
 - [x] Phase 6: FTS5, ICU, `dbsql` shell.
 - [x] Phase 7: docs, packaging, qualification (.agent/qualification/),
       tag v1.0.0, release.
-- [ ] 1.1.0: libdb pin v2026.10.5 + four libdb fixes (deps/patches),
-      per-case test conversion (known-problems.txt), re-qualify, tag
-      v1.1.0.
+- [x] 1.1.0: libdb pin v2026.10.5 + four libdb fixes (deps/patches),
+      re-qualify, tag v1.1.0.
+- [x] 1.2.0: VACUUM page-size readonly fix; full per-case suite
+      conversion (known-problems.txt, 3525 cases; 1111 of 1181 files
+      pass, known-failures 224 -> 70); tag v1.2.0.
 
 ## Build host
 

@@ -1,13 +1,15 @@
-# Qualification: dbsql 1.1.0 (2026-10-11)
+# Qualification: dbsql 1.2.0 (2026-10-11)
 
 Host: EC2 (64 vCPU), Debian 13 (trixie) amd64, clang 19.1.7, Tcl 8.6,
 account `kiwi`, us-west-2.  **libdb v2026.10.5** (553b649a1) **plus the
 four `deps/patches` fixes** (R7, R9, R10, R11), built `--enable-diagnostic`.
 SQLite 3.53.4 source for the transform and tests.  Measured on
-`rebuild/3.53` at the 1.1.0 commits, dbsql built against the patched
+`rebuild/3.53` at the 1.2.0 commits, dbsql built against the patched
 libdb (`~/w/inst/libdb-patched`).
 
 ## What changed since 1.0.0
+
+1.1.0:
 
 - libdb pin v2026.10.4 -> v2026.10.5; four libdb defect fixes carried as
   source patches in `deps/patches/` (see `.agent/libdb-bugs/`): R7
@@ -15,9 +17,21 @@ libdb (`~/w/inst/libdb-patched`).
   R10 (env panic on EMFILE opening a log file), R11 (compact hang after a
   sibling dbremove).  Each has a self-checking regression test and an A/B
   against stock v2026.10.5.
-- The SQLite suite is now run **per test case**: `known-problems.txt`
-  lists 2990 by-design divergent case names, so files that formerly were
+- The SQLite suite began being run **per test case**: `known-problems.txt`
+  lists by-design divergent case names, so files that formerly were
   skipped whole now pass and their other cases are verified.
+
+1.2.0 (this qualification):
+
+- A VACUUM page-size bug fix: a repeated `PRAGMA page_size=N; VACUUM`
+  wrongly flipped the database read-only (`__sm_set_page_size` returned
+  DBSQL_READONLY on a fixed size instead of a silent no-op).
+- The per-case conversion completed across three triage rounds:
+  `known-problems.txt` now lists 3525 by-design divergent case names;
+  1111 of 1181 files pass (up from 957 at 1.0.0), known-failures 224 ->
+  70, 0 unexpected.  One limitation surfaced and documented, not masked
+  (`vacuummem`, `[vacuumoom]`): in-place VACUUM of a very large database
+  under a small cache can exhaust memory.
 
 ## Gate 1: SQLite tcl suite (patched libdb) — measured
 
