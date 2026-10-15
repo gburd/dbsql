@@ -4,6 +4,47 @@ This is the operational state for agents working unsupervised on the build
 host. Design lives in NORTH_STAR.md and steering/. This file records **where
 things are and how to run them**. Append to it, and keep it accurate.
 
+## 2026-10-15 — 1.3.0: libdb v2026.10.7, FreeBSD qualification
+
+New FreeBSD host `dbsql-fbsd` (account kiwi, us-west-2, c7i.8xlarge,
+FreeBSD 14.5-RELEASE, ZFS).  ssh needs IdentitiesOnly/IdentityAgent=none
+(agent offered too many keys); the alias is set up in
+~/.ssh/ec2/dbsql-fbsd.conf.  cloud-init left /etc/resolv.conf empty --
+`echo nameserver 169.254.169.253 | sudo tee /etc/resolv.conf` fixed DNS.
+Toolchain: pkg install git gmake autoconf automake libtool tcl86 python3
+icu bash pkgconf unzip.  SQLite 3.53.4 src from
+https://sqlite.org/2026/sqlite-src-3530400.zip -> ~/src/sqlite-3.53.4.
+Build uses gmake and clang; configure --with-tcl=/usr/local/lib/tcl8.6
+--enable-icu (needs pkgconf for ICU detection).
+
+Work done:
+- libdb pin v2026.10.5 -> v2026.10.7; dropped the 4 now-upstream patches.
+- Fixed a pre-existing heap-overflow (__database_name on the sm
+  filename) ASan caught on FreeBSD -- __sm_get_filename /
+  __sm_pager_filename now return a dbsql_create_filename buffer.
+- test/bdb/multiproc.sh rewritten to assert the durability invariant
+  (integrity ok, counter==logrows, gap-free committed prefix) and
+  tolerate libdb R6 peer-recovery (common on FreeBSD); run.sh uses 4
+  writers.  suite.sh gained SUITE_TIMEOUT (default 900).
+- Corrected the SQLite provenance in dbsql_api_ref.h so the transform
+  reproduces src/ byte-for-byte from a pristine 3.53.4 download.
+- Bumped to 1.3.0; tag + release pending final ASan suite.
+
+Key FreeBSD findings (QUALIFICATION.md has detail):
+- FreeBSD is ~20-100x slower than Debian for fsync/txn-heavy tests:
+  single-threaded testfixture spins in __umtx_op_shm (libdb
+  process-shared mutex block path; FreeBSD umtx has no userspace fast
+  path).  Pre-existing (same on v2026.10.5), not the RFC-0015 mutex
+  work.  Raise SUITE_TIMEOUT; speed* benchmarks still exceed it.
+- R6 (DB_REGISTER recovery under live peers) fires far more on FreeBSD;
+  no corruption, durability holds.
+- Host build dirs: build_rel (libdb-rel), build_asan (libdb-diag),
+  ~/w/dbsql-105 (dbsql 1.2.0 on libdb v2026.10.5 for A/B).  Test tree in
+  /tmp/tst (and /mnt/ram/tst on a tmpfs for speed).  binp/binasan hold
+  the test binaries.  Remember to terminate the host and clean up the
+  key pair (dbsql-fbsd-*), SG (sg-089821d0c43ad3e9c) and ssh config when
+  done; the old Debian dbsql-kiwi (i-04f51c092352a7abe) is still running.
+
 ## 2026-10-11 — 1.1.0: libdb fixes integrated, per-case tests, release prep
 
 Four post-1.0.0 items addressed on `rebuild/3.53`:
