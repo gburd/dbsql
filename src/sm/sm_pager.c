@@ -156,7 +156,16 @@ __sm_pager_filename(const pager_t *pager, int null_if_memdb)
 
 	if (bt->flags & (SM_MEMORY | SM_EPHEMERAL))
 		return (null_if_memdb ? NULL : "");
-	return (bt->filename);
+	/*
+	 * dbsql_uri_parameter() and friends walk backwards from this pointer
+	 * for the four-NUL prefix (__database_name), so hand out the
+	 * pager-layout name, not the bare bt->filename string.  Built once,
+	 * lazily, on bt->uri_name (same buffer __sm_get_filename returns).
+	 */
+	if (bt->uri_name == NULL)
+		bt->uri_name = (char *)dbsql_create_filename(
+		    bt->filename != NULL ? bt->filename : "", "", "", 0, NULL);
+	return (bt->uri_name != NULL ? bt->uri_name : bt->filename);
 }
 
 /* PUBLIC: dbsql_vfs_t *__sm_pager_vfs __P((pager_t *)); */

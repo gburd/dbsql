@@ -584,6 +584,8 @@ err:	__sm_txn_release(db, bt->txn);
 	__sm_env_release(bt->env);
 	dbsql_free(bt->path);
 	dbsql_free(bt->filename);
+	if (bt->uri_name != NULL)
+		dbsql_free_filename(bt->uri_name);
 	dbsql_free(bt);
 	dbsql_free(p);
 	return (rc);
@@ -621,6 +623,8 @@ __sm_close(sm_t *p)
 	__sm_env_release(bt->env);
 	dbsql_free(bt->path);
 	dbsql_free(bt->filename);
+	if (bt->uri_name != NULL)
+		dbsql_free_filename(bt->uri_name);
 	dbsql_free(bt);
 	dbsql_free(p);
 	return (DBSQL_OK);
@@ -1763,7 +1767,21 @@ __sm_compact(sm_t *p)
 const char *
 __sm_get_filename(sm_t *p)
 {
-	return (p->bt->filename);
+	sm_shared_t *bt = p->bt;
+
+	/*
+	 * Returned to the core and the user (dbsql_db_filename), and parsed
+	 * by dbsql_uri_* (VACUUM INTO reserve=N), all of which walk backwards
+	 * for the four-NUL prefix via __database_name.  Hand out the
+	 * pager-layout name, not the bare bt->filename string, so that walk
+	 * stays inside the allocation.  Built once, lazily; empty name for an
+	 * in-memory or ephemeral database still gets the NUL prefix.
+	 */
+	if (bt->uri_name == NULL)
+		bt->uri_name = (char *)dbsql_create_filename(
+		    bt->filename != NULL ? bt->filename : "", "", "", 0, NULL);
+	return (bt->uri_name != NULL ? bt->uri_name :
+	    (bt->filename != NULL ? bt->filename : ""));
 }
 
 /*

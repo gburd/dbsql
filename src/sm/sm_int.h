@@ -153,6 +153,10 @@ struct sm_shared_t {
 	sm_env_t *env;
 	sm_txn_t *txn;			/* NULL for ephemeral (non-txn) dbs. */
 	char *filename;			/* As given to __sm_open; "" if none. */
+	char *uri_name;			/* filename in pager layout (4 NUL prefix,
+					 * then name\0journal\0wal\0\0) for
+					 * __database_name()/dbsql_uri_*; NULL until
+					 * first __sm_pager_filename() call. */
 	char *path;			/* libdb file name, NULL if in-memory. */
 	char lock_obj[512];		/* Write-lock object: path + "\0wr". */
 	u_int32_t lock_obj_len;
