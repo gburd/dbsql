@@ -15,7 +15,7 @@ this file whenever a phase lands.
    SQLite's Hungarian (see TRANSFORM.md).
 3. **One libdb file per SQL database**, with tables and indexes as
    sub-databases.
-4. **libdb pinned to `v2026.10.5`** (v2026.10.1 -> .2 on 2026-10-08, .2 -> .3 on 2026-10-09, .3 -> .4 on 2026-10-10, .4 -> .5 on 2026-10-11, each at the maintainer's request when released).  deps/patches carries four source-only fixes for libdb defects dbsql found (R7, R9, R10, R11), applied idempotently by deps/build_libdb.sh.
+4. **libdb pinned to `v2026.10.7`** (v2026.10.1 -> .2 on 2026-10-08, .2 -> .3 on 2026-10-09, .3 -> .4 on 2026-10-10, .4 -> .5 on 2026-10-11, .5 -> .7 on 2026-10-15, each at the maintainer's request when released).  The four libdb fixes dbsql found (R7, R9, R10, R11) were upstreamed in libdb v2026.10.6, so `deps/patches` is empty again as of the v2026.10.7 pin.
 5. **No sqlite3 API**, not even a compatibility shim.
 6. `.agent/` is tracked except `.agent/archive/` (old reports).
 7. **Scope**: core SQL (3.53.4), FTS5, ICU, and the full shell as `dbsql`.
