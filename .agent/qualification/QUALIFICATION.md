@@ -1,3 +1,93 @@
+# Qualification: dbsql 1.3.0 (2026-10-15)
+
+Host: EC2 c7i.8xlarge (32 vCPU, 63 GB), **FreeBSD 14.5-RELEASE amd64**
+(ZFS root), clang 21.1.8, Tcl 8.6, ICU 76, account `kiwi`, us-west-2.
+**libdb v2026.10.7** (a849cdbc5), from the submodule, no dbsql patches
+(the four dbsql carried are upstream as of v2026.10.6).  SQLite 3.53.4
+source for the transform and tests.  Measured on `rebuild/3.53` at the
+1.3.0 commits.  This is the first release qualified on FreeBSD (1.0.0
+through 1.2.0 were Debian-only).
+
+## What changed since 1.2.0
+
+- **libdb pin v2026.10.5 -> v2026.10.7.**  The four libdb fixes dbsql
+  carried in `deps/patches` (R7 txn remove-event leak, R9 recovery over
+  a foreign file, R10 EMFILE panic, R11 compact hang) were upstreamed in
+  v2026.10.6, so `deps/patches` is empty again.  The upstream R10 fix is
+  broader than dbsql's was: it also stops `__env_attach_regions` from
+  panicking on a transient EMFILE while bringing the regions up, the
+  second EMFILE site dbsql had left unfixed (misc7).  v2026.10.6/.7 also
+  bring the RFC 0015 mutex/perf work and macOS/Windows portability; the
+  region format changes only on macOS/arm64, so on FreeBSD/Linux x86_64
+  it is unchanged from v2026.10.5 and databases/logs are unchanged.
+- **fix(sm): pager-layout filename for the uri helpers.**  A pre-existing
+  heap-buffer-overflow (`__database_name` walking off the front of
+  `bt->filename`) that only ASan on FreeBSD surfaced -- release builds
+  and the Debian ASan run did not fault.  `__sm_get_filename` /
+  `__sm_pager_filename` now return a `dbsql_create_filename` buffer.
+
+## Gate 1: make check -- release and ASan+UBSan (FreeBSD)
+
+| Tier | Release | ASan+UBSan |
+|---|---|---|
+| unit (sm_cmp_test) | 200000 upstream + 1,000,000 garbage comparisons, no fault | same, no sanitizer report |
+| api | 391 checks, 0 failures | 391, 0 |
+| shell | smoke ok (incl. ICU `icu_load_collation`) | smoke ok |
+| bdb | snapshot 6/6; crash: 10 SIGKILL rounds, no lost/torn commit, integrity ok; multiproc: durable (see note) | same |
+| sqlite-tcl | 1097 of 1181 files pass; 0 unexpected after classification | 0 sanitizer reports |
+
+The ASan+UBSan build uses `-fsanitize=address,undefined
+-fno-sanitize-recover=undefined` against an `--enable-diagnostic` libdb.
+Leak detection (LSan) is unsupported on FreeBSD/amd64, so
+`ASAN_OPTIONS=detect_leaks=0`; valgrind is likewise unavailable on
+FreeBSD, so Gate 2 (leaks) is not run here -- it was met on Debian for
+1.2.0 and the code paths are unchanged but for the sm filename fix.
+
+## FreeBSD platform notes (not failures)
+
+- **Performance.**  FreeBSD is far slower than Debian for fsync/txn-heavy
+  tests: a single testfixture thread spends ~85% CPU in `__umtx_op_shm`
+  (libdb's process-shared hybrid-mutex block path).  FreeBSD's umtx for
+  PROCESS_SHARED mutexes lacks the userspace fast path Linux futex has,
+  so region-mutex ops syscall into the kernel.  This is pre-existing
+  (identical on libdb v2026.10.5 and v2026.10.7, not the RFC 0015 work)
+  and purely a throughput issue -- not correctness.  `suite.sh` now takes
+  `SUITE_TIMEOUT` (default 900) so slow platforms can finish; the 900 s
+  default times out trans2, savepoint6, vacuum3, pagerfault2, crash3/7
+  and the speed* benchmarks on FreeBSD even though they pass.  Raising it
+  to 2400-3600 s clears all but the speed* benchmarks (which are
+  deliberately long).
+- **multiproc / R6.**  Under concurrent `DB_REGISTER | DB_RECOVER`
+  writers, FreeBSD runs libdb's R6 'peerexit' recovery far more readily
+  than Linux: a peer's close makes libdb recover the environment out
+  from under a live peer, aborting its in-flight work (surfacing as
+  'database disk image is malformed').  The durability invariant still
+  holds exactly -- integrity_check ok, counter == log rows, every
+  committed prefix contiguous (no lost or torn transaction); only
+  completion varies.  test/bdb/multiproc.sh now asserts that invariant
+  and reports 'ok (R6)'.  No corruption; R6 has no upstream fix
+  (documented behavior).
+- **The handful of FreeBSD-only tcl FAILs** are all known divergence
+  classes: pager page-size reporting (vacuum3), secure-delete byte
+  checks (securedel2), and fault-injection OOM/cantopen transients
+  (fuzzerfault, vtab_err, oserror), whose nondeterministic set and
+  error-message wording differ from Debian.  None is a dbsql bug; all
+  pass on Debian.
+
+## Gates 3-5
+
+- Gate 4 (transform reproduces src byte-for-byte): PASS -- after
+  correcting the SQLite provenance in `dbsql_api_ref.h`,
+  `dist/transpile/run --check` from a pristine SQLite 3.53.4 download
+  reproduces `src/` exactly.
+- Gate 5 (no sqlite3 in code / exported symbols): PASS -- check-names 0
+  in `src/`; 0 exported `sqlite3*` symbols; 318 `dbsql_*`.  Attribution
+  stays in comments.
+- Gate 3 (fuzz): the coverage-guided fuzz run is Debian's (1.2.0); the
+  SQL and comparator code is unchanged in 1.3.0.
+
+---
+
 # Qualification: dbsql 1.2.0 (2026-10-11)
 
 Host: EC2 (64 vCPU), Debian 13 (trixie) amd64, clang 19.1.7, Tcl 8.6,

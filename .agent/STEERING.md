@@ -27,14 +27,16 @@ this file whenever a phase lands.
 10. Work happens unsupervised on a short-lived EC2 host. When qualified:
     package, clean up, tag, and release.
 11. **Versioning is semver**, not calver: tags are `vMAJOR.MINOR.PATCH`,
-    annotated and signed (`v1.0.0`, `v1.1.0`, `v1.2.0`, ...).  The
+    annotated and signed (`v1.0.0`, `v1.1.0`, `v1.2.0`, `v1.3.0`, ...).  The
     release-tagging skill's date-based `vYYYY.MM.DD` format is for the
     maintainer's other repos and does not apply here.  1.1.0 was a MINOR
     release (libdb pin v2026.10.4 -> .5, four libdb fixes, the start of
     per-case test conversion).  1.2.0 is a MINOR release: a VACUUM
     page-size bug fix and the full per-case suite conversion (1111 of
-    1181 files pass, known-failures 224 -> 70).  dbsql's on-disk format
-    is unchanged across 1.0.0/1.1.0/1.2.0.
+    1181 files pass, known-failures 224 -> 70).  1.3.0 is a MINOR
+    release: libdb pin -> v2026.10.7 (dbsql's fixes now upstream) and a
+    heap-overflow fix in the sm filename, first qualified on FreeBSD.
+    dbsql's on-disk format is unchanged across 1.0.0 through 1.3.0.
 
 ## libdb defects
 
@@ -71,6 +73,10 @@ only.
 - [x] 1.2.0: VACUUM page-size readonly fix; full per-case suite
       conversion (known-problems.txt, 3525 cases; 1111 of 1181 files
       pass, known-failures 224 -> 70); tag v1.2.0.
+- [x] 1.3.0: libdb pin v2026.10.5 -> v2026.10.7 (the four dbsql fixes are
+      upstream, deps/patches empty); fix the __database_name
+      heap-overflow on the sm filename (ASan on FreeBSD); first FreeBSD
+      qualification; tag v1.3.0.
 
 ## Build host
 
@@ -78,5 +84,10 @@ The build hosts are short-lived EC2 instances in burner AWS accounts;
 nothing lives only on them.  The 1.0.0 qualification ran on
 `dbsql-kiwi` (account `kiwi`, us-west-2, c7i.16xlarge, Debian 13).  The
 earlier hosts (`dbsql-deb`, `dbsql-fbsd`, account `hotdog`) were
-terminated on 2026-10-10 before that account expired.  **Terminate the
-host when work is done** (WORKLOG.md has the IDs).
+terminated on 2026-10-10 before that account expired.  1.3.0 was
+qualified on a fresh FreeBSD 14.5 host (`dbsql-fbsd`, account `kiwi`,
+us-west-2, c7i.8xlarge, ZFS); note FreeBSD is much slower than Debian
+for dbsql's txn-heavy tests (process-shared-mutex `__umtx_op_shm` cost,
+see QUALIFICATION) and triggers the libdb R6 recovery divergence far
+more readily.  **Terminate the host when work is done** (WORKLOG.md has
+the IDs).
