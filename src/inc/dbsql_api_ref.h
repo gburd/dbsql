@@ -150,9 +150,9 @@ extern "C" {
 */
 #define DBSQL_VERSION        "3.53.4"
 #define DBSQL_VERSION_NUMBER 3053004
-#define DBSQL_SOURCE_ID      "2026-07-24 19:02:57 bf7c7f30031888f4e796e429ab3978879485813aaca6f641c7b-experimental"
-#define DBSQL_SCM_BRANCH     "unknown"
-#define DBSQL_SCM_TAGS       "unknown"
+#define DBSQL_SOURCE_ID      "2026-07-24 19:02:57 bf7c7f30031888f4e796e429ab3978879485813aaca6f641c7b33e4e09459bcc"
+#define DBSQL_SCM_BRANCH     "branch-3.53"
+#define DBSQL_SCM_TAGS       "release version-3.53.4"
 #define DBSQL_SCM_DATETIME   "2026-07-24T19:02:57.525Z"
 
 /*
