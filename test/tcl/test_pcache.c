@@ -458,6 +458,8 @@ void __install_test_p_cache(
     if( install_flag ){
       dbsql_config(DBSQL_CONFIG_GETPCACHE2, &default_pcache);
       assert( default_pcache.create!=__testpcache_create );
+      /* dbsql: no SQLite pcache (libdb mpool); nothing to swap. */
+      if( default_pcache.create==0 ) return;
       dbsql_config(DBSQL_CONFIG_PCACHE2, &test_pcache);
     }else{
       assert( default_pcache.create!=0 );

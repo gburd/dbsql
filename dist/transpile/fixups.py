@@ -103,6 +103,22 @@ FIXUPS = [
 	(r'(^|/)test_osinst\.c$',
 	 r'"dbsql_ostrace1\.\.\.\.\.", 20\)', '"dbsql_ostrace1......", 20)',
 	 'reserved prefix: test harness keeps the 20-byte osinst log magic'),
+	# dbsql has no SQLite page cache: it reads and writes pages through
+	# libdb's mpool, so DBSQL_CONFIG_GETPCACHE2 returns an all-zero methods
+	# table (__p_cache_set_default is a no-op in sm/sm_pcache.c).  The
+	# pluggable test pcache therefore has nothing to replace; installing it
+	# would hand dbsql a cache it never calls, and the uninstall-time
+	# assert(default_pcache.create!=0) would then abort the testfixture.
+	# When there is no real pcache to swap, skip the install so the matching
+	# uninstall is a clean no-op (the test's SQL assertions still run).
+	(r'(^|/)test_pcache\.c$',
+	 r'      dbsql_config\(DBSQL_CONFIG_GETPCACHE2, &default_pcache\);\n'
+	 r'      assert\( default_pcache\.create!=__testpcache_create \);\n',
+	 '      dbsql_config(DBSQL_CONFIG_GETPCACHE2, &default_pcache);\n'
+	 '      assert( default_pcache.create!=__testpcache_create );\n'
+	 '      /* dbsql: no SQLite pcache (libdb mpool); nothing to swap. */\n'
+	 '      if( default_pcache.create==0 ) return;\n',
+	 'test pcache: skip install when dbsql has no SQLite page cache'),
 	# --- storage manager hooks -------------------------------------------
 	# The connection keeps the list of its libdb transaction states, one
 	# per environment (src/sm/sm.c: __sm_txn_for).  The native validation

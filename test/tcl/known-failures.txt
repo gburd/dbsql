@@ -64,7 +64,6 @@ sqllimits1	[journal] FAIL 18/3117: rollback journal / WAL / statement journal ex
 statfault	[vfs] FAIL 21/72: database I/O through a test VFS or fault injector expected
 strict2	[droptable] FAIL 1/26: dropped table numbers are retired, not reused
 sysfault	[journal] NORESULT: rollback journal / WAL / statement journal expected
-tkt2565	[pager] CRASH: SQLite pager pages or counters expected
 tkt2686	[pager] TIMEOUT: SQLite pager pages or counters expected
 trans	[journal] NORESULT: rollback journal / WAL / statement journal expected
 upfromfault	[vfs] FAIL 18/1299: database I/O through a test VFS or fault injector expected
