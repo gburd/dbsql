@@ -117,6 +117,6 @@ documentation describes it.
 
 ## License
 
-dbsql is distributed under the ISC license; see `LICENSE`.   SQLite is in the public
-domain.  libdb is distributed under the Sleepycat license; review its
-terms before redistributing.
+dbsql is distributed under the ISC license; see `LICENSE`.  SQLite is in
+the public domain.  libdb is distributed under the Sleepycat license;
+review its terms before redistributing.

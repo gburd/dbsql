@@ -173,7 +173,7 @@
                     changelog = "https://git.burd.me/greg/dbsql/raw/branch/main/ChangeLog";
                     downloadPage = "https://git.burd.me/greg/dbsql/releases";
                     homepage = "https://github.com/gburd/dbsql";
-                    license = licenses.gpl3Plus;
+                    license = licenses.isc;
                     mainProgram = "dbsql";
                     maintainers = [ "Greg Burd <greg@burd.me>" ];
                     platforms = platforms.linux;

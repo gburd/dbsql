@@ -1,7 +1,7 @@
 #!/bin/sh -
 # DBSQL - A SQL database engine.
 #
-# Copyright (C) 2007-2026  The DBSQL Group, Inc.
+# Copyright (c) 2007-2026  The DBSQL Group, Inc.
 #
 # s_include -- build src/sm/sm_ext.h from the "PUBLIC:" prototype lines in
 # the hand-written storage manager, in libdb style.  (The transformed SQL

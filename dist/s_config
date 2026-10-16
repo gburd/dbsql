@@ -1,7 +1,7 @@
 #!/bin/sh -
 # DBSQL - A SQL database engine.
 #
-# Copyright (C) 2007-2026  The DBSQL Group, Inc.
+# Copyright (c) 2007-2026  The DBSQL Group, Inc.
 #
 # s_config -- build dist/configure and dist/config.hin from configure.ac.
 # Run from the dist directory.
