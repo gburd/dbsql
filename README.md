@@ -15,16 +15,18 @@ in Berkeley DB's coding style.
   functions, `DBSQL_*` constants).  There is no `sqlite3_*` API.
 
 dbsql began in 2007 as a fork of SQLite 2.8 with the b-tree and pager
-replaced by Berkeley DB.  Release 1.3.0 is a rebuild on SQLite 3.53.4: the
+replaced by Berkeley DB.  Release 1.3.1 is a rebuild on SQLite 3.53.4: the
 SQL layer is produced from the SQLite release by a repeatable transform
 (`dist/transpile`), and the storage manager (`src/sm`) maps SQLite's
 b-tree interface onto libdb's public API.
 
 ## Status
 
-**1.3.0**, October 2026.  Qualified on FreeBSD 14.5 amd64 and (through
+**1.3.1**, October 2026.  Qualified on FreeBSD 14.5 amd64 and (through
 1.2.0) Debian 13 amd64; see `.agent/qualification/QUALIFICATION.md` for
-what was measured.  Differences from SQLite are listed in
+what was measured.  The storage manager and libdb were also run clean
+under a strict-alignment check (riscv64 + UBSan `-fsanitize=alignment`).
+Differences from SQLite are listed in
 `.agent/steering/DIVERGENCES.md`: there is no SQLite file format,
 rollback journal or WAL file, and page-level pragmas report what libdb
 provides.  Known libdb defects that affected dbsql are reported upstream

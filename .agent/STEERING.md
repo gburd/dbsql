@@ -27,7 +27,8 @@ this file whenever a phase lands.
 10. Work happens unsupervised on a short-lived EC2 host. When qualified:
     package, clean up, tag, and release.
 11. **Versioning is semver**, not calver: tags are `vMAJOR.MINOR.PATCH`,
-    annotated and signed (`v1.0.0`, `v1.1.0`, `v1.2.0`, `v1.3.0`, ...).  The
+    annotated and signed (`v1.0.0`, `v1.1.0`, `v1.2.0`, `v1.3.0`,
+    `v1.3.1`, ...).  The
     release-tagging skill's date-based `vYYYY.MM.DD` format is for the
     maintainer's other repos and does not apply here.  1.1.0 was a MINOR
     release (libdb pin v2026.10.4 -> .5, four libdb fixes, the start of
@@ -36,7 +37,12 @@ this file whenever a phase lands.
     1181 files pass, known-failures 224 -> 70).  1.3.0 is a MINOR
     release: libdb pin -> v2026.10.7 (dbsql's fixes now upstream) and a
     heap-overflow fix in the sm filename, first qualified on FreeBSD.
-    dbsql's on-disk format is unchanged across 1.0.0 through 1.3.0.
+    1.3.1 is a PATCH release: two test fixes (tkt2565 no longer aborts
+    the testfixture -- dbsql has no SQLite page cache to swap; tkt2686
+    skipped by design -- it needs an enforced PRAGMA max_page_count) and
+    a strict-alignment check of the storage manager and libdb on riscv64
+    under UBSan.  No code or on-disk change.
+    dbsql's on-disk format is unchanged across 1.0.0 through 1.3.1.
 
 ## libdb defects
 
@@ -90,4 +96,6 @@ us-west-2, c7i.8xlarge, ZFS); note FreeBSD is much slower than Debian
 for dbsql's txn-heavy tests (process-shared-mutex `__umtx_op_shm` cost,
 see QUALIFICATION) and triggers the libdb R6 recovery divergence far
 more readily.  **Terminate the host when work is done** (WORKLOG.md has
-the IDs).
+the IDs).  1.3.1 added a strict-alignment check of the storage manager
+and libdb on `lixr` (riscv64, clang, UBSan `-fsanitize=alignment`): the
+full suite ran with zero misaligned-access reports; see QUALIFICATION.
