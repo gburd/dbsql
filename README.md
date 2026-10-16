@@ -6,7 +6,8 @@ in Berkeley DB's coding style.
 
 - **SQL:** every SQL feature of SQLite 3.53.4, plus the FTS5 and ICU
   extensions and the full interactive shell, as `dbsql`.
-- **Storage:** libdb v2026.10.7 provides storage, transactions, logging
+- **Storage:** libdb v2026.10.7 (LTS) provides storage, transactions,
+  logging
   and crash recovery.  Each SQL database is one libdb file, with tables and
   indexes as sub-databases; the directory is the libdb environment.
 - **Concurrency:** SQLite WAL-mode semantics on libdb MVCC: readers see a
@@ -15,14 +16,16 @@ in Berkeley DB's coding style.
   functions, `DBSQL_*` constants).  There is no `sqlite3_*` API.
 
 dbsql began in 2007 as a fork of SQLite 2.8 with the b-tree and pager
-replaced by Berkeley DB.  Release 1.3.1 is a rebuild on SQLite 3.53.4: the
+replaced by Berkeley DB.  Release 1.3.2 is a rebuild on SQLite 3.53.4: the
 SQL layer is produced from the SQLite release by a repeatable transform
 (`dist/transpile`), and the storage manager (`src/sm`) maps SQLite's
 b-tree interface onto libdb's public API.
 
 ## Status
 
-**1.3.1**, October 2026.  Qualified on FreeBSD 14.5 amd64 and (through
+**1.3.2**, October 2026.  Pins libdb v2026.10.7, now the first libdb LTS
+release (same code as 1.3.1's pin; the upstream commit carries the LTS
+declaration).  Qualified on FreeBSD 14.5 amd64 and (through
 1.2.0) Debian 13 amd64; see `.agent/qualification/QUALIFICATION.md` for
 what was measured.  The storage manager and libdb were also run clean
 under a strict-alignment check (riscv64 + UBSan `-fsanitize=alignment`).
@@ -36,7 +39,10 @@ for (R7, R9, R10, R11) are upstream as of libdb v2026.10.6, so
 
 ### Upgrading
 
-1.3.0 moves the libdb pin from v2026.10.5 to v2026.10.7 and does not
+1.3.2 keeps the libdb pin at v2026.10.7 (now the first LTS release) and
+makes no dbsql code or on-disk format change: it reads databases written
+by 1.0.0 through 1.3.1.  1.3.0 moved the libdb pin from v2026.10.5 to
+v2026.10.7 and does not
 change dbsql's on-disk format: it reads databases written by 1.0.0
 through 1.2.0.  On FreeBSD/Linux the libdb region format is unchanged
 from v2026.10.5, so there are no migration steps from 1.1.0/1.2.0.

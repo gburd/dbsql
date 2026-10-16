@@ -28,7 +28,7 @@ this file whenever a phase lands.
     package, clean up, tag, and release.
 11. **Versioning is semver**, not calver: tags are `vMAJOR.MINOR.PATCH`,
     annotated and signed (`v1.0.0`, `v1.1.0`, `v1.2.0`, `v1.3.0`,
-    `v1.3.1`, ...).  The
+    `v1.3.1`, `v1.3.2`, ...).  The
     release-tagging skill's date-based `vYYYY.MM.DD` format is for the
     maintainer's other repos and does not apply here.  1.1.0 was a MINOR
     release (libdb pin v2026.10.4 -> .5, four libdb fixes, the start of
@@ -42,7 +42,11 @@ this file whenever a phase lands.
     skipped by design -- it needs an enforced PRAGMA max_page_count) and
     a strict-alignment check of the storage manager and libdb on riscv64
     under UBSan.  No code or on-disk change.
-    dbsql's on-disk format is unchanged across 1.0.0 through 1.3.1.
+    1.3.2 is a PATCH release: the libdb pin advances to the upstream
+    commit that declares v2026.10.7 the first libdb LTS release (same
+    libdb code, only docs added upstream); no dbsql code or on-disk
+    change.
+    dbsql's on-disk format is unchanged across 1.0.0 through 1.3.2.
 
 ## libdb defects
 
