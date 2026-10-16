@@ -58,3 +58,12 @@ reports `PASS n (k known)`).  Files that fail on stock SQLite too
 (`[native]`) and fault-injection files whose failing set is
 nondeterministic (malloc/ioerr/*fault) stay whole-file entries in
 `known-failures.txt` instead.
+
+A very small number of files cannot run meaningfully at all because the
+whole file is built around an unenforced-pragma or missing-pager feature
+(e.g. `tkt2686.test` loops `INSERT` until `PRAGMA max_page_count` raises
+"database or disk is full", which never happens because libdb storage
+grows until the real disk fills).  Those are skipped at the top with a
+`finish_test` and a one-line reason, injected by `dist/transpile/tests`
+(`SKIP_FILES`); they report a clean pass of zero cases rather than a
+timeout, and are not listed in `known-failures.txt`.

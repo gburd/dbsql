@@ -37,7 +37,7 @@ MANUAL = {
 	'strict2': 'droptable',
 	'alterfault': 'filecopy', 'fuzz3': 'fileformat',
 	'corruptC': 'fileformat', 'pagerfault': 'fileformat',
-	'tkt2686': 'pager', 'lock4': 'journal',
+	'lock4': 'journal',
 	# autovacuum/avtrans no longer hang (libdb R11 fixed in deps/patches):
 	# autovacuum's remaining fails are file_pages page-count checks, and
 	# avtrans reaches a WAL self-reparse section that hits "database is
